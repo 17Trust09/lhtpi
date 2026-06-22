@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LHTPi - Playlists</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<nav class="navbar">
+<div class="nav-brand">🎬 LHTPi</div>
+<div class="nav-links">
+<a href="{{ url_for('dashboard') }}">Dashboard</a>
+<a href="{{ url_for('media_list') }}">Medien</a>
+<a href="{{ url_for('playlist_list') }}" class="active">Playlists</a>
+<a href="{{ url_for('logout') }}" class="logout">Abmelden</a>
+</div>
+</nav>
+<main class="container">
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}{% for cat,msg in messages %}<div class="flash flash-{{ cat }}">{{ msg }}</div>{% endfor %}{% endif %}{% endwith %}
+
+<h1>Playlist-Verwaltung</h1>
+
+<form method="post" action="{{ url_for('create_playlist') }}" class="inline-form">
+<input type="text" name="name" placeholder="Neue Playlist…" required>
+<button type="submit">➕ Erstellen</button>
+</form>
+
+{% for pl in playlists %}
+<div class="playlist-card {% if pl.is_active %}active{% endif %}">
+<div class="playlist-header">
+<div>
+<form method="post" action="{{ url_for('rename_playlist', id=pl.id) }}" class="inline-form rename-form">
+<input type="text" name="name" value="{{ pl.name }}" class="rename-input" onchange="this.form.submit()">
+</form>
+{% if pl.is_active %}<span class="badge-active">▶ Aktiv</span>{% endif %}
+</div>
+<div class="playlist-actions">
+<form method="post" action="{{ url_for('activate_playlist', id=pl.id) }}"><button type="submit">▶ Aktivieren</button></form>
+<form method="post" action="{{ url_for('delete_playlist', id=pl.id) }}" onsubmit="return confirm('Playlist löschen?')"><button type="submit" class="btn-delete">🗑</button></form>
+</div>
+</div>
+
+{% if pl.items %}
+<ul class="playlist-items" data-playlist-id="{{ pl.id }}">
+{% for item in pl.items %}
+<li data-item-id="{{ item.id }}" class="drag-item">
+<span class="drag-handle">⠿</span>
+<div class="item-info">
+<img src="{{ url_for('uploaded_file', filename=item.media.filename) }}" class="item-thumb">
+<span class="item-name">{{ item.media.original_name }}</span>
+</div>
+<input type="number" class="duration-input" value="{{ item.display_duration }}" min="1" max="999" data-item-id="{{ item.id }}" title="Anzeigedauer (Sekunden)">
+<form method="post" action="{{ url_for('remove_from_playlist', playlist_id=pl.id, item_id=item.id) }}">
+<button type="submit" class="btn-remove">✕</button>
+</form>
+</li>
+{% endfor %}
+</ul>
+{% else %}
+<p class="empty-note">Playlist ist leer. Füge Medien hinzu.</p>
+{% endif %}
+
+{% set used_ids = pl.items | map(attribute='media_id') | list %}
+{% set available = all_media | selectattr('id', 'not in', used_ids) | list %}
+{% if available %}
+<form method="post" action="{{ url_for('add_media_to_playlist', id=pl.id) }}" class="inline-form add-media-form">
+<select name="media_id">
+{% for m in available %}
+<option value="{{ m.id }}">{{ m.original_name }}</option>
+{% endfor %}
+</select>
+<button type="submit">➕ Hinzufügen</button>
+</form>
+{% endif %}
+</div>
+{% else %}
+<div class="empty-state">📋 Keine Playlists vorhanden. Erstellen Sie eine neue Playlist.</div>
+{% endfor %}
+</main>
+
+<script>
+// Drag & Drop
+document.querySelectorAll('.playlist-items').forEach(ul=>{
+ul.addEventListener('dragover',e=>{e.preventDefault();const a=ul.querySelector('.drag-over');if(a)a.classList.remove('drag-over');const t=[...ul.querySelectorAll('.drag-item')].find(el=>e.clientY<el.getBoundingClientRect().top+el.offsetHeight/2);if(t)t.classList.add('drag-over')});
+ul.addEventListener('dragend',()=>ul.querySelectorAll('.drag-over').forEach(el=>el.classList.remove('drag-over')));
+});
+document.querySelectorAll('.drag-item').forEach(item=>{
+item.draggable=true;
+item.addEventListener('dragstart',e=>e.dataTransfer.setData('text/plain',item.dataset.itemId));
+item.addEventListener('drop',e=>{
+e.preventDefault();e.stopPropagation();
+const id=e.dataTransfer.getData('text/plain');
+const ul=e.currentTarget.closest('.playlist-items');
+if(!ul)return;
+const src=ul.querySelector(`[data-item-id="${id}"]`);
+if(src && item!==src){
+const srcIdx=[...ul.querySelectorAll('.drag-item')].indexOf(src);
+const items=[...ul.querySelectorAll('.drag-item')];
+const tgtIdx=items.indexOf(item);
+if(srcIdx<tgtIdx){item.after(src)}else{item.before(src)}
+ul.querySelectorAll('.drag-over').forEach(el=>el.classList.remove('drag-over'));
+const order=[...ul.querySelectorAll('.drag-item')].map(el=>el.dataset.itemId);
+fetch(`/playlists/${ul.dataset.playlistId}/reorder`,{
+method:'POST',headers:{'Content-Type':'application/json'},
+body:JSON.stringify({order})
+}).catch(()=>{});
+}});
+});
+
+// Duration update
+document.querySelectorAll('.duration-input').forEach(inp=>{
+inp.addEventListener('change',function(){
+fetch(`/playlists/${this.closest('.playlist-items').dataset.playlistId}/duration`,{
+method:'POST',headers:{'Content-Type':'application/json'},
+body:JSON.stringify({item_id:parseInt(this.dataset.itemId),duration:parseInt(this.value)})
+}).catch(()=>{});
+});
+});
+</script>
+</body>
+</html>

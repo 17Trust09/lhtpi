@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LHTPi - Medien</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<nav class="navbar">
+<div class="nav-brand">🎬 LHTPi</div>
+<div class="nav-links">
+<a href="{{ url_for('dashboard') }}">Dashboard</a>
+<a href="{{ url_for('media_list') }}" class="active">Medien</a>
+<a href="{{ url_for('playlist_list') }}">Playlists</a>
+<a href="{{ url_for('logout') }}" class="logout">Abmelden</a>
+</div>
+</nav>
+<main class="container">
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}{% for cat,msg in messages %}<div class="flash flash-{{ cat }}">{{ msg }}</div>{% endfor %}{% endif %}{% endwith %}
+
+<h1>Medienverwaltung</h1>
+
+<div class="toolbar">
+<form method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" class="upload-form">
+<input type="file" name="file" multiple accept=".png,.jpg,.jpeg,.gif,.mp4" required>
+<button type="submit">📤 Hochladen</button>
+</form>
+<form method="get" class="search-form">
+<input type="text" name="search" value="{{ search }}" placeholder="Suche…">
+<select name="sort">
+<option value="uploaded_at" {% if sort_by=='uploaded_at' %}selected{% endif %}>Datum</option>
+<option value="original_name" {% if sort_by=='original_name' %}selected{% endif %}>Name</option>
+<option value="file_type" {% if sort_by=='file_type' %}selected{% endif %}>Typ</option>
+</select>
+<select name="order">
+<option value="desc" {% if order=='desc' %}selected{% endif %}>⬇ Absteigend</option>
+<option value="asc" {% if order=='asc' %}selected{% endif %}>⬆ Aufsteigend</option>
+</select>
+<button type="submit">🔍 Suchen</button>
+</form>
+</div>
+
+<div class="media-grid">
+{% for m in media %}
+<div class="media-item">
+<div class="media-preview">
+{% if m.file_type == 'image' %}
+<img src="{{ url_for('uploaded_file', filename=m.filename) }}" alt="{{ m.original_name }}">
+{% else %}
+<video src="{{ url_for('uploaded_file', filename=m.filename) }}" preload="metadata"></video>
+<div class="video-badge">▶ MP4</div>
+{% endif %}
+</div>
+<div class="media-info">
+<span class="media-name" title="{{ m.original_name }}">{{ m.original_name }}</span>
+<span class="media-type-badge">{{ '🎬 Video' if m.file_type == 'video' else '🖼️ Bild' }} · {{ m.original_name.rsplit('.',1)[1].upper() }}</span>
+<span class="media-meta">{{ m.file_size|filesizeformat }}</span>
+</div>
+<form method="post" action="{{ url_for('delete_media', id=m.id) }}" onsubmit="return confirm('{{ m.original_name }} wirklich löschen?')">
+<button type="submit" class="btn-delete">🗑</button>
+</form>
+</div>
+{% else %}
+<div class="empty-state">📂 Keine Medien vorhanden. Laden Sie Bilder oder Videos hoch.</div>
+{% endfor %}
+</div>
+</main>
+</body>
+</html>

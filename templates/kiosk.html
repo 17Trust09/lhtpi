@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LHTPi - Präsentation</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#000}
+#player{width:100%;height:100%;display:flex;align-items:center;justify-content:center}
+#player img,#player video{max-width:100%;max-height:100%;object-fit:contain}
+#player video{width:100%;height:100%}
+#overlay{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.7);color:#fff;padding:8px 16px;border-radius:8px;font-family:sans-serif;font-size:14px;opacity:0;transition:opacity .3s;white-space:nowrap;pointer-events:none}
+#overlay.show{opacity:1}
+#empty{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:#555;font-family:sans-serif;font-size:2rem;text-align:center}
+</style>
+</head>
+<body>
+<div id="empty">⏳ Warte auf Playlist…</div>
+<div id="player"></div>
+<div id="overlay"></div>
+
+<script>
+let items=[],currIdx=0,timer=null,overlayTimer=null;
+
+function showOverlay(msg){
+const o=document.getElementById('overlay');
+o.textContent=msg;o.classList.add('show');
+clearTimeout(overlayTimer);
+overlayTimer=setTimeout(()=>o.classList.remove('show'),3000);
+}
+
+function playItem(idx){
+const player=document.getElementById('player');
+const em=document.getElementById('empty');
+if(!items.length){
+em.textContent='📋 Keine aktive Playlist';
+em.style.display='block';player.innerHTML='';
+return;
+}
+const item=items[idx % items.length];
+currIdx=idx % items.length;
+em.style.display='none';
+player.innerHTML='';
+
+if(item.file_type==='image'){
+const img=document.createElement('img');
+img.src='/uploads/'+item.filename;
+img.alt=item.original_name;
+img.onerror=()=>{showOverlay('⚠️ Fehler beim Laden');nextItem()};
+player.appendChild(img);
+timer=setTimeout(()=>nextItem(),(item.display_duration||10)*1000);
+showOverlay(`📷 ${item.original_name} — ${item.display_duration||10}s`);
+}else if(item.file_type==='video'){
+const vid=document.createElement('video');
+vid.src='/uploads/'+item.filename;
+vid.autoplay=true;
+vid.muted=false;
+vid.playsInline=true;
+vid.onerror=()=>{showOverlay('⚠️ Fehler beim Laden');nextItem()};
+vid.onended=()=>nextItem();
+vid.onloadedmetadata=()=>{
+showOverlay(`🎬 ${item.original_name}`);vid.play().catch(()=>{});
+const dur=item.display_duration||0;
+if(dur>0&&dur<vid.duration){
+timer=setTimeout(()=>{vid.pause();nextItem();},dur*1000);
+}
+};
+player.appendChild(vid);
+}
+}
+
+function nextItem(){
+clearTimeout(timer);
+playItem(currIdx+1);
+}
+
+async function checkPlaylist(){
+try{
+const r=await fetch('/present/api/status');
+const d=await r.json();
+if(d.active && d.items.length!==items.length || (d.active && !items.length)){
+items=d.items;currIdx=0;clearTimeout(timer);
+playItem(0);
+}else if(!d.active && items.length){
+items=[];clearTimeout(timer);
+document.getElementById('empty').textContent='⏸️ Präsentation pausiert';
+document.getElementById('empty').style.display='block';
+document.getElementById('player').innerHTML='';
+}
+}catch(e){}
+}
+checkPlaylist();
+setInterval(checkPlaylist,5000);
+</script>
+</body>
+</html>

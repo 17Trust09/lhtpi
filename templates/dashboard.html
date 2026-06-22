@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LHTPi - Dashboard</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<nav class="navbar">
+<div class="nav-brand">🎬 LHTPi</div>
+<div class="nav-links">
+<a href="{{ url_for('dashboard') }}" class="active">Dashboard</a>
+<a href="{{ url_for('media_list') }}">Medien</a>
+<a href="{{ url_for('playlist_list') }}">Playlists</a>
+<a href="{{ url_for('logout') }}" class="logout">Abmelden</a>
+</div>
+</nav>
+<main class="container">
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+{% for cat,msg in messages %}
+<div class="flash flash-{{ cat }}">{{ msg }}</div>
+{% endfor %}{% endif %}{% endwith %}
+
+<h1>Dashboard</h1>
+<div class="status-cards">
+<div class="card" onclick="location.href='{{ url_for('media_list') }}'" style="cursor:pointer">
+<h3>📁 Medien</h3>
+<p id="media-count">Lade…</p>
+</div>
+<div class="card" onclick="location.href='{{ url_for('playlist_list') }}'" style="cursor:pointer">
+<h3>📋 Playlists</h3>
+<p id="playlist-count">Lade…</p>
+</div>
+<div class="card" id="status-card">
+<h3>▶️ Live-Status</h3>
+<p id="status-text">Lade…</p>
+<p id="status-detail" style="font-size:.85rem;color:#8899aa;margin-top:.3rem"></p>
+<p id="status-time" style="font-size:.8rem;color:#556;margin-top:.2rem"></p>
+</div>
+</div>
+</main>
+
+<script>
+async function loadStatus(){
+try{
+const r=await fetch('{{ url_for("present_status") }}');
+const d=await r.json();
+document.getElementById('playlist-count').textContent=d.active ? d.playlist_name : 'Keine';
+if(d.active){
+const items=d.items.length;
+const currInfo = d.current_media ? `Aktuell: ${d.current_media}` : `${items} Medium/Medien`;
+document.getElementById('status-text').textContent='▶️ Wiedergabe bereit';
+document.getElementById('status-detail').textContent=currInfo;
+document.getElementById('status-time').textContent=d.remaining ? `Restzeit: ${d.remaining}s` : '';
+document.getElementById('status-card').style.borderLeftColor='#4ecca3';
+}else{
+document.getElementById('status-text').textContent='⏸️ Keine aktive Playlist';
+document.getElementById('status-detail').textContent='Playlist auswählen und aktivieren';
+document.getElementById('status-time').textContent='';
+document.getElementById('status-card').style.borderLeftColor='#e94560';
+}
+}catch(e){
+document.getElementById('status-text').textContent='⚠️ Status nicht verfügbar';
+document.getElementById('status-detail').textContent='';
+document.getElementById('status-time').textContent='';
+}}
+loadStatus();
+setInterval(loadStatus,5000);
+</script>
+</body>
+</html>
