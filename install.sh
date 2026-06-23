@@ -191,6 +191,7 @@ exec /usr/bin/chromium-browser \
     --touch-events=enabled \
     --fast \
     --fast-start \
+    --autoplay-policy=no-user-gesture-required \
     --disable-popup-blocking \
     --disable-translate \
     "${APP_URL}" >> "$LOG" 2>&1

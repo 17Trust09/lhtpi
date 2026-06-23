@@ -22,6 +22,14 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000}
 
 <script>
 let items=[],currIdx=0,timer=null,overlayTimer=null;
+let playlistSignature='';
+
+function makeSignature(d){
+  return d.active ? JSON.stringify({
+    playlist: d.playlist_name,
+    items: (d.items||[]).map(i => [i.id, i.media_id, i.position, i.display_duration, i.filename])
+  }) : '';
+}
 
 function showOverlay(msg){
 const o=document.getElementById('overlay');
@@ -55,7 +63,7 @@ showOverlay(`📷 ${item.original_name} — ${item.display_duration||10}s`);
 const vid=document.createElement('video');
 vid.src='/uploads/'+item.filename;
 vid.autoplay=true;
-vid.muted=false;
+vid.muted=true;
 vid.playsInline=true;
 vid.onerror=()=>{showOverlay('⚠️ Fehler beim Laden');nextItem()};
 vid.onended=()=>nextItem();
@@ -79,14 +87,19 @@ async function checkPlaylist(){
 try{
 const r=await fetch('/present/api/status');
 const d=await r.json();
-if(d.active && d.items.length!==items.length || (d.active && !items.length)){
-items=d.items;currIdx=0;clearTimeout(timer);
-playItem(0);
+const nextSignature = makeSignature(d);
+if(d.active && nextSignature !== playlistSignature){
+  playlistSignature = nextSignature;
+  items = d.items || [];
+  currIdx = d.current_item_index || 0;
+  clearTimeout(timer);
+  playItem(currIdx);
 }else if(!d.active && items.length){
-items=[];clearTimeout(timer);
-document.getElementById('empty').textContent='⏸️ Präsentation pausiert';
-document.getElementById('empty').style.display='block';
-document.getElementById('player').innerHTML='';
+  playlistSignature = '';
+  items=[];clearTimeout(timer);
+  document.getElementById('empty').textContent='⏸️ Präsentation pausiert';
+  document.getElementById('empty').style.display='block';
+  document.getElementById('player').innerHTML='';
 }
 }catch(e){}
 }

@@ -3,70 +3,314 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LHTPi - Dashboard</title>
+<title>LHTPi - Steuerzentrale</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-<nav class="navbar">
-<div class="nav-brand">🎬 LHTPi</div>
-<div class="nav-links">
-<a href="{{ url_for('dashboard') }}" class="active">Dashboard</a>
-<a href="{{ url_for('media_list') }}">Medien</a>
-<a href="{{ url_for('playlist_list') }}">Playlists</a>
-<a href="{{ url_for('logout') }}" class="logout">Abmelden</a>
-</div>
-</nav>
+<header class="navbar app-topbar">
+  <a class="nav-brand" href="{{ url_for('dashboard') }}">🎬 LHTPi</a>
+  <a href="{{ url_for('logout') }}" class="logout top-logout">Abmelden</a>
+</header>
+
 <main class="container">
 {% with messages = get_flashed_messages(with_categories=true) %}
 {% if messages %}
-{% for cat,msg in messages %}
-<div class="flash flash-{{ cat }}">{{ msg }}</div>
-{% endfor %}{% endif %}{% endwith %}
+<div class="flash-stack">
+{% for cat,msg in messages %}<div class="flash flash-{{ cat }}">{{ msg }}</div>{% endfor %}
+</div>
+{% endif %}
+{% endwith %}
 
-<h1>Dashboard</h1>
-<div class="status-cards">
-<div class="card" onclick="location.href='{{ url_for('media_list') }}'" style="cursor:pointer">
-<h3>📁 Medien</h3>
-<p id="media-count">Lade…</p>
-</div>
-<div class="card" onclick="location.href='{{ url_for('playlist_list') }}'" style="cursor:pointer">
-<h3>📋 Playlists</h3>
-<p id="playlist-count">Lade…</p>
-</div>
-<div class="card" id="status-card">
-<h3>▶️ Live-Status</h3>
-<p id="status-text">Lade…</p>
-<p id="status-detail" style="font-size:.85rem;color:#8899aa;margin-top:.3rem"></p>
-<p id="status-time" style="font-size:.8rem;color:#556;margin-top:.2rem"></p>
-</div>
-</div>
+<section class="hero-panel">
+  <div>
+    <p class="eyebrow">Raspberry-Pi Präsentations-Player</p>
+    <h1>LHTPi Steuerzentrale</h1>
+    <p class="muted">Medien verwalten, Playlists bauen und den Live-Status im Blick behalten – alles auf einer Seite.</p>
+  </div>
+  <a class="btn btn-ghost" href="{{ url_for('kiosk') }}" target="_blank" rel="noopener">🖥️ Kiosk öffnen</a>
+</section>
+
+<nav class="tabbar" aria-label="LHTPi Bereiche">
+  <button type="button" class="tab-button active" data-tab="dashboard">📊 Dashboard</button>
+  <button type="button" class="tab-button" data-tab="media">📁 Medien</button>
+  <button type="button" class="tab-button" data-tab="playlists">📋 Playlists</button>
+</nav>
+
+<section id="tab-dashboard" class="tab-panel active">
+  <div class="status-cards dashboard-cards">
+    <button type="button" class="card glass-card metric-card" data-jump-tab="media">
+      <span class="metric-icon">📁</span>
+      <h3>Medien</h3>
+      <p id="media-count"><span class="spinner"></span></p>
+      <small>Uploads und Bibliothek</small>
+    </button>
+    <button type="button" class="card glass-card metric-card" data-jump-tab="playlists">
+      <span class="metric-icon">📋</span>
+      <h3>Playlists</h3>
+      <p id="playlist-count"><span class="spinner"></span></p>
+      <small>Zusammenstellungen</small>
+    </button>
+    <article class="card glass-card metric-card status-ready" id="status-card">
+      <span class="metric-icon">▶️</span>
+      <h3>Live-Status</h3>
+      <p id="status-text"><span class="spinner"></span></p>
+      <small id="status-detail">Status wird geladen…</small>
+      <small id="status-time"></small>
+    </article>
+  </div>
+</section>
+
+<section id="tab-media" class="tab-panel">
+  <div class="section-heading">
+    <div>
+      <p class="eyebrow">Bibliothek</p>
+      <h2>Medienverwaltung</h2>
+    </div>
+    <span id="media-result-count" class="pill">Lade…</span>
+  </div>
+
+  <div class="toolbar modern-toolbar">
+    <form method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" class="upload-form ajax-form" data-after="media">
+      <input type="file" name="file" multiple accept=".png,.jpg,.jpeg,.gif,.mp4" required>
+      <button type="submit">📤 Hochladen</button>
+    </form>
+    <form id="media-filter" class="search-form">
+      <input type="text" name="search" id="media-search" placeholder="Medien suchen…" autocomplete="off">
+      <select name="sort" id="media-sort">
+        <option value="uploaded_at">Datum</option>
+        <option value="original_name">Name</option>
+        <option value="file_type">Typ</option>
+      </select>
+      <select name="order" id="media-order">
+        <option value="desc">⬇ Absteigend</option>
+        <option value="asc">⬆ Aufsteigend</option>
+      </select>
+      <button type="submit">🔍 Filtern</button>
+    </form>
+  </div>
+  <div id="media-grid" class="media-grid"><div class="empty-state"><span class="spinner"></span> Medien werden geladen…</div></div>
+</section>
+
+<section id="tab-playlists" class="tab-panel">
+  <div class="section-heading">
+    <div>
+      <p class="eyebrow">Ablauf</p>
+      <h2>Playlist-Verwaltung</h2>
+    </div>
+    <span id="playlist-result-count" class="pill">Lade…</span>
+  </div>
+
+  <form method="post" action="{{ url_for('create_playlist') }}" class="inline-form create-form ajax-form" data-after="playlists">
+    <input type="text" name="name" placeholder="Neue Playlist…" required>
+    <button type="submit">➕ Erstellen</button>
+  </form>
+  <div id="playlist-list" class="playlist-list"><div class="empty-state"><span class="spinner"></span> Playlists werden geladen…</div></div>
+</section>
 </main>
 
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
 <script>
-async function loadStatus(){
-try{
-const r=await fetch('{{ url_for("present_status") }}');
-const d=await r.json();
-document.getElementById('playlist-count').textContent=d.active ? d.playlist_name : 'Keine';
-if(d.active){
-const items=d.items.length;
-const currInfo = d.current_media ? `Aktuell: ${d.current_media}` : `${items} Medium/Medien`;
-document.getElementById('status-text').textContent='▶️ Wiedergabe bereit';
-document.getElementById('status-detail').textContent=currInfo;
-document.getElementById('status-time').textContent=d.remaining ? `Restzeit: ${d.remaining}s` : '';
-document.getElementById('status-card').style.borderLeftColor='#4ecca3';
-}else{
-document.getElementById('status-text').textContent='⏸️ Keine aktive Playlist';
-document.getElementById('status-detail').textContent='Playlist auswählen und aktivieren';
-document.getElementById('status-time').textContent='';
-document.getElementById('status-card').style.borderLeftColor='#e94560';
+const urls={
+  media:'{{ url_for("media_list") }}',
+  playlists:'{{ url_for("playlist_list") }}',
+  status:'{{ url_for("present_status") }}',
+  upload:'{{ url_for("upload") }}'
+};
+let mediaCache=[];
+let playlistCache=[];
+let allMediaCache=[];
+let activeTab='dashboard';
+
+const $=(sel,root=document)=>root.querySelector(sel);
+const $$=(sel,root=document)=>[...root.querySelectorAll(sel)];
+function escapeHtml(value){return String(value??'').replace(/[&<>'"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));}
+function fileSize(bytes){if(!bytes)return '0 B';const units=['B','KB','MB','GB'];let n=bytes,i=0;while(n>=1024&&i<units.length-1){n/=1024;i++;}return `${n.toFixed(n>=10||i===0?0:1)} ${units[i]}`;}
+function showToast(message,type='success'){const t=$('#toast');t.textContent=message;t.className=`toast show ${type}`;setTimeout(()=>t.classList.remove('show'),2600);}
+
+function switchTab(name){
+  activeTab=name;
+  $$('.tab-button').forEach(btn=>btn.classList.toggle('active',btn.dataset.tab===name));
+  $$('.tab-panel').forEach(panel=>panel.classList.toggle('active',panel.id===`tab-${name}`));
+  if(name==='media') loadMedia();
+  if(name==='playlists') loadPlaylists();
+  if(name==='dashboard') loadDashboard();
 }
-}catch(e){
-document.getElementById('status-text').textContent='⚠️ Status nicht verfügbar';
-document.getElementById('status-detail').textContent='';
-document.getElementById('status-time').textContent='';
-}}
-loadStatus();
+
+$$('.tab-button').forEach(btn=>btn.addEventListener('click',()=>switchTab(btn.dataset.tab)));
+$$('[data-jump-tab]').forEach(el=>el.addEventListener('click',()=>switchTab(el.dataset.jumpTab)));
+
+async function fetchJson(url){
+  const res=await fetch(url,{headers:{'X-Requested-With':'XMLHttpRequest'}});
+  if(!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function loadDashboard(){
+  await Promise.allSettled([loadMedia(false),loadPlaylists(false),loadStatus()]);
+}
+
+async function loadStatus(){
+  try{
+    const d=await fetchJson(urls.status);
+    const card=$('#status-card');
+    if(d.active){
+      const total=(d.items||[]).length;
+      const index=(d.current_item_index ?? 0)+1;
+      const item=d.current_item || (d.items||[])[0];
+      $('#status-text').textContent=`▶️ ${d.playlist_name}`;
+      $('#status-detail').textContent=item ? `Item ${index} von ${total}: ${item.original_name}` : `${total} Medium/Medien`;
+      $('#status-time').textContent=d.remaining ? `Restzeit: ${d.remaining}s` : '';
+      card.classList.remove('status-error');card.classList.add('status-ready');
+    }else{
+      $('#status-text').textContent='⏸️ Keine aktive Playlist';
+      $('#status-detail').textContent='Playlist auswählen und aktivieren';
+      $('#status-time').textContent='';
+      card.classList.remove('status-ready');card.classList.add('status-error');
+    }
+  }catch(e){
+    $('#status-text').textContent='⚠️ Status nicht verfügbar';
+    $('#status-detail').textContent='Bitte Server oder Login prüfen';
+    $('#status-time').textContent='';
+  }
+}
+
+async function loadMedia(render=true){
+  const params=new URLSearchParams(new FormData($('#media-filter')));
+  params.set('format','json');
+  try{
+    const data=await fetchJson(`${urls.media}?${params.toString()}`);
+    mediaCache=data.media||[];
+    $('#media-count').textContent=String(data.count||0);
+    $('#media-result-count').textContent=`${data.count||0} Medien`;
+    if(render) renderMedia(mediaCache);
+    return data;
+  }catch(e){
+    $('#media-grid').innerHTML='<div class="empty-state">⚠️ Medien konnten nicht geladen werden.</div>';
+    $('#media-count').textContent='–';
+  }
+}
+
+function renderMedia(media){
+  const grid=$('#media-grid');
+  if(!media.length){grid.innerHTML='<div class="empty-state">📂 Keine Medien vorhanden. Laden Sie Bilder oder Videos hoch.</div>';return;}
+  grid.innerHTML=media.map(m=>`
+    <article class="media-item">
+      <div class="media-preview">
+        ${m.file_type==='image'
+          ? `<img src="${m.url}" alt="${escapeHtml(m.original_name)}" loading="lazy">`
+          : `<video src="${m.url}" preload="metadata"></video><div class="video-badge">▶ MP4</div>`}
+      </div>
+      <div class="media-info">
+        <span class="media-name" title="${escapeHtml(m.original_name)}">${escapeHtml(m.original_name)}</span>
+        <span class="media-type-badge">${m.file_type==='video'?'🎬 Video':'🖼️ Bild'}</span>
+        <span class="media-meta">${fileSize(m.file_size)}</span>
+      </div>
+      <form method="post" action="/media/${m.id}/delete" class="ajax-form floating-delete" data-after="media" data-confirm="${escapeHtml(m.original_name)} wirklich löschen?">
+        <button type="submit" class="btn-delete" title="Löschen">🗑</button>
+      </form>
+    </article>`).join('');
+  bindAjaxForms(grid);
+}
+
+async function loadPlaylists(render=true){
+  try{
+    const data=await fetchJson(`${urls.playlists}?format=json`);
+    playlistCache=data.playlists||[];
+    allMediaCache=data.all_media||[];
+    $('#playlist-count').textContent=String(data.count||0);
+    $('#playlist-result-count').textContent=`${data.count||0} Playlists`;
+    if(render) renderPlaylists(playlistCache,allMediaCache);
+    return data;
+  }catch(e){
+    $('#playlist-list').innerHTML='<div class="empty-state">⚠️ Playlists konnten nicht geladen werden.</div>';
+    $('#playlist-count').textContent='–';
+  }
+}
+
+function renderPlaylists(playlists,allMedia){
+  const wrap=$('#playlist-list');
+  if(!playlists.length){wrap.innerHTML='<div class="empty-state">📋 Keine Playlists vorhanden. Erstellen Sie eine neue Playlist.</div>';return;}
+  wrap.innerHTML=playlists.map(pl=>{
+    const used=new Set(pl.items.map(item=>item.media_id));
+    const available=allMedia.filter(m=>!used.has(m.id));
+    const itemsHtml=pl.items.length?`<ul class="playlist-items" data-playlist-id="${pl.id}">${pl.items.map(item=>`
+      <li data-item-id="${item.id}" class="drag-item" draggable="true">
+        <span class="drag-handle">⠿</span>
+        <div class="item-info">
+          ${item.file_type==='image'?`<img src="${item.url}" class="item-thumb" alt="">`:`<span class="item-thumb video-thumb">▶</span>`}
+          <span class="item-name">${escapeHtml(item.original_name)}</span>
+        </div>
+        <input type="number" class="duration-input" value="${item.display_duration}" min="1" max="999" data-item-id="${item.id}" title="Anzeigedauer in Sekunden">
+        <form method="post" action="/playlists/${pl.id}/remove/${item.id}" class="ajax-form" data-after="playlists"><button type="submit" class="btn-remove">✕</button></form>
+      </li>`).join('')}</ul>`:'<p class="empty-note">Playlist ist leer. Füge Medien hinzu.</p>';
+    const addHtml=available.length?`<form method="post" action="/playlists/${pl.id}/add_media" class="inline-form add-media-form ajax-form" data-after="playlists"><select name="media_id">${available.map(m=>`<option value="${m.id}">${escapeHtml(m.original_name)}</option>`).join('')}</select><button type="submit">➕ Hinzufügen</button></form>`:'';
+    return `<article class="playlist-card ${pl.is_active?'active':''}">
+      <div class="playlist-header">
+        <div class="playlist-title-row">
+          <form method="post" action="/playlists/${pl.id}/rename" class="rename-form ajax-form" data-after="playlists"><input type="text" name="name" value="${escapeHtml(pl.name)}" class="rename-input" aria-label="Playlist umbenennen"></form>
+          ${pl.is_active?'<span class="badge-active">▶ Aktiv</span>':''}
+        </div>
+        <div class="playlist-actions">
+          <form method="post" action="/playlists/${pl.id}/activate" class="ajax-form" data-after="all"><button type="submit">▶ Aktivieren</button></form>
+          <form method="post" action="/playlists/${pl.id}/delete" class="ajax-form" data-after="playlists" data-confirm="Playlist löschen?"><button type="submit" class="btn-delete">🗑</button></form>
+        </div>
+      </div>${itemsHtml}${addHtml}</article>`;
+  }).join('');
+  bindAjaxForms(wrap);bindPlaylistControls();
+}
+
+function bindAjaxForms(root=document){
+  $$('.ajax-form',root).forEach(form=>{
+    if(form.dataset.bound)return;form.dataset.bound='1';
+    form.addEventListener('submit',async e=>{
+      e.preventDefault();
+      if(form.dataset.confirm&&!confirm(form.dataset.confirm))return;
+      const btn=$('button[type="submit"]',form); if(btn) btn.disabled=true;
+      try{
+        const res=await fetch(form.action,{method:form.method||'POST',body:new FormData(form),headers:{'X-Requested-With':'XMLHttpRequest'}});
+        if(!res.ok){
+          const err=await res.json().catch(()=>({message:'Aktion fehlgeschlagen'}));
+          throw new Error(err.message||'Aktion fehlgeschlagen');
+        }
+        form.reset();
+        showToast('Änderung gespeichert');
+        if(form.dataset.after==='media') await Promise.all([loadMedia(),loadPlaylists(false),loadStatus()]);
+        else if(form.dataset.after==='all') await Promise.all([loadPlaylists(),loadStatus()]);
+        else await Promise.all([loadPlaylists(),loadStatus()]);
+      }catch(err){showToast('Aktion fehlgeschlagen','error');}
+      finally{if(btn)btn.disabled=false;}
+    });
+  });
+}
+
+function bindPlaylistControls(){
+  $$('.rename-input').forEach(input=>{input.addEventListener('change',()=>input.form.requestSubmit());});
+  $$('.duration-input').forEach(input=>{
+    input.addEventListener('change',async function(){
+      const ul=this.closest('.playlist-items'); if(!ul)return;
+      await fetch(`/playlists/${ul.dataset.playlistId}/duration`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({item_id:parseInt(this.dataset.itemId),duration:parseInt(this.value)})});
+      showToast('Dauer aktualisiert'); loadStatus();
+    });
+  });
+  $$('.playlist-items').forEach(ul=>{
+    ul.addEventListener('dragover',e=>{e.preventDefault();const over=[...ul.querySelectorAll('.drag-item')].find(el=>e.clientY<el.getBoundingClientRect().top+el.offsetHeight/2);ul.querySelectorAll('.drag-over').forEach(el=>el.classList.remove('drag-over'));if(over)over.classList.add('drag-over');});
+    ul.addEventListener('drop',async e=>{
+      e.preventDefault();const id=e.dataTransfer.getData('text/plain');const target=e.target.closest('.drag-item');const src=ul.querySelector(`[data-item-id="${id}"]`);if(!src||!target||src===target)return;
+      const items=[...ul.querySelectorAll('.drag-item')];items.indexOf(src)<items.indexOf(target)?target.after(src):target.before(src);
+      ul.querySelectorAll('.drag-over').forEach(el=>el.classList.remove('drag-over'));
+      const order=[...ul.querySelectorAll('.drag-item')].map(el=>el.dataset.itemId);
+      await fetch(`/playlists/${ul.dataset.playlistId}/reorder`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({order})});
+      showToast('Reihenfolge gespeichert');loadStatus();
+    });
+  });
+  $$('.drag-item').forEach(item=>item.addEventListener('dragstart',e=>e.dataTransfer.setData('text/plain',item.dataset.itemId)));
+}
+
+$('#media-filter').addEventListener('submit',e=>{e.preventDefault();loadMedia();});
+['media-search','media-sort','media-order'].forEach(id=>$('#'+id).addEventListener('change',()=>loadMedia()));
+bindAjaxForms(document);
+loadDashboard();
 setInterval(loadStatus,5000);
 </script>
 </body>

@@ -63,7 +63,7 @@
 {% endif %}
 
 {% set used_ids = pl.items | map(attribute='media_id') | list %}
-{% set available = all_media | selectattr('id', 'not in', used_ids) | list %}
+{% set available = all_media | rejectattr('id', 'in', used_ids) | list %}
 {% if available %}
 <form method="post" action="{{ url_for('add_media_to_playlist', id=pl.id) }}" class="inline-form add-media-form">
 <select name="media_id">
