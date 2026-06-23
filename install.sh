@@ -73,33 +73,61 @@ echo "✅ Backup nach $BACKUP_DIR"
 # ── 5. Access Point konfigurieren ──────────────────────────────────────
 echo "📡 Konfiguriere Access Point..."
 
-# hostapd
+# hostapd – Optimierte Konfiguration für stabile und schnelle WLAN-Verbindung
 cat > /etc/hostapd/hostapd.conf << 'HOSTAPDEOF'
 interface=wlan0
 driver=nl80211
 ssid=LHTPi
 hw_mode=g
 channel=6
+
+# 20 MHz Kanalbreite (kein HT40, da viele Clients Probleme damit haben)
+ht_capab=[HT20][SHORT-GI-20][RX-STBC1]
+
+# WMM für bessere Multimedia-Performance
 wmm_enabled=1
+
+# Sicherheit
 macaddr_acl=0
 auth_algs=1
 ignore_broadcast_ssid=0
 wpa=2
 wpa_passphrase=LHTPi123
 wpa_key_mgmt=WPA-PSK
-wpa_pairwise=TKIP
+wpa_pairwise=CCMP
 rsn_pairwise=CCMP
+
+# Beacon-Intervall (Standard 100, niedriger = schnellere Verbindung)
+beacon_int=100
+
+# DTIM-Periode (Standard 2, niedriger = weniger Latenz)
+dtim_period=2
+
+# Kein Powersave (Clients sollen nicht in den Energiesparmodus fallen)
+# Diese Einstellung wird zusätzlich per NetworkManager/iW enforced
 HOSTAPDEOF
 chmod 600 /etc/hostapd/hostapd.conf
 
-# dnsmasq
+# dnsmasq – DHCP + DNS für den Access Point, optimiert für stabile Clients
 cat > /etc/dnsmasq.conf << 'DNSMASQEOF'
 interface=wlan0
 dhcp-range=192.168.4.2,192.168.4.100,255.255.255.0,24h
+dhcp-option=3,192.168.4.1
+dhcp-option=6,192.168.4.1
+# MTU auf 1500 setzen – viele Geräte und Webseiten haben Probleme mit PMTU-Discovery
+dhcp-option=26,1500
+# Lease-Zeit (24h, damit Clients nicht ständig neu verhandeln)
+dhcp-lease-max=50
+# DNS für lokale Weiterleitung
 address=/lhtpi.local/192.168.4.1
 no-resolv
+# Externe DNS-Server (für Internet-Zugriff, falls LAN verbunden)
 server=8.8.8.8
 server=1.1.1.1
+# Cache-Größe erhöhen für schnellere wiederholte Anfragen
+cache-size=1000
+# Negativen Cache (NXDOMAIN) cachen, um Zeitüberschreitungen zu vermeiden
+neg-ttl=60
 DNSMASQEOF
 
 # Statische IP für wlan0 via systemd-networkd (Bookworm-kompatibel)
@@ -353,6 +381,38 @@ mkdir -p /etc/NetworkManager/conf.d/
 unmanaged-devices=interface-name:wlan0
 NMEOF
 fi
+
+# ── Netzwerk-Tuning für stabilen AP ──────────────────────────
+echo "📶 Optimiere WLAN-Netzwerk für stabilen AP..."
+
+# WiFi Powersave deaktivieren (die häufigste Ursache für langsame/laggige Verbindungen)
+if command -v iw &>/dev/null; then
+    iw dev wlan0 set power_save off 2>/dev/null || true
+fi
+
+# Dauerhaft via NetworkManager (falls der doch wlan0 managed)
+mkdir -p /etc/NetworkManager/conf.d/
+cat > /etc/NetworkManager/conf.d/99-lhtpi-wifi-powersave-off.cfg << 'NMPWR'
+[connection]
+wifi.powersave = 2
+NMPWR
+
+# MSS Clamping via iptables – verhindert MTU-Probleme bei verschiedenen Webseiten
+# Viele Router/Webseiten haben kaputte PMTU-Discovery, was zu Timeouts führt
+if command -v iptables &>/dev/null; then
+    iptables -t mangle -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true
+fi
+
+# systemd-resolved-Konflikte vermeiden (dnsmasq wird der einzige DNS-Server auf wlan0)
+if systemctl is-active systemd-resolved &>/dev/null 2>&1; then
+    mkdir -p /etc/systemd/resolved.conf.d/
+    cat > /etc/systemd/resolved.conf.d/lhtpi.conf << 'RESEOF'
+[Resolve]
+DNSStubListener=no
+RESEOF
+fi
+
+echo "✅ Netzwerk-Tuning abgeschlossen"
 
 # ── 13. Fertig ─────────────────────────────────────────────────────────
 echo ""
