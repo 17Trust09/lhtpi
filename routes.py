@@ -107,7 +107,10 @@ def active_playlist_status():
         }
 
     items = [playlist_item_to_dict(item) for item in active.items]
-    durations = [max(1, int(item.get('display_duration') or 10)) for item in items]
+    durations = [int(item.get('display_duration') or 10) for item in items]
+    # Bei Videos: display_duration=0 bedeutet "volle Videolänge", 
+    # für die Status-Berechnung nehmen wir 10s als Platzhalter
+    durations = [max(1, d if d > 0 else 10) for d in durations]
     total_duration = sum(durations) or 1
     elapsed = int(datetime.utcnow().timestamp()) % total_duration
     current_index = 0
@@ -332,7 +335,8 @@ def add_media_to_playlist(id):
     item = PlaylistItem(
         playlist_id=playlist.id,
         media_id=media.id,
-        position=max_pos + 1
+        position=max_pos + 1,
+        display_duration=0 if media.file_type == 'video' else 10
     )
     db.session.add(item)
     db.session.commit()
@@ -376,7 +380,8 @@ def update_duration(id):
     if data and 'item_id' in data and 'duration' in data:
         item = PlaylistItem.query.get(int(data['item_id']))
         if item and item.playlist_id == id:
-            item.display_duration = max(1, int(data['duration']))
+            duration = int(data['duration'])
+            item.display_duration = max(0 if item.media.file_type == 'video' else 1, duration)
             db.session.commit()
     return jsonify({'status': 'ok'})
 

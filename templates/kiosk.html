@@ -68,8 +68,8 @@ vid.playsInline=true;
 vid.onerror=()=>{showOverlay('⚠️ Fehler beim Laden');nextItem()};
 vid.onended=()=>nextItem();
 vid.onloadedmetadata=()=>{
-showOverlay(`🎬 ${item.original_name}`);vid.play().catch(()=>{});
 const dur=item.display_duration||0;
+showOverlay(`🎬 ${item.original_name} — ${dur===0?'Auto':`${dur}s`}`);vid.play().catch(()=>{});
 if(dur>0&&dur<vid.duration){
 timer=setTimeout(()=>{vid.pause();nextItem();},dur*1000);
 }

@@ -234,16 +234,20 @@ function renderPlaylists(playlists,allMedia){
   wrap.innerHTML=playlists.map(pl=>{
     const used=new Set(pl.items.map(item=>item.media_id));
     const available=allMedia.filter(m=>!used.has(m.id));
-    const itemsHtml=pl.items.length?`<ul class="playlist-items" data-playlist-id="${pl.id}">${pl.items.map(item=>`
+    const itemsHtml=pl.items.length?`<ul class="playlist-items" data-playlist-id="${pl.id}">${pl.items.map(item=>{
+      const isAutoVideo=item.file_type==='video'&&Number(item.display_duration)===0;
+      return `
       <li data-item-id="${item.id}" class="drag-item" draggable="true">
         <span class="drag-handle">⠿</span>
         <div class="item-info">
           ${item.file_type==='image'?`<img src="${item.url}" class="item-thumb" alt="">`:`<span class="item-thumb video-thumb">▶</span>`}
           <span class="item-name">${escapeHtml(item.original_name)}</span>
         </div>
-        <input type="number" class="duration-input" value="${item.display_duration}" min="1" max="999" data-item-id="${item.id}" title="Anzeigedauer in Sekunden">
+        <input type="number" class="duration-input" value="${item.display_duration}" min="${item.file_type==='video'?'0':'1'}" max="999" data-item-id="${item.id}" title="${item.file_type==='video'?'Anzeigedauer in Sekunden (0 = Auto)':'Anzeigedauer in Sekunden'}">
+        ${isAutoVideo?'<span class="duration-auto-label">Auto</span>':''}
         <form method="post" action="/playlists/${pl.id}/remove/${item.id}" class="ajax-form" data-after="playlists"><button type="submit" class="btn-remove">✕</button></form>
-      </li>`).join('')}</ul>`:'<p class="empty-note">Playlist ist leer. Füge Medien hinzu.</p>';
+      </li>`;
+    }).join('')}</ul>`:'<p class="empty-note">Playlist ist leer. Füge Medien hinzu.</p>';
     const addHtml=available.length?`<form method="post" action="/playlists/${pl.id}/add_media" class="inline-form add-media-form ajax-form" data-after="playlists"><select name="media_id">${available.map(m=>`<option value="${m.id}">${escapeHtml(m.original_name)}</option>`).join('')}</select><button type="submit">➕ Hinzufügen</button></form>`:'';
     return `<article class="playlist-card ${pl.is_active?'active':''}">
       <div class="playlist-header">
@@ -289,8 +293,10 @@ function bindPlaylistControls(){
   $$('.duration-input').forEach(input=>{
     input.addEventListener('change',async function(){
       const ul=this.closest('.playlist-items'); if(!ul)return;
-      await fetch(`/playlists/${ul.dataset.playlistId}/duration`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({item_id:parseInt(this.dataset.itemId),duration:parseInt(this.value)})});
-      showToast('Dauer aktualisiert'); loadStatus();
+      const duration=parseInt(this.value,10);
+      if(Number.isNaN(duration)){showToast('Ungültige Dauer','error');return;}
+      await fetch(`/playlists/${ul.dataset.playlistId}/duration`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({item_id:parseInt(this.dataset.itemId,10),duration})});
+      showToast('Dauer aktualisiert'); await Promise.all([loadPlaylists(),loadStatus()]);
     });
   });
   $$('.playlist-items').forEach(ul=>{
