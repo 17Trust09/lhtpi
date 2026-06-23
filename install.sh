@@ -1,13 +1,18 @@
 #!/bin/bash
 # LHTPi Installationsskript
 # Richtet einen Raspberry Pi 4/5 als autarken Präsentations-Player ein.
-# set -e am Anfang entfernt – stattdessen gezielte Fehlerbehandlung
-# mit || true an kritischen Stellen
+#
+# Zwei Modi:
+#   Desktop (Standard) – mit X11/Openbox/Chromium-Kiosk
+#   Lite              – ohne GUI, nur Access Point + Web-Dashboard
+#
+# Nutzung:
+#   sudo bash install.sh          → Desktop-Modus
+#   sudo bash install.sh lite     → Lite-Modus (für Lite OS / headless)
 
 PROJECT_NAME="LHTPi"
 PROJECT_DIR="/home/pi/lhtpi"
 APP_PORT="8000"
-KIOSK_URL="http://localhost:${APP_PORT}/present/kiosk"
 AP_SSID="LHTPi"
 AP_PASS="LHTPi123"
 SERVICE_APP="lhtpi.service"
@@ -17,9 +22,17 @@ KIOSK_LOG="/home/pi/lhtpi-kiosk.log"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BACKUP_DIR="/root/lhtpi-backup-$(date +%Y%m%d%H%M%S)"
 
+# ── Modus erkennen ──────────────────────────────────────────────────────
+MODE="${1:-desktop}"
+if [ "$MODE" != "desktop" ] && [ "$MODE" != "lite" ]; then
+    echo "❌ Unbekannter Modus '$MODE'. Erlaubt: desktop, lite"
+    echo "   Beispiel: sudo bash install.sh lite"
+    exit 1
+fi
+
 echo "================================================"
 echo "  ${PROJECT_NAME} - Installation"
-echo "  Autarker Präsentations-Player für Raspberry Pi"
+echo "  Modus: ${MODE}"
 echo "================================================"
 echo ""
 
@@ -29,19 +42,25 @@ if [ ! -f /proc/device-tree/model ] || ! grep -qi "raspberry pi" /proc/device-tr
 fi
 
 if [ "$EUID" -ne 0 ]; then
-    echo "❌ Bitte als root ausführen: sudo bash install.sh"
+    echo "❌ Bitte als root ausführen: sudo bash install.sh [modus]"
     exit 1
 fi
 
 # ── 1. Pakete installieren ─────────────────────────────────────────────
 echo "📦 Installiere Systempakete..."
+
+BASE_PKGS="python3 python3-pip python3-venv hostapd dnsmasq ufw curl git"
+
+if [ "$MODE" = "desktop" ]; then
+    GUI_PKGS="xorg openbox chromium-browser chromium-browser-l10n"
+else
+    GUI_PKGS=""
+    echo "   (Lite-Modus: Kein X11/Chromium – Web-Dashboard nur per WLAN)"
+fi
+
 apt-get update -qq
-apt-get install -y -qq \
-    python3 python3-pip python3-venv \
-    hostapd dnsmasq \
-    xorg openbox \
-    chromium-browser chromium-browser-l10n \
-    ufw curl git
+# shellcheck disable=SC2086
+apt-get install -y -qq $BASE_PKGS $GUI_PKGS
 
 apt-mark hold hostapd dnsmasq 2>/dev/null || true
 
@@ -64,8 +83,11 @@ echo "✅ Python-Abhängigkeiten installiert"
 # ── 4. Bestehende Konfiguration sichern ─────────────────────────────────
 echo "💾 Sichere bestehende Konfiguration..."
 mkdir -p "$BACKUP_DIR"
-for f in /etc/hostapd/hostapd.conf /etc/dnsmasq.conf /etc/dhcpcd.conf \
-         /etc/lightdm/lightdm.conf /boot/firmware/config.txt; do
+BACKUP_FILES="/etc/hostapd/hostapd.conf /etc/dnsmasq.conf"
+if [ "$MODE" = "desktop" ]; then
+    BACKUP_FILES="$BACKUP_FILES /etc/dhcpcd.conf /etc/lightdm/lightdm.conf /boot/firmware/config.txt"
+fi
+for f in $BACKUP_FILES; do
     [ -f "$f" ] && cp "$f" "$BACKUP_DIR/" 2>/dev/null || true
 done
 echo "✅ Backup nach $BACKUP_DIR"
@@ -73,7 +95,7 @@ echo "✅ Backup nach $BACKUP_DIR"
 # ── 5. Access Point konfigurieren ──────────────────────────────────────
 echo "📡 Konfiguriere Access Point..."
 
-# hostapd – Optimierte Konfiguration für stabile und schnelle WLAN-Verbindung
+# hostapd – Optimierte Konfiguration
 cat > /etc/hostapd/hostapd.conf << 'HOSTAPDEOF'
 interface=wlan0
 driver=nl80211
@@ -81,10 +103,10 @@ ssid=LHTPi
 hw_mode=g
 channel=6
 
-# 20 MHz Kanalbreite (kein HT40, da viele Clients Probleme damit haben)
+# 20 MHz Kanalbreite (kein HT40, viele Clients haben Probleme damit)
 ht_capab=[HT20][SHORT-GI-20][RX-STBC1]
 
-# WMM für bessere Multimedia-Performance
+# WMM für Multimedia-Performance
 wmm_enabled=1
 
 # Sicherheit
@@ -97,36 +119,29 @@ wpa_key_mgmt=WPA-PSK
 wpa_pairwise=CCMP
 rsn_pairwise=CCMP
 
-# Beacon-Intervall (Standard 100, niedriger = schnellere Verbindung)
+# Beacon-Intervall
 beacon_int=100
 
-# DTIM-Periode (Standard 2, niedriger = weniger Latenz)
+# DTIM-Periode
 dtim_period=2
-
-# Kein Powersave (Clients sollen nicht in den Energiesparmodus fallen)
-# Diese Einstellung wird zusätzlich per NetworkManager/iW enforced
 HOSTAPDEOF
 chmod 600 /etc/hostapd/hostapd.conf
 
-# dnsmasq – DHCP + DNS für den Access Point, optimiert für stabile Clients
+# dnsmasq – DHCP + DNS, optimiert für stabile Clients
 cat > /etc/dnsmasq.conf << 'DNSMASQEOF'
 interface=wlan0
 dhcp-range=192.168.4.2,192.168.4.100,255.255.255.0,24h
 dhcp-option=3,192.168.4.1
 dhcp-option=6,192.168.4.1
-# MTU auf 1500 setzen – viele Geräte und Webseiten haben Probleme mit PMTU-Discovery
+# MTU auf 1500 – viele Clients/Geräte haben kaputte PMTU-Discovery
 dhcp-option=26,1500
-# Lease-Zeit (24h, damit Clients nicht ständig neu verhandeln)
 dhcp-lease-max=50
-# DNS für lokale Weiterleitung
+# Lokale DNS-Weiterleitung
 address=/lhtpi.local/192.168.4.1
 no-resolv
-# Externe DNS-Server (für Internet-Zugriff, falls LAN verbunden)
 server=8.8.8.8
 server=1.1.1.1
-# Cache-Größe erhöhen für schnellere wiederholte Anfragen
 cache-size=1000
-# Negativen Cache (NXDOMAIN) cachen, um Zeitüberschreitungen zu vermeiden
 neg-ttl=60
 DNSMASQEOF
 
@@ -142,7 +157,7 @@ DHCPServer=no
 IPForward=yes
 NETEOF
 
-# dhcpcd deaktivieren falls vorhanden, um Konflikte zu vermeiden
+# dhcpcd deaktivieren
 if systemctl is-enabled dhcpcd &>/dev/null; then
     systemctl stop dhcpcd 2>/dev/null || true
     systemctl disable dhcpcd 2>/dev/null || true
@@ -158,7 +173,7 @@ fi
 echo "✅ Access Point konfiguriert (SSID: ${AP_SSID})"
 
 # ── 6. Flask-App als systemd-Service ───────────────────────────────────
-echo "⚙️  Erstelle systemd-Services..."
+echo "⚙️  Erstelle systemd-Service (App)..."
 
 cat > /etc/systemd/system/${SERVICE_APP} << APPEOF
 [Unit]
@@ -182,10 +197,15 @@ StartLimitBurst=5
 WantedBy=multi-user.target
 APPEOF
 
-# ── 7. Kiosk-Skript ────────────────────────────────────────────────────
-echo "🖥️  Erstelle Kiosk-Startskript..."
+echo "✅ App-Service erstellt"
 
-cat > ${KIOSK_SCRIPT} << 'KIOSKEOF'
+# ── 7. Desktop-Modus: Kiosk + X11 ─────────────────────────────────────
+if [ "$MODE" = "desktop" ]; then
+
+    # ── 7a. Kiosk-Skript ──────────────────────────────────────────────
+    echo "🖥️  Erstelle Kiosk-Startskript..."
+
+    cat > ${KIOSK_SCRIPT} << 'KIOSKEOF'
 #!/bin/bash
 # LHTPi - Kiosk-Startskript
 LOG="/home/pi/lhtpi-kiosk.log"
@@ -225,11 +245,11 @@ exec /usr/bin/chromium-browser \
     "${APP_URL}" >> "$LOG" 2>&1
 KIOSKEOF
 
-chmod +x ${KIOSK_SCRIPT}
-chown pi:pi ${KIOSK_SCRIPT}
+    chmod +x ${KIOSK_SCRIPT}
+    chown pi:pi ${KIOSK_SCRIPT}
 
-# ── 8. Kiosk-Service ───────────────────────────────────────────────────
-cat > /etc/systemd/system/${SERVICE_KIOSK} << KIOSKSVCEOF
+    # ── 7b. Kiosk-Service ─────────────────────────────────────────────
+    cat > /etc/systemd/system/${SERVICE_KIOSK} << KIOSKSVCEOF
 [Unit]
 Description=LHTPi - Kiosk-Präsentationsmodus
 After=${SERVICE_APP}
@@ -252,62 +272,62 @@ StartLimitBurst=3
 WantedBy=multi-user.target
 KIOSKSVCEOF
 
-echo "✅ systemd-Services erstellt"
+    echo "✅ Kiosk-Service erstellt"
 
-# ── 9. X11-Autostart + Desktop-Session ─────────────────────────────────
-echo "🖥️  Richte automatische Desktop-Session ein..."
+    # ── 7c. X11-Autostart + Desktop-Session ───────────────────────────
+    echo "🖥️  Richte Desktop-Session ein..."
 
-# LightDM mit Auto-Login konfigurieren
-mkdir -p /etc/lightdm/
-cat > /etc/lightdm/lightdm.conf << 'LIGHTDM'
+    # LightDM mit Auto-Login
+    mkdir -p /etc/lightdm/
+    cat > /etc/lightdm/lightdm.conf << 'LIGHTDM'
 [Seat:*]
 autologin-user=pi
 autologin-user-timeout=0
 user-session=LXDE-pi
 LIGHTDM
 
-# Openbox-Autostart
-mkdir -p /home/pi/.config/openbox
-cat > /home/pi/.config/openbox/autostart << 'OBEOF'
+    # Openbox-Autostart
+    mkdir -p /home/pi/.config/openbox
+    cat > /home/pi/.config/openbox/autostart << 'OBEOF'
 # LHTPi - Openbox Autostart
 xset s off
 xset -dpms
 xset s noblank
 OBEOF
-chown -R pi:pi /home/pi/.config
+    chown -R pi:pi /home/pi/.config
 
-# systemd-logind konfigurieren für Auto-Login auf tty1
-mkdir -p /etc/systemd/system/getty@tty1.service.d/
-cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf << 'GETTYEOF'
+    # systemd-logind Auto-Login
+    mkdir -p /etc/systemd/system/getty@tty1.service.d/
+    cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf << 'GETTYEOF'
 [Service]
 ExecStart=
 ExecStart=-/sbin/agetty -o '-p -f -- \\u' --noclear --autologin pi %I $TERM
 GETTYEOF
 
-# X11 als Standard (via LightDM)
-if command -v raspi-config &>/dev/null; then
-    raspi-config nonint do_boot_behaviour B4 2>/dev/null || true
-fi
+    if command -v raspi-config &>/dev/null; then
+        raspi-config nonint do_boot_behaviour B4 2>/dev/null || true
+    fi
 
-# Forciere X11 (falls Wayland aktiv)
-mkdir -p /etc/systemd/system/lightdm.service.d/
-cat > /etc/systemd/system/lightdm.service.d/x11.conf << 'X11EOF'
+    # X11 erzwingen
+    mkdir -p /etc/systemd/system/lightdm.service.d/
+    cat > /etc/systemd/system/lightdm.service.d/x11.conf << 'X11EOF'
 [Service]
 Environment=XDG_SESSION_TYPE=x11
 X11EOF
 
-# ── 10. boot/config.txt ────────────────────────────────────────────────
-echo "🖥️  Konfiguriere boot/config.txt..."
+    echo "✅ Desktop-Session eingerichtet"
 
-if [ -f /boot/firmware/config.txt ]; then
-    CONFIG="/boot/firmware/config.txt"
-else
-    CONFIG="/boot/config.txt"
-fi
+    # ── 7d. boot/config.txt ──────────────────────────────────────────
+    echo "🖥️  Konfiguriere boot/config.txt..."
 
-# Markierung nur einmal einfügen
-if ! grep -q "### LHTPi START" "$CONFIG" 2>/dev/null; then
-    cat >> "$CONFIG" << 'BOOTEOF'
+    if [ -f /boot/firmware/config.txt ]; then
+        CONFIG="/boot/firmware/config.txt"
+    else
+        CONFIG="/boot/config.txt"
+    fi
+
+    if ! grep -q "### LHTPi START" "$CONFIG" 2>/dev/null; then
+        cat >> "$CONFIG" << 'BOOTEOF'
 
 ### LHTPi START
 # X11 / KMS
@@ -320,13 +340,12 @@ config_hdmi_boost=4
 disable_overscan=1
 ### LHTPi END
 BOOTEOF
-fi
+    fi
 
-# ── 11. Energiesparmodus ───────────────────────────────────────────────
-echo "🔌 Deaktiviere Energiesparmodus..."
+    # ── 7e. Energiesparmodus ─────────────────────────────────────────
+    echo "🔌 Deaktiviere Energiesparmodus..."
 
-# Konsolen-Profil
-cat > /etc/profile.d/lhtpi_display.sh << 'DPYEOF'
+    cat > /etc/profile.d/lhtpi_display.sh << 'DPYEOF'
 #!/bin/sh
 if [ "$DISPLAY" != "" ]; then
     xset s off 2>/dev/null
@@ -334,9 +353,12 @@ if [ "$DISPLAY" != "" ]; then
     xset s noblank 2>/dev/null
 fi
 DPYEOF
-chmod +x /etc/profile.d/lhtpi_display.sh
+    chmod +x /etc/profile.d/lhtpi_display.sh
 
-# ── 12. UFW Firewall ───────────────────────────────────────────────────
+    echo "✅ Desktop-Konfiguration abgeschlossen"
+fi
+
+# ── 8. UFW Firewall ────────────────────────────────────────────────────
 echo "🔥 Konfiguriere Firewall..."
 
 ufw --force reset 2>/dev/null || true
@@ -350,12 +372,12 @@ ufw allow 53/tcp
 ufw --force enable 2>/dev/null || true
 echo "✅ Firewall konfiguriert"
 
-# ── 12. Services aktivieren ─────────────────────────────────────────────
+# ── 9. Services aktivieren ─────────────────────────────────────────────
 echo "🚀 Aktiviere Services..."
 
 systemctl daemon-reload
 
-# Alte Dienste deaktivieren, die stören könnten
+# Alte Dienste deaktivieren
 systemctl disable dhcpcd 2>/dev/null || true
 systemctl stop dhcpcd 2>/dev/null || true
 
@@ -365,45 +387,46 @@ systemctl unmask dnsmasq 2>/dev/null || true
 systemctl enable hostapd
 systemctl enable dnsmasq
 
-# LHTPi Services
+# LHTPi App
 systemctl enable ${SERVICE_APP}
-systemctl enable ${SERVICE_KIOSK}
 
-# LightDM/X11 aktivieren
-systemctl enable lightdm 2>/dev/null || true
+# Kiosk (nur im Desktop-Modus)
+if [ "$MODE" = "desktop" ]; then
+    systemctl enable ${SERVICE_KIOSK}
+    systemctl enable lightdm 2>/dev/null || true
+fi
 
 # NetworkManager wlan0 entziehen
 if command -v nmcli &>/dev/null; then
     nmcli dev set wlan0 managed no 2>/dev/null || true
+fi
 mkdir -p /etc/NetworkManager/conf.d/
-    cat > /etc/NetworkManager/conf.d/99-lhtpi-unmanaged.cfg << 'NMEOF'
+cat > /etc/NetworkManager/conf.d/99-lhtpi-unmanaged.cfg << 'NMEOF'
 [keyfile]
 unmanaged-devices=interface-name:wlan0
 NMEOF
-fi
 
-# ── Netzwerk-Tuning für stabilen AP ──────────────────────────
-echo "📶 Optimiere WLAN-Netzwerk für stabilen AP..."
+# ── 10. Netzwerk-Tuning ──────────────────────────────────────────────
+echo "📶 Optimiere WLAN-Netzwerk..."
 
-# WiFi Powersave deaktivieren (die häufigste Ursache für langsame/laggige Verbindungen)
+# WiFi Powersave deaktivieren
 if command -v iw &>/dev/null; then
     iw dev wlan0 set power_save off 2>/dev/null || true
 fi
 
-# Dauerhaft via NetworkManager (falls der doch wlan0 managed)
+# Dauerhaft via NetworkManager
 mkdir -p /etc/NetworkManager/conf.d/
 cat > /etc/NetworkManager/conf.d/99-lhtpi-wifi-powersave-off.cfg << 'NMPWR'
 [connection]
 wifi.powersave = 2
 NMPWR
 
-# MSS Clamping via iptables – verhindert MTU-Probleme bei verschiedenen Webseiten
-# Viele Router/Webseiten haben kaputte PMTU-Discovery, was zu Timeouts führt
+# MSS Clamping (verhindert MTU-Probleme)
 if command -v iptables &>/dev/null; then
     iptables -t mangle -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null || true
 fi
 
-# systemd-resolved-Konflikte vermeiden (dnsmasq wird der einzige DNS-Server auf wlan0)
+# systemd-resolved Konflikte vermeiden
 if systemctl is-active systemd-resolved &>/dev/null 2>&1; then
     mkdir -p /etc/systemd/resolved.conf.d/
     cat > /etc/systemd/resolved.conf.d/lhtpi.conf << 'RESEOF'
@@ -414,10 +437,11 @@ fi
 
 echo "✅ Netzwerk-Tuning abgeschlossen"
 
-# ── 13. Fertig ─────────────────────────────────────────────────────────
+# ── 11. Fertig ────────────────────────────────────────────────────────
 echo ""
 echo "================================================"
 echo "  ✅ ${PROJECT_NAME} Installation abgeschlossen!"
+echo "  Modus: ${MODE}"
 echo "================================================"
 echo ""
 echo "  SSID:     ${AP_SSID}"
@@ -425,11 +449,15 @@ echo "  Passwort: ${AP_PASS}"
 echo "  Dashboard: http://192.168.4.1:${APP_PORT}"
 echo "  Login:     admin / admin"
 echo ""
-echo "📋 Nach einem Neustart startet alles automatisch:"
+echo "📋 Nach einem Neustart startet:"
 echo "   - Flask-App als systemd-Service"
 echo "   - Access Point mit SSID '${AP_SSID}'"
-echo "   - X11/Openbox-Session"
-echo "   - Chromium im Kioskmodus"
+if [ "$MODE" = "desktop" ]; then
+    echo "   - X11/Openbox-Session"
+    echo "   - Chromium im Kioskmodus"
+else
+    echo "   - (Kein Kiosk – Lite-Modus, Dashboard per Browser)"
+fi
 echo ""
 echo "👉 Starte Neustart in 5 Sekunden..."
 echo "================================================"
