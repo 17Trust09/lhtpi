@@ -1,7 +1,8 @@
 #!/bin/bash
 # LHTPi Installationsskript
 # Richtet einen Raspberry Pi 4/5 als autarken Präsentations-Player ein.
-set -e
+# set -e am Anfang entfernt – stattdessen gezielte Fehlerbehandlung
+# mit || true an kritischen Stellen
 
 PROJECT_NAME="LHTPi"
 PROJECT_DIR="/home/pi/lhtpi"
@@ -146,6 +147,8 @@ Environment=LHTPI_SECRET=$(head -c 32 /dev/urandom | base64)
 ExecStart=${PROJECT_DIR}/venv/bin/python app.py
 Restart=always
 RestartSec=5
+StartLimitIntervalSec=120
+StartLimitBurst=5
 
 [Install]
 WantedBy=multi-user.target
@@ -211,8 +214,10 @@ Environment=DISPLAY=:0
 Environment=XAUTHORITY=/home/pi/.Xauthority
 ExecStartPre=/bin/sleep 5
 ExecStart=${KIOSK_SCRIPT}
-Restart=always
-RestartSec=5
+Restart=on-failure
+RestartSec=10
+StartLimitIntervalSec=120
+StartLimitBurst=3
 
 [Install]
 WantedBy=multi-user.target
@@ -365,5 +370,8 @@ echo "   - Access Point mit SSID '${AP_SSID}'"
 echo "   - X11/Openbox-Session"
 echo "   - Chromium im Kioskmodus"
 echo ""
-echo "👉 Jetzt Neustart ausführen: sudo reboot"
+echo "👉 Starte Neustart in 5 Sekunden..."
 echo "================================================"
+sleep 5
+echo "🔄 Reboot..."
+reboot
