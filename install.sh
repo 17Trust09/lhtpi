@@ -4,7 +4,6 @@
 # Nutzung auf dem Pi:
 #   cd /home/pi/lhtpi
 #   sudo bash install.sh
-
 set -Eeuo pipefail
 
 PROJECT_NAME="LHTPi"
@@ -23,10 +22,11 @@ KIOSK_LOG="/home/pi/lhtpi-kiosk.log"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_DIR="/root/lhtpi-backup-$(date +%Y%m%d%H%M%S)"
 
-log() { echo -e "\n==> $*"; }
-ok() { echo "✅ $*"; }
-warn() { echo "⚠️  $*"; }
-fail() { echo "❌ $*" >&2; exit 1; }
+# ── Hilfsfunktionen ────────────────────────────────────────────────────
+log()  { echo -e "\n==> $*"; }
+ok()   { echo "  ✅ $*"; }
+warn() { echo "  ⚠️  $*"; }
+fail() { echo -e "\n  ❌ $*" >&2; exit 1; }
 
 require_root() {
     if [ "${EUID}" -ne 0 ]; then
@@ -36,27 +36,63 @@ require_root() {
 
 require_desktop_target() {
     if [ -f /proc/device-tree/model ] && ! grep -qi "raspberry pi" /proc/device-tree/model 2>/dev/null; then
-        warn "Dieses System meldet sich nicht als Raspberry Pi. Installation wird trotzdem fortgesetzt."
-    elif [ ! -f /proc/device-tree/model ]; then
-        warn "Raspberry-Pi-Hardware konnte nicht erkannt werden. Installation wird trotzdem fortgesetzt."
+        warn "Dieses System ist kein Raspberry Pi. Installation wird trotzdem versucht."
     fi
-
-    if [ ! -d /boot/firmware ]; then
-        warn "/boot/firmware fehlt. Das Skript ist für Raspberry Pi OS Desktop (Trixie) gedacht."
+    if ! command -v Xorg &>/dev/null && ! dpkg -l xorg &>/dev/null 2>&1; then
+        warn "Xorg scheint nicht installiert. Stelle sicher, dass Raspberry Pi OS Desktop verwendet wird."
     fi
 }
 
 ensure_pi_user() {
     if ! id "${PI_USER}" >/dev/null 2>&1; then
-        fail "Benutzer '${PI_USER}' existiert nicht. Bitte Raspberry Pi OS Desktop mit Standardbenutzer 'pi' verwenden oder das Skript anpassen."
+        fail "Benutzer '${PI_USER}' existiert nicht. Bitte Raspberry Pi OS Desktop verwenden."
+    fi
+    if [ ! -d "/home/${PI_USER}" ]; then
+        fail "Home-Verzeichnis /home/${PI_USER} nicht gefunden."
     fi
 }
 
+retry_nmcli() {
+    """Führt nmcli aus, wartet bei transienten Fehlern und wiederholt."""
+    local cmd=("$@")
+    for i in 1 2 3; do
+        if "${cmd[@]}" 2>/dev/null; then
+            return 0
+        fi
+        warn "nmcli (Versuch $i/3) fehlgeschlagen: ${cmd[*]}"
+        sleep 2
+    done
+    # Letzter Versuch – Fehler wird ausgegeben, Skript läuft weiter
+    "${cmd[@]}" 2>&1 || warn "nmcli-Kommando endgültig fehlgeschlagen (nicht kritisch): ${cmd[*]}"
+    return 0
+}
+
+wait_for_ap() {
+    """Wartet maximal 30s, bis der Access Point aktiv ist."""
+    log "Warte auf Access Point '${AP_SSID}'..."
+    for i in $(seq 1 15); do
+        if nmcli -t con show lhtpi-ap --active 2>/dev/null | grep -q lhtpi-ap; then
+            ok "Access Point '${AP_SSID}' ist aktiv"
+            return 0
+        fi
+        if iw dev wlan0 info 2>/dev/null | grep -q type.ap; then
+            ok "wlan0 ist im AP-Modus"
+            return 0
+        fi
+        sleep 2
+    done
+    warn "Access Point wurde nicht als aktiv erkannt. Das Dashboard ist trotzdem per LAN erreichbar."
+    warn "Nach dem Reboot sollte der AP automatisch starten."
+    return 0
+}
+
+# ── Installationsschritte ──────────────────────────────────────────────
+
 install_packages() {
-    log "Installiere Systempakete für Desktop/Kiosk"
+    log "Installiere Systempakete"
     export DEBIAN_FRONTEND=noninteractive
-    apt-get update
-    apt-get install -y \
+    apt-get update -qq
+    apt-get install -y -qq \
         python3 python3-pip python3-venv \
         ufw curl git \
         xorg openbox \
@@ -68,88 +104,123 @@ prepare_project() {
     log "Richte Projekt unter ${PROJECT_DIR} ein"
     mkdir -p "${PROJECT_DIR}" "${PROJECT_DIR}/uploads"
 
-    # Wenn das Skript aus einem anderen Verzeichnis gestartet wurde, Projektdateien nach /home/pi/lhtpi kopieren.
     if [ "${SCRIPT_DIR}" != "${PROJECT_DIR}" ]; then
-        tar --exclude='./venv' --exclude='./.venv' --exclude='./__pycache__' --exclude='./lhtpi.db' \
-            -C "${SCRIPT_DIR}" -cf - . | tar -C "${PROJECT_DIR}" -xf -
+        # Dateien kopieren, aber venv/Caches ausschließen
+        for f in "${SCRIPT_DIR}"/*; do
+            [ -f "$f" ] && cp "$f" "${PROJECT_DIR}/" 2>/dev/null || true
+        done
+        for d in templates static; do
+            [ -d "${SCRIPT_DIR}/${d}" ] && cp -r "${SCRIPT_DIR}/${d}" "${PROJECT_DIR}/" 2>/dev/null || true
+        done
     fi
 
-    [ -f "${PROJECT_DIR}/requirements.txt" ] || fail "${PROJECT_DIR}/requirements.txt fehlt. Bitte Repository nach ${PROJECT_DIR} kopieren."
+    if [ ! -f "${PROJECT_DIR}/requirements.txt" ]; then
+        fail "${PROJECT_DIR}/requirements.txt fehlt. Bitte Repository korrekt klonen."
+    fi
+
     chown -R "${PI_USER}:${PI_GROUP}" "${PROJECT_DIR}"
-    ok "Projektverzeichnis und uploads/ sind vorhanden"
+    ok "Projektverzeichnis mit uploads/ bereit"
 }
 
 setup_python() {
-    log "Erstelle Python-Virtualenv und installiere requirements.txt"
+    log "Erstelle Python-Virtualenv"
     cd "${PROJECT_DIR}"
     sudo -u "${PI_USER}" python3 -m venv venv
-    sudo -u "${PI_USER}" "${PROJECT_DIR}/venv/bin/python" -m pip install --upgrade pip
-    sudo -u "${PI_USER}" "${PROJECT_DIR}/venv/bin/pip" install -r requirements.txt
+    sudo -u "${PI_USER}" "${PROJECT_DIR}/venv/bin/python" -m pip install --upgrade pip -q
+    sudo -u "${PI_USER}" "${PROJECT_DIR}/venv/bin/pip" install -r requirements.txt -q
     chown -R "${PI_USER}:${PI_GROUP}" "${PROJECT_DIR}"
-    ok "Python-Umgebung fertig"
+    ok "Python-Umgebung fertig (Venv + Abhängigkeiten)"
 }
 
 backup_configs() {
-    log "Sichere relevante bestehende Konfigurationen nach ${BACKUP_DIR}"
+    log "Sichere bestehende Konfiguration nach ${BACKUP_DIR}"
     mkdir -p "${BACKUP_DIR}"
     cp -a /etc/NetworkManager/system-connections "${BACKUP_DIR}/system-connections" 2>/dev/null || true
     cp -a /etc/NetworkManager/conf.d "${BACKUP_DIR}/NetworkManager-conf.d" 2>/dev/null || true
     cp -a /etc/lightdm "${BACKUP_DIR}/lightdm" 2>/dev/null || true
-    cp -a /boot/firmware/config.txt "${BACKUP_DIR}/config.txt" 2>/dev/null || true
+    [ -f /boot/firmware/config.txt ] && cp /boot/firmware/config.txt "${BACKUP_DIR}/config.txt"
     ok "Backup abgeschlossen"
 }
 
 configure_network() {
-    log "Konfiguriere Netzwerk: eth0 bleibt DHCP, wlan0 wird NetworkManager-Access-Point"
+    log "Konfiguriere Netzwerk"
+    log "  eth0: bleibt per DHCP (LAN-Zugriff)"
+    log "  wlan0: wird zum Access Point '${AP_SSID}'"
 
-    command -v nmcli >/dev/null 2>&1 || fail "nmcli fehlt. Raspberry Pi OS Desktop/Trixie mit NetworkManager wird benötigt."
+    command -v nmcli >/dev/null 2>&1 || fail "nmcli fehlt. Raspberry Pi OS Desktop (Trixie) mit NetworkManager benötigt."
 
-    # Alte AP-Dienste dürfen nicht parallel zu NetworkManager laufen.
+    # 1. hostapd/dnsmasq stilllegen (falls aus alter Installation)
+    log "  Deaktiviere alte AP-Dienste (hostapd/dnsmasq)..."
     systemctl stop hostapd dnsmasq 2>/dev/null || true
     systemctl disable hostapd dnsmasq 2>/dev/null || true
     systemctl mask hostapd dnsmasq 2>/dev/null || true
 
-    # Trixie Desktop nutzt NetworkManager. systemd-networkd soll wlan0 nicht übernehmen.
+    # 2. systemd-networkd deaktivieren (Trixie nutzt NM)
+    log "  Deaktiviere systemd-networkd..."
     systemctl stop systemd-networkd 2>/dev/null || true
     systemctl disable systemd-networkd 2>/dev/null || true
 
+    # 3. NetworkManager aktivieren + Powersave ausschalten
+    log "  Aktiviere NetworkManager und deaktiviere WiFi Powersave..."
     systemctl enable NetworkManager
     systemctl restart NetworkManager
+    sleep 2
 
-    # WLAN-Powersave dauerhaft abschalten.
     mkdir -p /etc/NetworkManager/conf.d
     cat > /etc/NetworkManager/conf.d/99-lhtpi-wifi-powersave.conf <<'EOF'
 [connection]
 wifi.powersave = 2
 EOF
-    systemctl reload NetworkManager || systemctl restart NetworkManager
+    systemctl reload NetworkManager 2>/dev/null || systemctl restart NetworkManager
+    sleep 1
 
-    # Alle bestehenden WLAN-Verbindungen löschen, damit der Pi nicht als Client in ein altes WLAN geht.
+    # 4. Alte WLAN-Client-Verbindungen löschen
+    log "  Lösche alte WLAN-Client-Verbindungen..."
     while IFS=: read -r name uuid type device; do
-        if [ "${type}" = "802-11-wireless" ] || [ "${device}" = "wlan0" ]; then
-            nmcli con delete "${uuid}" || true
+        if [ "${type}" = "802-11-wireless" ]; then
+            log "    Lösche alte WLAN-Verbindung: ${name} (${uuid})"
+            nmcli con delete "${uuid}" 2>/dev/null || true
         fi
-    done < <(nmcli -t -f NAME,UUID,TYPE,DEVICE con show)
+    done < <(nmcli -t -f NAME,UUID,TYPE,DEVICE con show 2>/dev/null || true)
 
-    nmcli radio wifi on || true
+    # 5. AP-Verbindung anlegen (falls nicht vorhanden)
+    log "  Lege AP-Verbindung 'lhtpi-ap' an..."
+    if nmcli -t con show lhtpi-ap &>/dev/null; then
+        log "    Verbindung existiert bereits, überspringe create"
+    else
+        retry_nmcli nmcli con add type wifi ifname wlan0 mode ap con-name lhtpi-ap ssid "${AP_SSID}"
+        retry_nmcli nmcli con modify lhtpi-ap wifi.band bg
+        retry_nmcli nmcli con modify lhtpi-ap wifi.channel 6
+        retry_nmcli nmcli con modify lhtpi-ap 802-11-wireless-security.key-mgmt wpa-psk
+        retry_nmcli nmcli con modify lhtpi-ap 802-11-wireless-security.psk "${AP_PASS}"
+        retry_nmcli nmcli con modify lhtpi-ap ipv4.method shared
+        retry_nmcli nmcli con modify lhtpi-ap ipv4.addresses "${AP_ADDR}"
+        retry_nmcli nmcli con modify lhtpi-ap ipv6.method ignore
+        retry_nmcli nmcli con modify lhtpi-ap connection.autoconnect yes
+    fi
 
-    # eth0 wird bewusst nicht verändert: Raspberry Pi OS/NetworkManager belässt DHCP als Default.
-    nmcli con add type wifi ifname wlan0 mode ap con-name lhtpi-ap ssid "${AP_SSID}"
-    nmcli con modify lhtpi-ap wifi.band bg
-    nmcli con modify lhtpi-ap wifi.channel 6
-    nmcli con modify lhtpi-ap 802-11-wireless-security.key-mgmt wpa-psk
-    nmcli con modify lhtpi-ap 802-11-wireless-security.psk "${AP_PASS}"
-    nmcli con modify lhtpi-ap ipv4.method shared
-    nmcli con modify lhtpi-ap ipv4.addresses "${AP_ADDR}"
-    nmcli con modify lhtpi-ap ipv6.method ignore
-    nmcli con modify lhtpi-ap connection.autoconnect yes
-    nmcli con up lhtpi-ap || true
+    # 6. AP starten
+    log "  Starte Access Point..."
+    # Vor dem Up kurz warten, damit NM die Änderungen verarbeitet
+    sleep 2
+    nmcli con up lhtpi-ap 2>&1 || warn "AP konnte nicht sofort gestartet werden (startet nach Reboot)"
 
-    ok "Access Point '${AP_SSID}' konfiguriert (${AP_ADDR}); eth0 bleibt per DHCP erreichbar"
+    # 7. Warten und prüfen
+    wait_for_ap
+
+    # 8. eth0 wird NICHT angefasst – NM belässt DHCP.
+    #    Zusätzlich: Notfall-IP auf eth0 falls DHCP fehlschlägt (nur wenn keine IP vorhanden)
+    if ! ip addr show eth0 2>/dev/null | grep -q 'inet '; then
+        log "  eth0 hat keine IP – setze temporär 192.168.178.250/24 als Fallback"
+        ip addr add 192.168.178.250/24 dev eth0 2>/dev/null || true
+    fi
+
+    ok "Netzwerk konfiguriert: eth0=DHCP, wlan0=AP '${AP_SSID}'"
 }
 
 configure_services() {
     log "Erstelle systemd-Service für Flask-App"
+
     local secret
     secret="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 48 || true)"
     [ -n "${secret}" ] || secret="lhtpi-change-me-$(date +%s)"
@@ -191,7 +262,7 @@ READY_URL="http://localhost:8000/login"
 mkdir -p "$(dirname "$LOG")"
 touch "$LOG"
 
-echo "$(date '+%F %T') - LHTPi-Kiosk wartet auf Flask-App" >> "$LOG"
+echo "$(date '+%F %T') - LHTPi-Kiosk gestartet, warte auf Flask-App" >> "$LOG"
 
 ready=0
 for i in $(seq 1 30); do
@@ -200,12 +271,12 @@ for i in $(seq 1 30); do
         echo "$(date '+%F %T') - Flask-App erreichbar, starte Chromium" >> "$LOG"
         break
     fi
-    echo "$(date '+%F %T') - Versuch $i/30: Flask-App noch nicht erreichbar" >> "$LOG"
+    echo "$(date '+%F %T') - Versuch $i/30: Flask-App noch nicht bereit" >> "$LOG"
     sleep 2
 done
 
 if [ "$ready" -ne 1 ]; then
-    echo "$(date '+%F %T') - Flask-App nach 30 Versuchen nicht erreichbar; starte Chromium trotzdem" >> "$LOG"
+    echo "$(date '+%F %T') - Flask-App nach 30 Versuchen nicht erreichbar, starte Chromium trotzdem" >> "$LOG"
 fi
 
 xset s off >/dev/null 2>&1 || true
@@ -265,8 +336,9 @@ EOF
 }
 
 configure_desktop() {
-    log "Konfiguriere X11/Openbox, LightDM-Autologin und HDMI-Fallback"
+    log "Konfiguriere X11/LightDM/Openbox und HDMI-Fallback"
 
+    # LightDM-Autologin
     mkdir -p /etc/lightdm/lightdm.conf.d
     cat > /etc/lightdm/lightdm.conf.d/50-lhtpi-autologin.conf <<EOF
 [Seat:*]
@@ -275,6 +347,7 @@ autologin-user-timeout=0
 user-session=openbox
 EOF
 
+    # Openbox-Autostart
     mkdir -p "/home/${PI_USER}/.config/openbox"
     cat > "/home/${PI_USER}/.config/openbox/autostart" <<'EOF'
 # LHTPi: Bildschirm für Dauerbetrieb wach halten
@@ -284,6 +357,7 @@ xset s noblank
 EOF
     chown -R "${PI_USER}:${PI_GROUP}" "/home/${PI_USER}/.config"
 
+    # Getty-Autologin tty1
     mkdir -p /etc/systemd/system/getty@tty1.service.d
     cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf <<EOF
 [Service]
@@ -291,12 +365,13 @@ ExecStart=
 ExecStart=-/sbin/agetty --autologin ${PI_USER} --noclear %I \$TERM
 EOF
 
+    # HDMI-Fallback in config.txt
     if [ -f /boot/firmware/config.txt ]; then
         grep -qxF 'hdmi_force_hotplug=1' /boot/firmware/config.txt || echo 'hdmi_force_hotplug=1' >> /boot/firmware/config.txt
         grep -qxF 'hdmi_group=2' /boot/firmware/config.txt || echo 'hdmi_group=2' >> /boot/firmware/config.txt
         grep -qxF 'hdmi_mode=82' /boot/firmware/config.txt || echo 'hdmi_mode=82' >> /boot/firmware/config.txt
     else
-        warn "/boot/firmware/config.txt nicht gefunden; HDMI-Fallback wurde nicht geschrieben."
+        warn "/boot/firmware/config.txt nicht gefunden – HDMI-Fallback nicht gesetzt"
     fi
 
     systemctl set-default graphical.target
@@ -304,29 +379,45 @@ EOF
 }
 
 configure_firewall() {
-    log "Konfiguriere UFW"
+    log "Konfiguriere Firewall (UFW)"
+    ufw --force reset 2>/dev/null || true
+    ufw default deny incoming
+    ufw default allow outgoing
     ufw allow ssh
     ufw allow "${APP_PORT}/tcp"
     ufw --force enable
-    ok "Firewall aktiv: SSH und Port ${APP_PORT}/tcp erlaubt"
+    ok "Firewall aktiv: SSH + Port ${APP_PORT}/tcp freigegeben"
 }
 
-finish_install() {
-    log "Installation abgeschlossen"
-    echo "Dashboard über LAN: http://<LAN-IP>:${APP_PORT}"
-    echo "Dashboard über LHTPi-AP: http://192.168.4.1:${APP_PORT}"
-    echo "AP: SSID '${AP_SSID}', Passwort '${AP_PASS}'"
-    echo "Login: admin / admin"
+print_summary() {
     echo ""
-    echo "Neustart in 5 Sekunden ..."
+    echo "================================================"
+    echo "  ✅ ${PROJECT_NAME} Installation abgeschlossen!"
+    echo "================================================"
+    echo ""
+    echo "  📡 Access Point:  ${AP_SSID} / ${AP_PASS}"
+    echo "  🌐 AP-Dashboard:  http://192.168.4.1:${APP_PORT}"
+    echo "  🌐 LAN-Dashboard: http://<LAN-IP>:${APP_PORT}"
+    echo "  🔑 Login:         admin / admin"
+    echo ""
+    echo "  📺 HDMI: Chromium-Kiosk mit ${KIOSK_URL}"
+    echo "  🔗 SSH (LAN): ssh pi@<LAN-IP>"
+    echo ""
+    echo "  ⚠️  Wichtig: DHCP-Reservierung im Router für den Pi einrichten,"
+    echo "     damit die LAN-IP stabil bleibt."
+    echo "-----------------------------------------------"
+    echo ""
+    echo "👉 Neustart in 5 Sekunden..."
     sleep 5
+    echo "🔄 Reboot..."
     reboot
 }
 
+# ── Hauptprogramm ──────────────────────────────────────────────────────
 main() {
     echo "================================================"
-    echo "  ${PROJECT_NAME} Installation - Raspberry Pi OS Desktop/Trixie"
-    echo "  Kein Lite-Modus: X11/Openbox/Chromium-Kiosk wird eingerichtet"
+    echo "  ${PROJECT_NAME} Installation"
+    echo "  Raspberry Pi OS Desktop (Trixie)"
     echo "================================================"
 
     require_root
@@ -340,7 +431,7 @@ main() {
     configure_services
     configure_desktop
     configure_firewall
-    finish_install
+    print_summary
 }
 
 main "$@"
