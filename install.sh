@@ -53,7 +53,7 @@ ensure_pi_user() {
 }
 
 retry_nmcli() {
-    """Führt nmcli aus, wartet bei transienten Fehlern und wiederholt."""
+    # Führt nmcli aus, wartet bei transienten Fehlern und wiederholt.
     local cmd=("$@")
     for i in 1 2 3; do
         if "${cmd[@]}" 2>/dev/null; then
@@ -68,7 +68,7 @@ retry_nmcli() {
 }
 
 wait_for_ap() {
-    """Wartet maximal 30s, bis der Access Point aktiv ist."""
+    # Wartet maximal 30s, bis der Access Point aktiv ist.
     log "Warte auf Access Point '${AP_SSID}'..."
     for i in $(seq 1 15); do
         if nmcli -t con show lhtpi-ap --active 2>/dev/null | grep -q lhtpi-ap; then
@@ -95,7 +95,7 @@ install_packages() {
     apt-get install -y -qq \
         python3 python3-pip python3-venv \
         ufw curl git \
-        xorg openbox \
+        xorg openbox unclutter \
         chromium-browser chromium-browser-l10n
     ok "Systempakete installiert"
 }
@@ -283,6 +283,9 @@ xset s off >/dev/null 2>&1 || true
 xset -dpms >/dev/null 2>&1 || true
 xset s noblank >/dev/null 2>&1 || true
 
+# Mauszeiger nach 5s Inaktivität ausblenden
+unclutter -idle 5 -root >/dev/null 2>&1 || true
+
 CHROMIUM="/usr/bin/chromium-browser"
 [ -x "$CHROMIUM" ] || CHROMIUM="/usr/bin/chromium"
 
@@ -338,14 +341,25 @@ EOF
 configure_desktop() {
     log "Konfiguriere X11/LightDM/Openbox und HDMI-Fallback"
 
-    # LightDM-Autologin
+    # LightDM-Autologin (Openbox als Default-Session)
     mkdir -p /etc/lightdm/lightdm.conf.d
     cat > /etc/lightdm/lightdm.conf.d/50-lhtpi-autologin.conf <<EOF
 [Seat:*]
 autologin-user=${PI_USER}
 autologin-user-timeout=0
 user-session=openbox
+autologin-session=openbox
 EOF
+
+    # Wayland-Sessions für den Kiosk deaktivieren – Chromium-Kiosk,
+    # unclutter und xset brauchen zwingend X11
+    if [ -d /usr/share/wayland-sessions ]; then
+        mkdir -p /usr/share/wayland-sessions/disabled
+        for f in /usr/share/wayland-sessions/*.desktop; do
+            [ -f "$f" ] && mv "$f" /usr/share/wayland-sessions/disabled/ 2>/dev/null || true
+        done
+        log "  Wayland-Sessions deaktiviert (X11 erforderlich für Kiosk)"
+    fi
 
     # Openbox-Autostart
     mkdir -p "/home/${PI_USER}/.config/openbox"
