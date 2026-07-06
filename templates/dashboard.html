@@ -5,6 +5,33 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>LHTPi - Steuerzentrale</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<style>
+/* Move-Buttons (▲/▼) für Touch-Bedienung */
+.move-btns {
+  display: flex;
+  gap: .3rem;
+  flex-shrink: 0;
+}
+.btn-move {
+  padding: .4rem .55rem;
+  background: rgba(108,99,255,.1);
+  border: 1px solid rgba(108,99,255,.2);
+  border-radius: 8px;
+  color: #8f88ff;
+  cursor: pointer;
+  font-size: .8rem;
+  line-height: 1;
+  transition: all .2s;
+}
+.btn-move:hover, .btn-move:active {
+  background: rgba(108,99,255,.25);
+  color: #fff;
+}
+.btn-move:disabled {
+  opacity: .3;
+  cursor: not-allowed;
+}
+</style>
 </head>
 <body>
 <header class="navbar app-topbar">
@@ -245,6 +272,10 @@ function renderPlaylists(playlists,allMedia){
         </div>
         <input type="number" class="duration-input" value="${item.display_duration}" min="${item.file_type==='video'?'0':'1'}" max="999" data-item-id="${item.id}" title="${item.file_type==='video'?'Anzeigedauer in Sekunden (0 = Auto)':'Anzeigedauer in Sekunden'}">
         ${isAutoVideo?'<span class="duration-auto-label">Auto</span>':''}
+        <div class="move-btns">
+          <button type="button" class="btn-move" data-dir="up" title="Nach oben">▲</button>
+          <button type="button" class="btn-move" data-dir="down" title="Nach unten">▼</button>
+        </div>
         <form method="post" action="/playlists/${pl.id}/remove/${item.id}" class="ajax-form" data-after="playlists"><button type="submit" class="btn-remove">✕</button></form>
       </li>`;
     }).join('')}</ul>`:'<p class="empty-note">Playlist ist leer. Füge Medien hinzu.</p>';
@@ -311,6 +342,33 @@ function bindPlaylistControls(){
     });
   });
   $$('.drag-item').forEach(item=>item.addEventListener('dragstart',e=>e.dataTransfer.setData('text/plain',item.dataset.itemId)));
+  // Move-Buttons (▲/▼)
+  $$('.btn-move').forEach(btn=>{
+    if(btn.dataset.bound)return;btn.dataset.bound='1';
+    btn.addEventListener('click',function(){
+      const li=this.closest('.drag-item');
+      const ul=li.closest('.playlist-items');
+      const dir=this.dataset.dir;
+      if(dir==='up'&&li.previousElementSibling){
+        li.parentNode.insertBefore(li,li.previousElementSibling);
+      }else if(dir==='down'&&li.nextElementSibling){
+        li.parentNode.insertBefore(li.nextElementSibling,li);
+      }
+      updateMoveButtons(ul);
+      const order=[...ul.querySelectorAll('.drag-item')].map(el=>el.dataset.itemId);
+      fetch(`/playlists/${ul.dataset.playlistId}/reorder`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({order})}).catch(()=>{});
+    });
+  });
+  $$('.playlist-items').forEach(ul=>updateMoveButtons(ul));
+}
+function updateMoveButtons(ul){
+  const items=ul.querySelectorAll('.drag-item');
+  items.forEach((item,i)=>{
+    const up=item.querySelector('.btn-move[data-dir="up"]');
+    const down=item.querySelector('.btn-move[data-dir="down"]');
+    if(up)up.disabled=(i===0);
+    if(down)down.disabled=(i===items.length-1);
+  });
 }
 
 $('#media-filter').addEventListener('submit',e=>{e.preventDefault();loadMedia();});
