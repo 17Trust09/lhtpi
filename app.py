@@ -11,9 +11,18 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500 MB
 app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif', 'mp4'}
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0  # Kein Browser-Cache für Templates
 
 from models import db
 db.init_app(app)
+
+# Browser-Caching komplett deaktivieren (damit Templates immer frisch sind)
+@app.after_request
+def no_cache(response):
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 login_manager = LoginManager()
 login_manager.init_app(app)
