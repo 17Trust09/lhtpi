@@ -295,7 +295,7 @@ exec "$CHROMIUM" \
     --noerrdialogs \
     --disable-infobars \
     --disable-session-crashed-bubble \
-    --disable-features=TranslateUI \
+    --disable-features=Translate,TranslateUI \
     --no-first-run \
     --check-for-update-interval=31536000 \
     --autoplay-policy=no-user-gesture-required \
@@ -307,6 +307,9 @@ exec "$CHROMIUM" \
     --disable-context-menu \
     --touch-events=disabled \
     --simulate-outdated-no-au='01-01-2200' \
+    --disable-component-update \
+    --lang=de \
+    --force-fieldtrials="*Translate/Disabled/" \
     "$APP_URL" >> "$LOG" 2>&1
 EOF
     chmod +x "${KIOSK_SCRIPT}"
