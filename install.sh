@@ -291,34 +291,48 @@ if [ -d /sys/class/graphics ]; then
     [ -w "$fb/cursor_blink" ] && echo 0 > "$fb/cursor_blink" 2>/dev/null || true
   done
 fi
-# 2. Xorg HW-Cursor deaktivieren – per xorg.conf.d-Eintrag
-mkdir -p /etc/X11/xorg.conf.d
-cat > /etc/X11/xorg.conf.d/99-lhtpi-nocursor.conf <<'XEOF'
-Section "Device"
-    Identifier  "Card0"
-    Driver      "modesetting"
-    Option      "SWCursor" "true"
-EndSection
+# 2. System-Cursor-Theme durch transparente 1x1-Cursor ersetzen (Wayland-kompatibel!)
+mkdir -p /home/pi/.icons/lhtpi-blank/cursors
+cat > /home/pi/.icons/lhtpi-blank/cursors/default <<'XEOF'
+Xcursor
+0
+0
 XEOF
-# 3. Transparenten XBM-Cursor setzen
-mkdir -p /home/pi/.icons
-cat > /home/pi/.icons/blank.xbm <<'XEOF'
-#define blank_width 1
-#define blank_height 1
-static unsigned char blank_bits[] = { 0x00 };
+chmod 644 /home/pi/.icons/lhtpi-blank/cursors/default
+# Alle gängigen Cursor-Namen auf den leeren Cursor linken
+for c in arrow left_ptr right_ptr hand1 hand2 pointer crosshair move grab grabbing text wait progress cell pencil copy alias context-menu all-scroll col-resize e-resize w-resize n-resize s-resize ne-resize nw-resize se-resize sw-resize ew-resize ns-resize nesw-resize nwse-resize row-resize vertical-text dnd-none dnd-copy dnd-link dnd-move dnd-ask no-drop not-allowed forbidden help; do
+  ln -sf default "/home/pi/.icons/lhtpi-blank/cursors/$c" 2>/dev/null || true
+done
+# 3. Das Theme als Systemdefault setzen
+mkdir -p /home/pi/.icons/default
+cat > /home/pi/.icons/default/index.theme <<'XEOF'
+[Icon Theme]
+Name=LHTPi Blank
+Comment=Leerer Cursor für Kiosk-Modus
+Inherits=lhtpi-blank
 XEOF
+# 4. XDG-Umgebungsvariable setzen (für Wayland-Anwendungen)
+export XCURSOR_THEME=lhtpi-blank
+export XCURSOR_SIZE=1
+# 5. labwc zwingen, das Theme zu laden
+mkdir -p /home/pi/.config/labwc
+cat > /home/pi/.config/labwc/rc.xml <<'LABWC_EOF'
+<?xml version="1.0"?>
+<labwc_config>
+  <theme>
+    <name>lhtpi-blank</name>
+    <cornerRadius>0</cornerRadius>
+  </theme>
+  <mouse>
+    <theme>
+      <name>lhtpi-blank</name>
+    </theme>
+  </mouse>
+</labwc_config>
+LABWC_EOF
+# 6. Vorhandene Cursor-Root-Setups
 xsetroot -bitmap /home/pi/.icons/blank.xbm -fg black -bg black >/dev/null 2>&1 || true
-# 4. Cursor aus dem Bildschirm verschieben (nach ganz unten rechts +1)
-xdotool mousemove 99999 99999 >/dev/null 2>&1 || true
-# 5. Dauerhaft den Cursor wegdrücken (Hintergrundprozess)
-(
-  while true; do
-    xdotool mousemove 99999 99999 2>/dev/null || true
-    sleep 2
-  done
-) &
-CURSOR_PID=$!
-unclutter -idle 0 -root -jitter 0 -grab -visible >/dev/null 2>&1 || true
+chown -R "${PI_USER}:${PI_GROUP}" /home/pi/.icons /home/pi/.config/labwc
 
 CHROMIUM="/usr/bin/chromium-browser"
 [ -x "$CHROMIUM" ] || CHROMIUM="/usr/bin/chromium"
@@ -365,6 +379,8 @@ User=${PI_USER}
 Group=${PI_GROUP}
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=/home/${PI_USER}/.Xauthority
+Environment=XCURSOR_THEME=lhtpi-blank
+Environment=XCURSOR_SIZE=1
 ExecStartPre=/bin/sleep 5
 ExecStart=${KIOSK_SCRIPT}
 Restart=on-failure
