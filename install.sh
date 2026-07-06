@@ -95,7 +95,7 @@ install_packages() {
     apt-get install -y -qq \
         python3 python3-pip python3-venv \
         ufw curl git \
-        xorg openbox unclutter \
+        xorg openbox unclutter-xfixes \
         chromium-browser chromium-browser-l10n
     ok "Systempakete installiert"
 }
@@ -283,8 +283,99 @@ xset s off >/dev/null 2>&1 || true
 xset -dpms >/dev/null 2>&1 || true
 xset s noblank >/dev/null 2>&1 || true
 
-# Mauszeiger nach 5s Inaktivität ausblenden
-unclutter -idle 5 -root >/dev/null 2>&1 || true
+# Mauszeiger sofort ausblenden (funktioniert auf X11 + Wayland)
+unclutter -idle 0 -root >/dev/null 2>&1 || true
+mkdir -p /home/pi/.icons
+cd /tmp
+rm -rf Transparent_Cursor_Theme 2>/dev/null || true
+# Nur die benötigte Datei holen – den Transparent-Ordner
+mkdir -p /home/pi/.icons/Transparent/cursors
+# cursor.theme schreiben
+cat > /home/pi/.icons/Transparent/cursor.theme <<'XEOF'
+[Icon Theme]
+Name=Transparent
+Inherits=Transparent
+XEOF
+# Leere Cursor-Dateien erstellen (1x1 transparent)
+# Da das Repo keine Quelldateien hat, erstellen wir echte leere Cursor
+for c in X_cursor all-scroll bd_double_arrow bottom_left_corner bottom_right_corner bottom_side bottom_tee cell circle context-menu copy cross crosshair cross_reverse default diamond_cross dnd-ask dnd-copy dnd-link dnd-move dnd-none dotbox double_arrow e-resize ew-resize fd_double_arrow fleur grab grabbing hand hand1 hand2 hand2 help ibeam left_ptr left_ptr_watch left_side left_tee link ll_angle lr_angle move n-resize ne-resize nesw-resize no-drop not-allowed ns-resize nw-resize nwse-resize pencil pirate pointer plus question_arrow right_ptr right_side right_tee row-resize s-resize se-resize sw-resize target tcross text top_left_arrow top_side top_tee ul_angle ur_angle v_double_arrow wait watch w-resize xterm zoom-in zoom-out; do
+  touch "/home/pi/.icons/Transparent/cursors/$c"
+done
+# 3. Als Systemdefault setzen
+mkdir -p /home/pi/.icons/default
+cat > /home/pi/.icons/default/index.theme <<'XEOF'
+[Icon Theme]
+Name=Default
+Comment=Transparent Cursor Theme
+Inherits=Transparent
+XEOF
+# 4. XDG-Umgebungsvariable setzen (für Wayland-Anwendungen)
+export XCURSOR_THEME=Transparent
+export XCURSOR_SIZE=1
+# 5. labwc zwingen, das Theme zu laden + Cursor komplett aus
+mkdir -p /home/pi/.config/labwc
+cat > /home/pi/.config/labwc/rc.xml <<'LABWC_EOF'
+<?xml version="1.0"?>
+<labwc_config>
+  <theme>
+    <name>Transparent</name>
+    <cornerRadius>0</cornerRadius>
+  </theme>
+  <mouse>
+    <theme>
+      <name>Transparent</name>
+      <size>1</size>
+    </theme>
+  </mouse>
+</labwc_config>
+LABWC_EOF
+# 6. Vorhandene Cursor-Root-Setups
+xsetroot -bitmap /home/pi/.icons/blank.xbm -fg black -bg black >/dev/null 2>&1 || true
+# 7. Chrome Extension für Kiosk-Cursor ausblenden (zusätzliche Sicherheit)
+mkdir -p /home/pi/.config/chromium/Default/Extensions/hidecursor/1.0
+cat > /home/pi/.config/chromium/Default/Extensions/hidecursor/1.0/manifest.json <<'CE_EOF'
+{
+"name": "Hide Cursor",
+"version": "1.0",
+"manifest_version": 2,
+"description": "Blendet den Mauszeiger im Kiosk-Modus aus",
+"content_scripts": [{
+"matches": ["<all_urls>"],
+"css": ["hide-cursor.css"],
+"run_at": "document_start",
+"all_frames": true
+}],
+"web_accessible_resources": ["hide-cursor.css"]
+}
+CE_EOF
+cat > /home/pi/.config/chromium/Default/Extensions/hidecursor/1.0/hide-cursor.css <<'CE_EOF'
+* { cursor: none !important; }
+html { cursor: none !important; }
+:root { cursor: none !important; }
+CE_EOF
+
+# Extension automatisch laden per Preferences
+mkdir -p /home/pi/.config/chromium/Default
+cat > /home/pi/.config/chromium/Default/Preferences <<'CE_EOF'
+{
+"extensions": {
+"settings": {
+  "hidecursor": {
+    "toolbar": false,
+    "location": 1,
+    "ack_external": true
+  }
+}
+},
+"browser": {
+"show_cursor": false
+}
+}
+CE_EOF
+
+chown -R "${PI_USER}:${PI_GROUP}" /home/pi/.config/chromium
+
+ok "Chrome Extension 'Hide Cursor' installiert und aktiviert"
 
 CHROMIUM="/usr/bin/chromium-browser"
 [ -x "$CHROMIUM" ] || CHROMIUM="/usr/bin/chromium"
@@ -295,7 +386,7 @@ exec "$CHROMIUM" \
     --noerrdialogs \
     --disable-infobars \
     --disable-session-crashed-bubble \
-    --disable-features=TranslateUI \
+    --disable-features=Translate,TranslateUI \
     --no-first-run \
     --check-for-update-interval=31536000 \
     --autoplay-policy=no-user-gesture-required \
@@ -304,6 +395,16 @@ exec "$CHROMIUM" \
     --overscroll-history-navigation=0 \
     --disable-pinch \
     --start-fullscreen \
+    --disable-context-menu \
+    --password-store=basic \
+    --touch-events=disabled \
+    --simulate-outdated-no-au='01-01-2200' \
+    --disable-component-update \
+    --lang=de \
+    --force-fieldtrials="*Translate/Disabled/" \
+    --disable-gpu \
+    --disable-gpu-compositing \
+    --load-extension=/home/pi/.config/chromium/Default/Extensions/hidecursor/1.0 \
     "$APP_URL" >> "$LOG" 2>&1
 EOF
     chmod +x "${KIOSK_SCRIPT}"
@@ -322,6 +423,8 @@ User=${PI_USER}
 Group=${PI_GROUP}
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=/home/${PI_USER}/.Xauthority
+Environment=XCURSOR_THEME=Transparent
+Environment=XCURSOR_SIZE=1
 ExecStartPre=/bin/sleep 5
 ExecStart=${KIOSK_SCRIPT}
 Restart=on-failure
@@ -361,8 +464,21 @@ EOF
         log "  Wayland-Sessions deaktiviert (X11 erforderlich für Kiosk)"
     fi
 
-    # Openbox-Autostart
+    # Openbox-Konfiguration: unsichtbarer Cursor + kein Dekor
     mkdir -p "/home/${PI_USER}/.config/openbox"
+    cat > "/home/${PI_USER}/.config/openbox/rc.xml" <<'EOF'
+<?xml version="1.0"?>
+<openbox_config>
+  <mouse>
+    <theme>
+      <name>X_cursor</name>
+    </theme>
+  </mouse>
+  <resistance>
+    <move>0</move>
+  </resistance>
+</openbox_config>
+EOF
     cat > "/home/${PI_USER}/.config/openbox/autostart" <<'EOF'
 # LHTPi: Bildschirm für Dauerbetrieb wach halten
 xset s off
@@ -390,6 +506,34 @@ EOF
 
     systemctl set-default graphical.target
     ok "Desktop/Kiosk-Autostart konfiguriert"
+}
+
+configure_policies() {
+    log "Erstelle Chromium-Policy: Translate komplett deaktivieren"
+
+    mkdir -p /etc/chromium/policies/managed /etc/chromium/policies/recommended
+
+    cat > /etc/chromium/policies/managed/lhtpi-translate-off.json <<'EOF'
+{
+  "TranslateEnabled": false
+}
+EOF
+
+    cat > /etc/chromium/policies/recommended/lhtpi-translate-off.json <<'EOF'
+{
+  "TranslateEnabled": false
+}
+EOF
+
+    # Password-Manager deaktivieren (Schlüsselbund-Dialog)
+    cat > /etc/chromium/policies/managed/lhtpi-nopassword.json <<'EOF'
+{
+  "PasswordManagerEnabled": false,
+  "AutoFillEnabled": false
+}
+EOF
+
+    ok "Chromium-Policies gesetzt: Translate + PasswordManager deaktiviert"
 }
 
 configure_firewall() {
@@ -444,6 +588,7 @@ main() {
     configure_network
     configure_services
     configure_desktop
+    configure_policies
     configure_firewall
     print_summary
 }
