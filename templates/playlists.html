@@ -112,6 +112,43 @@
   border: 1px solid rgba(255,255,255,.09);
   color: #8899aa;
 }
+/* Move-Buttons für Touch-Bedienung */
+.item-controls {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+}
+.btn-move {
+  padding: .4rem .55rem;
+  background: rgba(108,99,255,.1);
+  border: 1px solid rgba(108,99,255,.2);
+  border-radius: 8px;
+  color: #8f88ff;
+  cursor: pointer;
+  font-size: .8rem;
+  line-height: 1;
+  transition: all .2s;
+}
+.btn-move:hover, .btn-move:active {
+  background: rgba(108,99,255,.25);
+  color: #fff;
+}
+.btn-move:disabled {
+  opacity: .3;
+  cursor: not-allowed;
+}
+/* Mobile: vollbreite Buttons und Anpassungen */
+@media (max-width: 600px) {
+  .item-controls {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    width: 100%;
+    margin-top: .4rem;
+  }
+  .duration-input {
+    width: 65px;
+  }
+}
 </style>
 </head>
 <body>
@@ -159,10 +196,14 @@
 <img src="{{ url_for('uploaded_file', filename=item.media.filename) }}" class="item-thumb">
 <span class="item-name">{{ item.media.original_name }}</span>
 </div>
+<div class="item-controls">
+<button type="button" class="btn-move" data-dir="up" title="Nach oben">▲</button>
+<button type="button" class="btn-move" data-dir="down" title="Nach unten">▼</button>
 <input type="number" class="duration-input" value="{{ item.display_duration }}" min="1" max="999" data-item-id="{{ item.id }}" title="Anzeigedauer (Sekunden)">
 <form method="post" action="{{ url_for('remove_from_playlist', playlist_id=pl.id, item_id=item.id) }}">
 <button type="submit" class="btn-remove">✕</button>
 </form>
+</div>
 </li>
 {% endfor %}
 </ul>
@@ -232,6 +273,36 @@ document.querySelectorAll('.media-picker-overlay').forEach(overlay => {
     }
   });
 });
+// Move-Buttons (▲/▼) für Touch + Desktop
+document.querySelectorAll('.btn-move').forEach(btn => {
+  btn.addEventListener('click', function() {
+    const li = this.closest('.drag-item');
+    const ul = li.closest('.playlist-items');
+    const dir = this.dataset.dir;
+    if (dir === 'up' && li.previousElementSibling) {
+      li.parentNode.insertBefore(li, li.previousElementSibling);
+    } else if (dir === 'down' && li.nextElementSibling) {
+      li.parentNode.insertBefore(li.nextElementSibling, li);
+    }
+    // Move-Buttons deaktivieren/aktivieren
+    updateMoveButtons(ul);
+    // Neue Reihenfolge speichern
+    const order = [...ul.querySelectorAll('.drag-item')].map(el => el.dataset.itemId);
+    fetch(`/playlists/${ul.dataset.playlistId}/reorder`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({order})
+    }).catch(() => {});
+  });
+});
+function updateMoveButtons(ul) {
+  const items = ul.querySelectorAll('.drag-item');
+  items.forEach((item, i) => {
+    item.querySelector('.btn-move[data-dir="up"]').disabled = (i === 0);
+    item.querySelector('.btn-move[data-dir="down"]').disabled = (i === items.length - 1);
+  });
+}
+// Initial Move-Buttons setzen
+document.querySelectorAll('.playlist-items').forEach(ul => updateMoveButtons(ul));
 </script>
 </body>
 </html>
