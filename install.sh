@@ -284,18 +284,33 @@ xset -dpms >/dev/null 2>&1 || true
 xset s noblank >/dev/null 2>&1 || true
 
 # Mauszeiger mit allen Mitteln verstecken
-# 1. Transparenten Cursor als .xbm erstellen und setzen
+# 1. DRM/KMS Hardware-Cursor auf Kernel-Ebene deaktivieren
+#    (das ist die tiefste Ebene – Chromium kann das nicht umgehen)
+if [ -d /sys/class/graphics ]; then
+  for fb in /sys/class/graphics/fb*; do
+    [ -w "$fb/blank" ] && echo 1 > "$fb/blank" 2>/dev/null || true
+    [ -w "$fb/cursor_blink" ] && echo 0 > "$fb/cursor_blink" 2>/dev/null || true
+  done
+fi
+# 2. Xorg HW-Cursor deaktivieren – per xorg.conf.d-Eintrag
+mkdir -p /etc/X11/xorg.conf.d
+cat > /etc/X11/xorg.conf.d/99-lhtpi-nocursor.conf <<'XEOF'
+Section "Device"
+    Identifier  "Card0"
+    Driver      "modesetting"
+    Option      "SWCursor" "true"
+    Option      "NoAccel"  "true"
+EndSection
+XEOF
+# 3. Transparenten XBM-Cursor setzen
 mkdir -p /home/pi/.icons
-cat > /home/pi/.icons/blank.cursor <<'EOF'
+cat > /home/pi/.icons/blank.xbm <<'XEOF'
 #define blank_width 1
 #define blank_height 1
 static unsigned char blank_bits[] = { 0x00 };
-EOF
-xsetroot -bitmap /home/pi/.icons/blank.cursor -fg black -bg black >/dev/null 2>&1 || true
-# 2. Xorg-Hardware-Cursor per xrandr deaktivieren (falls unterstützt)
-xrandr --output $(xrandr | grep ' connected' | head -1 | cut -d' ' -f1) --set "CursorSize" 0 2>/dev/null || true
-xrandr --output $(xrandr | grep ' connected' | head -1 | cut -d' ' -f1) --set "CursorVisible" 0 2>/dev/null || true
-# 3. unclutter-xfixes für guten Gewissen
+XEOF
+xsetroot -bitmap /home/pi/.icons/blank.xbm -fg black -bg black >/dev/null 2>&1 || true
+# 4. unclutter-xfixes
 unclutter -idle 0 -root -jitter 0 -grab -visible >/dev/null 2>&1 || true
 
 CHROMIUM="/usr/bin/chromium-browser"
