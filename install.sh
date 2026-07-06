@@ -338,7 +338,51 @@ cat > /home/pi/.config/labwc/rc.xml <<'LABWC_EOF'
 LABWC_EOF
 # 6. Vorhandene Cursor-Root-Setups
 xsetroot -bitmap /home/pi/.icons/blank.xbm -fg black -bg black >/dev/null 2>&1 || true
-chown -R "${PI_USER}:${PI_GROUP}" /home/pi/.icons /home/pi/.config/labwc
+# 7. Chrome Extension für Kiosk-Cursor ausblenden (zusätzliche Sicherheit)
+mkdir -p /home/pi/.config/chromium/Default/Extensions/hidecursor/1.0
+cat > /home/pi/.config/chromium/Default/Extensions/hidecursor/1.0/manifest.json <<'CE_EOF'
+{
+"name": "Hide Cursor",
+"version": "1.0",
+"manifest_version": 2,
+"description": "Blendet den Mauszeiger im Kiosk-Modus aus",
+"content_scripts": [{
+"matches": ["<all_urls>"],
+"css": ["hide-cursor.css"],
+"run_at": "document_start",
+"all_frames": true
+}],
+"web_accessible_resources": ["hide-cursor.css"]
+}
+CE_EOF
+cat > /home/pi/.config/chromium/Default/Extensions/hidecursor/1.0/hide-cursor.css <<'CE_EOF'
+* { cursor: none !important; }
+html { cursor: none !important; }
+:root { cursor: none !important; }
+CE_EOF
+
+# Extension automatisch laden per Preferences
+mkdir -p /home/pi/.config/chromium/Default
+cat > /home/pi/.config/chromium/Default/Preferences <<'CE_EOF'
+{
+"extensions": {
+"settings": {
+  "hidecursor": {
+    "toolbar": false,
+    "location": 1,
+    "ack_external": true
+  }
+}
+},
+"browser": {
+"show_cursor": false
+}
+}
+CE_EOF
+
+chown -R "${PI_USER}:${PI_GROUP}" /home/pi/.config/chromium
+
+ok "Chrome Extension 'Hide Cursor' installiert und aktiviert"
 
 CHROMIUM="/usr/bin/chromium-browser"
 [ -x "$CHROMIUM" ] || CHROMIUM="/usr/bin/chromium"
@@ -367,6 +411,7 @@ exec "$CHROMIUM" \
     --force-fieldtrials="*Translate/Disabled/" \
     --disable-gpu \
     --disable-gpu-compositing \
+    --load-extension=/home/pi/.config/chromium/Default/Extensions/hidecursor/1.0 \
     "$APP_URL" >> "$LOG" 2>&1
 EOF
     chmod +x "${KIOSK_SCRIPT}"
