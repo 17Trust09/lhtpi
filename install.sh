@@ -292,8 +292,9 @@ cat > /home/pi/.icons/blank.cursor <<'EOF'
 static unsigned char blank_bits[] = { 0x00 };
 EOF
 xsetroot -bitmap /home/pi/.icons/blank.cursor -fg black -bg black >/dev/null 2>&1 || true
-# 2. Transparentes Theme setzen
-xsetroot -cursor_name X_cursor >/dev/null 2>&1 || true
+# 2. Xorg-Hardware-Cursor per xrandr deaktivieren (falls unterstützt)
+xrandr --output $(xrandr | grep ' connected' | head -1 | cut -d' ' -f1) --set "CursorSize" 0 2>/dev/null || true
+xrandr --output $(xrandr | grep ' connected' | head -1 | cut -d' ' -f1) --set "CursorVisible" 0 2>/dev/null || true
 # 3. unclutter-xfixes für guten Gewissen
 unclutter -idle 0 -root -jitter 0 -grab -visible >/dev/null 2>&1 || true
 
