@@ -398,6 +398,26 @@ EOF
     ok "Desktop/Kiosk-Autostart konfiguriert"
 }
 
+configure_policies() {
+    log "Erstelle Chromium-Policy: Translate komplett deaktivieren"
+
+    mkdir -p /etc/chromium/policies/managed /etc/chromium/policies/recommended
+
+    cat > /etc/chromium/policies/managed/lhtpi-translate-off.json <<'EOF'
+{
+  "TranslateEnabled": false
+}
+EOF
+
+    cat > /etc/chromium/policies/recommended/lhtpi-translate-off.json <<'EOF'
+{
+  "TranslateEnabled": false
+}
+EOF
+
+    ok "Chromium-Policy 'TranslateEnabled=false' gesetzt"
+}
+
 configure_firewall() {
     log "Konfiguriere Firewall (UFW)"
     ufw --force reset 2>/dev/null || true
@@ -450,6 +470,7 @@ main() {
     configure_network
     configure_services
     configure_desktop
+    configure_policies
     configure_firewall
     print_summary
 }
