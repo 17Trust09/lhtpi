@@ -285,8 +285,19 @@ xset s noblank >/dev/null 2>&1 || true
 
 # Mauszeiger mit allen Mitteln verstecken
 unclutter -idle 0 -root -jitter 0 -grab -visible >/dev/null 2>&1 || true
+# X-Cursor komplett unsichtbar machen (leeres Pixmap)
 xsetroot -cursor_name X_cursor >/dev/null 2>&1 || true
-xsetroot -cursor left_ptr blank >/dev/null 2>&1 || true
+# Alle Zeigegeräte per xinput deaktivieren (Maus/Touchpad)
+for id in $(xinput list --id-only 2>/dev/null); do
+  name=$(xinput list --name-only "$id" 2>/dev/null || echo "")
+  # Nur echte Zeigegeräte, nicht Tastaturen/Controller
+  if xinput list-props "$id" 2>/dev/null | grep -q "Device Enabled"; then
+    device_type=$(xinput list "$id" 2>/dev/null || echo "")
+    if echo "$device_type" | grep -qiE "(mouse|touchpad|trackpoint|pointer|touchscreen)"; then
+      xinput set-prop "$id" "Device Enabled" 0 2>/dev/null || true
+    fi
+  fi
+done 2>/dev/null || true
 
 CHROMIUM="/usr/bin/chromium-browser"
 [ -x "$CHROMIUM" ] || CHROMIUM="/usr/bin/chromium"
