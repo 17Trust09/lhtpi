@@ -283,8 +283,8 @@ xset s off >/dev/null 2>&1 || true
 xset -dpms >/dev/null 2>&1 || true
 xset s noblank >/dev/null 2>&1 || true
 
-# Mauszeiger nach 5s Inaktivität ausblenden
-unclutter -idle 5 -root >/dev/null 2>&1 || true
+# Mauszeiger sofort ausblenden
+unclutter -idle 0 -root >/dev/null 2>&1 || true
 
 CHROMIUM="/usr/bin/chromium-browser"
 [ -x "$CHROMIUM" ] || CHROMIUM="/usr/bin/chromium"
@@ -304,6 +304,9 @@ exec "$CHROMIUM" \
     --overscroll-history-navigation=0 \
     --disable-pinch \
     --start-fullscreen \
+    --disable-context-menu \
+    --touch-events=disabled \
+    --simulate-outdated-no-au='01-01-2200' \
     "$APP_URL" >> "$LOG" 2>&1
 EOF
     chmod +x "${KIOSK_SCRIPT}"
