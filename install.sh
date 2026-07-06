@@ -283,8 +283,10 @@ xset s off >/dev/null 2>&1 || true
 xset -dpms >/dev/null 2>&1 || true
 xset s noblank >/dev/null 2>&1 || true
 
-# Mauszeiger sofort ausblenden
-unclutter -idle 0 -root >/dev/null 2>&1 || true
+# Mauszeiger mit allen Mitteln verstecken
+unclutter -idle 0 -root -jitter 0 -grab >/dev/null 2>&1 || true
+xsetroot -cursor_name X_cursor >/dev/null 2>&1 || true
+xsetroot -cursor left_ptr blank >/dev/null 2>&1 || true
 
 CHROMIUM="/usr/bin/chromium-browser"
 [ -x "$CHROMIUM" ] || CHROMIUM="/usr/bin/chromium"
@@ -367,8 +369,21 @@ EOF
         log "  Wayland-Sessions deaktiviert (X11 erforderlich für Kiosk)"
     fi
 
-    # Openbox-Autostart
+    # Openbox-Konfiguration: unsichtbarer Cursor + kein Dekor
     mkdir -p "/home/${PI_USER}/.config/openbox"
+    cat > "/home/${PI_USER}/.config/openbox/rc.xml" <<'EOF'
+<?xml version="1.0"?>
+<openbox_config>
+  <mouse>
+    <theme>
+      <name>X_cursor</name>
+    </theme>
+  </mouse>
+  <resistance>
+    <move>0</move>
+  </resistance>
+</openbox_config>
+EOF
     cat > "/home/${PI_USER}/.config/openbox/autostart" <<'EOF'
 # LHTPi: Bildschirm für Dauerbetrieb wach halten
 xset s off
