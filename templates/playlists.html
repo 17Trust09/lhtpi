@@ -5,6 +5,114 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>LHTPi - Playlists</title>
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<style>
+/* Visuelle Medienauswahl – Thumbnail-Galerie */
+.add-media-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  margin-top: .8rem;
+  padding: .65rem 1rem;
+  background: rgba(108,99,255,.15);
+  border: 1px solid rgba(108,99,255,.3);
+  border-radius: 12px;
+  color: #fff;
+  cursor: pointer;
+  font-size: .9rem;
+  font-weight: 700;
+  transition: all .2s;
+}
+.add-media-toggle:hover {
+  background: rgba(108,99,255,.25);
+  box-shadow: 0 0 20px rgba(108,99,255,.2);
+}
+.media-picker-overlay {
+  display: none;
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,.7);
+  z-index: 100;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+}
+.media-picker-overlay.open {
+  display: flex;
+}
+.media-picker-panel {
+  background: #1a1a2e;
+  border: 1px solid rgba(255,255,255,.09);
+  border-radius: 24px;
+  padding: 1.5rem;
+  max-width: 700px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 22px 60px rgba(0,0,0,.5);
+}
+.media-picker-panel h2 {
+  margin-bottom: 1rem;
+  font-size: 1.3rem;
+}
+.media-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: .7rem;
+  margin-bottom: 1rem;
+}
+.media-picker-item {
+  background: #0f0f1a;
+  border: 2px solid transparent;
+  border-radius: 14px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all .2s;
+  text-align: center;
+}
+.media-picker-item:hover {
+  border-color: rgba(108,99,255,.5);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(108,99,255,.2);
+}
+.media-picker-item.selected {
+  border-color: #6c63ff;
+  box-shadow: 0 0 20px rgba(108,99,255,.3);
+}
+.media-picker-thumb {
+  width: 100%;
+  height: 80px;
+  object-fit: cover;
+  display: block;
+  background: #0d0d1c;
+}
+.media-picker-thumb.video {
+  background: linear-gradient(135deg, #1a1a2e, #0f0f1a);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.8rem;
+  color: #6c63ff;
+}
+.media-picker-name {
+  padding: .4rem .5rem;
+  font-size: .78rem;
+  color: #8899aa;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.media-picker-actions {
+  display: flex;
+  gap: .7rem;
+  justify-content: flex-end;
+}
+.media-picker-actions .btn-cancel {
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.09);
+  color: #8899aa;
+}
+</style>
 </head>
 <body>
 <nav class="navbar">
@@ -65,14 +173,33 @@
 {% set used_ids = pl.items | map(attribute='media_id') | list %}
 {% set available = all_media | rejectattr('id', 'in', used_ids) | list %}
 {% if available %}
-<form method="post" action="{{ url_for('add_media_to_playlist', id=pl.id) }}" class="inline-form add-media-form">
-<select name="media_id">
-{% for m in available %}
-<option value="{{ m.id }}">{{ m.original_name }}</option>
-{% endfor %}
-</select>
-<button type="submit">➕ Hinzufügen</button>
-</form>
+<button type="button" class="add-media-toggle" onclick="openPicker('{{ pl.id }}')">📁 Medium hinzufügen</button>
+
+<!-- Visuelle Medienauswahl (Overlay) -->
+<div class="media-picker-overlay" id="picker-{{ pl.id }}">
+  <div class="media-picker-panel">
+    <h2>📁 Medium auswählen</h2>
+    <div class="media-picker-grid">
+      {% for m in available %}
+      <div class="media-picker-item" data-media-id="{{ m.id }}" onclick="selectMedia(this, '{{ pl.id }}')">
+        {% if m.file_type == 'image' %}
+        <img src="{{ url_for('uploaded_file', filename=m.filename) }}" class="media-picker-thumb" alt="{{ m.original_name }}">
+        {% else %}
+        <div class="media-picker-thumb video">🎬</div>
+        {% endif %}
+        <div class="media-picker-name">{{ m.original_name }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="media-picker-actions">
+      <button class="btn btn-cancel" onclick="closePicker('{{ pl.id }}')">Abbrechen</button>
+      <form method="post" action="{{ url_for('add_media_to_playlist', id=pl.id) }}" id="form-{{ pl.id }}">
+        <input type="hidden" name="media_id" id="input-{{ pl.id }}" value="">
+        <button type="submit" id="btn-{{ pl.id }}" disabled>➕ Hinzufügen</button>
+      </form>
+    </div>
+  </div>
+</div>
 {% endif %}
 </div>
 {% else %}
@@ -81,42 +208,29 @@
 </main>
 
 <script>
-// Drag & Drop
-document.querySelectorAll('.playlist-items').forEach(ul=>{
-ul.addEventListener('dragover',e=>{e.preventDefault();const a=ul.querySelector('.drag-over');if(a)a.classList.remove('drag-over');const t=[...ul.querySelectorAll('.drag-item')].find(el=>e.clientY<el.getBoundingClientRect().top+el.offsetHeight/2);if(t)t.classList.add('drag-over')});
-ul.addEventListener('dragend',()=>ul.querySelectorAll('.drag-over').forEach(el=>el.classList.remove('drag-over')));
-});
-document.querySelectorAll('.drag-item').forEach(item=>{
-item.draggable=true;
-item.addEventListener('dragstart',e=>e.dataTransfer.setData('text/plain',item.dataset.itemId));
-item.addEventListener('drop',e=>{
-e.preventDefault();e.stopPropagation();
-const id=e.dataTransfer.getData('text/plain');
-const ul=e.currentTarget.closest('.playlist-items');
-if(!ul)return;
-const src=ul.querySelector(`[data-item-id="${id}"]`);
-if(src && item!==src){
-const srcIdx=[...ul.querySelectorAll('.drag-item')].indexOf(src);
-const items=[...ul.querySelectorAll('.drag-item')];
-const tgtIdx=items.indexOf(item);
-if(srcIdx<tgtIdx){item.after(src)}else{item.before(src)}
-ul.querySelectorAll('.drag-over').forEach(el=>el.classList.remove('drag-over'));
-const order=[...ul.querySelectorAll('.drag-item')].map(el=>el.dataset.itemId);
-fetch(`/playlists/${ul.dataset.playlistId}/reorder`,{
-method:'POST',headers:{'Content-Type':'application/json'},
-body:JSON.stringify({order})
-}).catch(()=>{});
-}});
-});
-
-// Duration update
-document.querySelectorAll('.duration-input').forEach(inp=>{
-inp.addEventListener('change',function(){
-fetch(`/playlists/${this.closest('.playlist-items').dataset.playlistId}/duration`,{
-method:'POST',headers:{'Content-Type':'application/json'},
-body:JSON.stringify({item_id:parseInt(this.dataset.itemId),duration:parseInt(this.value)})
-}).catch(()=>{});
-});
+function openPicker(plId) {
+  document.getElementById('picker-' + plId).classList.add('open');
+}
+function closePicker(plId) {
+  document.getElementById('picker-' + plId).classList.remove('open');
+  document.querySelectorAll('#picker-' + plId + ' .media-picker-item').forEach(el => el.classList.remove('selected'));
+  document.getElementById('input-' + plId).value = '';
+  document.getElementById('btn-' + plId).disabled = true;
+}
+function selectMedia(el, plId) {
+  document.querySelectorAll('#picker-' + plId + ' .media-picker-item').forEach(e => e.classList.remove('selected'));
+  el.classList.add('selected');
+  document.getElementById('input-' + plId).value = el.dataset.mediaId;
+  document.getElementById('btn-' + plId).disabled = false;
+}
+// Overlay schließen bei Klick außerhalb
+document.querySelectorAll('.media-picker-overlay').forEach(overlay => {
+  overlay.addEventListener('click', function(e) {
+    if (e.target === this) {
+      const id = this.id.replace('picker-', '');
+      closePicker(id);
+    }
+  });
 });
 </script>
 </body>
