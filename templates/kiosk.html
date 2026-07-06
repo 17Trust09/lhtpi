@@ -11,8 +11,6 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;user-select:non
 #player{width:100%;height:100%;display:flex;align-items:center;justify-content:center}
 #player img,#player video{max-width:100%;max-height:100%;object-fit:contain;pointer-events:none;-webkit-user-drag:none;user-drag:none}
 #player video{width:100%;height:100%}
-#overlay{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.7);color:#fff;padding:8px 16px;border-radius:8px;font-family:sans-serif;font-size:14px;opacity:0;transition:opacity .3s;white-space:nowrap;pointer-events:none}
-#overlay.show{opacity:1}
 #empty{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:#555;font-family:sans-serif;font-size:2rem;text-align:center;pointer-events:none}
 /* Maus-Cursor-Overlay: deckt den HW-Cursor mit einem transparenten Bereich ab */
 #cursor-overlay{position:fixed;top:0;left:0;width:100%;height:100%;z-index:999999;pointer-events:none;cursor:none!important}
@@ -65,11 +63,10 @@ document.addEventListener('gesturestart', e => e.preventDefault());
 <div id="cursor-overlay"></div>
 <div id="empty">⏳ Warte auf Playlist…</div>
 <div id="player"></div>
-<div id="overlay"></div>
 </div>
 
 <script>
-let items=[],currIdx=0,timer=null,overlayTimer=null;
+let items=[],currIdx=0,timer=null;
 let playlistSignature='';
 
 function makeSignature(d){
@@ -77,13 +74,6 @@ function makeSignature(d){
     playlist: d.playlist_name,
     items: (d.items||[]).map(i => [i.id, i.media_id, i.position, i.display_duration, i.filename])
   }) : '';
-}
-
-function showOverlay(msg){
-const o=document.getElementById('overlay');
-o.textContent=msg;o.classList.add('show');
-clearTimeout(overlayTimer);
-overlayTimer=setTimeout(()=>o.classList.remove('show'),3000);
 }
 
 function playItem(idx){
@@ -103,21 +93,20 @@ if(item.file_type==='image'){
 const img=document.createElement('img');
 img.src='/uploads/'+item.filename;
 img.alt=item.original_name;
-img.onerror=()=>{showOverlay('⚠️ Fehler beim Laden');nextItem()};
+img.onerror=()=>{nextItem()};
 player.appendChild(img);
 timer=setTimeout(()=>nextItem(),(item.display_duration||10)*1000);
-showOverlay(`📷 ${item.original_name} — ${item.display_duration||10}s`);
 }else if(item.file_type==='video'){
 const vid=document.createElement('video');
 vid.src='/uploads/'+item.filename;
 vid.autoplay=true;
 vid.muted=true;
 vid.playsInline=true;
-vid.onerror=()=>{showOverlay('⚠️ Fehler beim Laden');nextItem()};
+vid.onerror=()=>{nextItem()};
 vid.onended=()=>nextItem();
 vid.onloadedmetadata=()=>{
 const dur=item.display_duration||0;
-showOverlay(`🎬 ${item.original_name} — ${dur===0?'Auto':`${dur}s`}`);vid.play().catch(()=>{});
+vid.play().catch(()=>{});
 if(dur>0&&dur<vid.duration){
 timer=setTimeout(()=>{vid.pause();nextItem();},dur*1000);
 }
