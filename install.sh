@@ -283,15 +283,8 @@ xset s off >/dev/null 2>&1 || true
 xset -dpms >/dev/null 2>&1 || true
 xset s noblank >/dev/null 2>&1 || true
 
-# Mauszeiger mit allen Mitteln verstecken
-# 1. DRM/KMS Hardware-Cursor auf Kernel-Ebene deaktivieren
-if [ -d /sys/class/graphics ]; then
-  for fb in /sys/class/graphics/fb*; do
-    [ -w "$fb/blank" ] && echo 1 > "$fb/blank" 2>/dev/null || true
-    [ -w "$fb/cursor_blink" ] && echo 0 > "$fb/cursor_blink" 2>/dev/null || true
-  done
-fi
-# 2. Transparentes Cursor-Theme von GitHub installieren (Wayland + X11!)
+# Mauszeiger sofort ausblenden (funktioniert auf X11 + Wayland)
+unclutter -idle 0 -root >/dev/null 2>&1 || true
 mkdir -p /home/pi/.icons
 cd /tmp
 rm -rf Transparent_Cursor_Theme 2>/dev/null || true
