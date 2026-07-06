@@ -310,6 +310,14 @@ XEOF
 xsetroot -bitmap /home/pi/.icons/blank.xbm -fg black -bg black >/dev/null 2>&1 || true
 # 4. Cursor aus dem Bildschirm verschieben (nach ganz unten rechts +1)
 xdotool mousemove 99999 99999 >/dev/null 2>&1 || true
+# 5. Dauerhaft den Cursor wegdrücken (Hintergrundprozess)
+(
+  while true; do
+    xdotool mousemove 99999 99999 2>/dev/null || true
+    sleep 2
+  done
+) &
+CURSOR_PID=$!
 unclutter -idle 0 -root -jitter 0 -grab -visible >/dev/null 2>&1 || true
 
 CHROMIUM="/usr/bin/chromium-browser"
