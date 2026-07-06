@@ -7,6 +7,7 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box;cursor:none!important}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;user-select:none;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;cursor:none!important}
+#page{width:100%;height:100%;pointer-events:none;cursor:none!important}
 #player{width:100%;height:100%;display:flex;align-items:center;justify-content:center}
 #player img,#player video{max-width:100%;max-height:100%;object-fit:contain;pointer-events:none;-webkit-user-drag:none;user-drag:none}
 #player video{width:100%;height:100%}
@@ -17,6 +18,32 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;user-select:non
 iframe[src*="translate"], div[class*="translate"], div[id*="translate"], div[aria-label*="Translate"], .goog-te-banner-frame, .goog-te-menu-frame, .goog-te-gadget-simple, .VIpgJd-ZVi9od-aZ2wEe-wOHMyf{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important;position:absolute!important;top:-9999px!important;left:-9999px!important;z-index:-1!important}
 </style>
 <script>
+// Maus-Overlay-Events sofort killen – bevor Chromium den Cursor zeigt
+(function(){
+  // Pointer Events Layer – alle Pointer-Events abfangen
+  document.addEventListener('pointermove', e => {
+    // Cursor-Position tracken (optional für spätere Touch-Interaktion)
+  }, true);
+  
+  // Mausevents auf doc-Ebene blockieren, damit Chromium den Cursor nicht anzeigt
+  const block = e => e.preventDefault();
+  document.addEventListener('mousemove', block, true);
+  document.addEventListener('mouseenter', block, true);
+  document.addEventListener('mouseover', block, true);
+  document.addEventListener('mouseout', block, true);
+  
+  // CSS cursor:none per Style-Element nach jedem Laden forcieren
+  const forceCursorNone = () => {
+    const s = document.createElement('style');
+    s.textContent = '*{cursor:none!important}html,body{cursor:none!important}';
+    document.head.appendChild(s);
+  };
+  forceCursorNone();
+  
+  // Regelmäßig nachprüfen (falls Chromium den Cursor zurücksetzt)
+  setInterval(forceCursorNone, 2000);
+})();
+
 document.addEventListener('contextmenu', e => e.preventDefault());
 document.addEventListener('selectstart', e => e.preventDefault());
 document.addEventListener('dragstart', e => e.preventDefault());
@@ -25,9 +52,11 @@ document.addEventListener('gesturestart', e => e.preventDefault());
 </script>
 </head>
 <body>
+<div id="page">
 <div id="empty">⏳ Warte auf Playlist…</div>
 <div id="player"></div>
 <div id="overlay"></div>
+</div>
 
 <script>
 let items=[],currIdx=0,timer=null,overlayTimer=null;

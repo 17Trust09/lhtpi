@@ -95,7 +95,7 @@ install_packages() {
     apt-get install -y -qq \
         python3 python3-pip python3-venv \
         ufw curl git \
-        xorg openbox unclutter \
+        xorg openbox unclutter-xfixes \
         chromium-browser chromium-browser-l10n
     ok "Systempakete installiert"
 }
@@ -284,7 +284,7 @@ xset -dpms >/dev/null 2>&1 || true
 xset s noblank >/dev/null 2>&1 || true
 
 # Mauszeiger mit allen Mitteln verstecken
-unclutter -idle 0 -root -jitter 0 -grab >/dev/null 2>&1 || true
+unclutter -idle 0 -root -jitter 0 -grab -visible >/dev/null 2>&1 || true
 xsetroot -cursor_name X_cursor >/dev/null 2>&1 || true
 xsetroot -cursor left_ptr blank >/dev/null 2>&1 || true
 
