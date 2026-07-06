@@ -20,28 +20,33 @@ iframe[src*="translate"], div[class*="translate"], div[id*="translate"], div[ari
 <script>
 // Maus-Overlay-Events sofort killen – bevor Chromium den Cursor zeigt
 (function(){
-  // Pointer Events Layer – alle Pointer-Events abfangen
-  document.addEventListener('pointermove', e => {
-    // Cursor-Position tracken (optional für spätere Touch-Interaktion)
-  }, true);
+  // Cursor alle 100ms aus dem Bildschirm werfen
+  const hideCursor = () => {
+    try {
+      // Versuch 1: CSS per forceCursorNone
+      const s = document.getElementById('_cursor_hide') || (()=>{
+        const e=document.createElement('style');
+        e.id='_cursor_hide';
+        document.head.appendChild(e);
+        return e;
+      })();
+      s.textContent = '*{cursor:none!important}html,body{cursor:none!important}';
+      // Versuch 2: Maus per hiddenmousemove außerhalb treiben
+      // (nicht möglich im Browser, aber wir blocken alle Events)
+    } catch(e){}
+  };
+  hideCursor();
+  setInterval(hideCursor, 1000);
   
-  // Mausevents auf doc-Ebene blockieren, damit Chromium den Cursor nicht anzeigt
-  const block = e => e.preventDefault();
+  // Pointer-Events abfangen
+  const block = e => { e.preventDefault(); e.stopPropagation(); };
   document.addEventListener('mousemove', block, true);
   document.addEventListener('mouseenter', block, true);
   document.addEventListener('mouseover', block, true);
   document.addEventListener('mouseout', block, true);
-  
-  // CSS cursor:none per Style-Element nach jedem Laden forcieren
-  const forceCursorNone = () => {
-    const s = document.createElement('style');
-    s.textContent = '*{cursor:none!important}html,body{cursor:none!important}';
-    document.head.appendChild(s);
-  };
-  forceCursorNone();
-  
-  // Regelmäßig nachprüfen (falls Chromium den Cursor zurücksetzt)
-  setInterval(forceCursorNone, 2000);
+  document.addEventListener('pointermove', block, true);
+  document.addEventListener('pointerover', block, true);
+  document.addEventListener('pointerenter', block, true);
 })();
 
 document.addEventListener('contextmenu', e => e.preventDefault());

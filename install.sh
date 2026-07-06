@@ -285,7 +285,6 @@ xset s noblank >/dev/null 2>&1 || true
 
 # Mauszeiger mit allen Mitteln verstecken
 # 1. DRM/KMS Hardware-Cursor auf Kernel-Ebene deaktivieren
-#    (das ist die tiefste Ebene – Chromium kann das nicht umgehen)
 if [ -d /sys/class/graphics ]; then
   for fb in /sys/class/graphics/fb*; do
     [ -w "$fb/blank" ] && echo 1 > "$fb/blank" 2>/dev/null || true
@@ -299,7 +298,6 @@ Section "Device"
     Identifier  "Card0"
     Driver      "modesetting"
     Option      "SWCursor" "true"
-    Option      "NoAccel"  "true"
 EndSection
 XEOF
 # 3. Transparenten XBM-Cursor setzen
@@ -310,7 +308,8 @@ cat > /home/pi/.icons/blank.xbm <<'XEOF'
 static unsigned char blank_bits[] = { 0x00 };
 XEOF
 xsetroot -bitmap /home/pi/.icons/blank.xbm -fg black -bg black >/dev/null 2>&1 || true
-# 4. unclutter-xfixes
+# 4. Cursor aus dem Bildschirm verschieben (nach ganz unten rechts +1)
+xdotool mousemove 99999 99999 >/dev/null 2>&1 || true
 unclutter -idle 0 -root -jitter 0 -grab -visible >/dev/null 2>&1 || true
 
 CHROMIUM="/usr/bin/chromium-browser"
