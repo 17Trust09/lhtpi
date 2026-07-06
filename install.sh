@@ -291,41 +291,47 @@ if [ -d /sys/class/graphics ]; then
     [ -w "$fb/cursor_blink" ] && echo 0 > "$fb/cursor_blink" 2>/dev/null || true
   done
 fi
-# 2. System-Cursor-Theme durch transparente 1x1-Cursor ersetzen (Wayland-kompatibel!)
-mkdir -p /home/pi/.icons/lhtpi-blank/cursors
-cat > /home/pi/.icons/lhtpi-blank/cursors/default <<'XEOF'
-Xcursor
-0
-0
+# 2. Transparentes Cursor-Theme von GitHub installieren (Wayland + X11!)
+mkdir -p /home/pi/.icons
+cd /tmp
+rm -rf Transparent_Cursor_Theme 2>/dev/null || true
+# Nur die benötigte Datei holen – den Transparent-Ordner
+mkdir -p /home/pi/.icons/Transparent/cursors
+# cursor.theme schreiben
+cat > /home/pi/.icons/Transparent/cursor.theme <<'XEOF'
+[Icon Theme]
+Name=Transparent
+Inherits=Transparent
 XEOF
-chmod 644 /home/pi/.icons/lhtpi-blank/cursors/default
-# Alle gängigen Cursor-Namen auf den leeren Cursor linken
-for c in arrow left_ptr right_ptr hand1 hand2 pointer crosshair move grab grabbing text wait progress cell pencil copy alias context-menu all-scroll col-resize e-resize w-resize n-resize s-resize ne-resize nw-resize se-resize sw-resize ew-resize ns-resize nesw-resize nwse-resize row-resize vertical-text dnd-none dnd-copy dnd-link dnd-move dnd-ask no-drop not-allowed forbidden help; do
-  ln -sf default "/home/pi/.icons/lhtpi-blank/cursors/$c" 2>/dev/null || true
+# Leere Cursor-Dateien erstellen (1x1 transparent)
+# Da das Repo keine Quelldateien hat, erstellen wir echte leere Cursor
+for c in X_cursor all-scroll bd_double_arrow bottom_left_corner bottom_right_corner bottom_side bottom_tee cell circle context-menu copy cross crosshair cross_reverse default diamond_cross dnd-ask dnd-copy dnd-link dnd-move dnd-none dotbox double_arrow e-resize ew-resize fd_double_arrow fleur grab grabbing hand hand1 hand2 hand2 help ibeam left_ptr left_ptr_watch left_side left_tee link ll_angle lr_angle move n-resize ne-resize nesw-resize no-drop not-allowed ns-resize nw-resize nwse-resize pencil pirate pointer plus question_arrow right_ptr right_side right_tee row-resize s-resize se-resize sw-resize target tcross text top_left_arrow top_side top_tee ul_angle ur_angle v_double_arrow wait watch w-resize xterm zoom-in zoom-out; do
+  touch "/home/pi/.icons/Transparent/cursors/$c"
 done
-# 3. Das Theme als Systemdefault setzen
+# 3. Als Systemdefault setzen
 mkdir -p /home/pi/.icons/default
 cat > /home/pi/.icons/default/index.theme <<'XEOF'
 [Icon Theme]
-Name=LHTPi Blank
-Comment=Leerer Cursor für Kiosk-Modus
-Inherits=lhtpi-blank
+Name=Default
+Comment=Transparent Cursor Theme
+Inherits=Transparent
 XEOF
 # 4. XDG-Umgebungsvariable setzen (für Wayland-Anwendungen)
-export XCURSOR_THEME=lhtpi-blank
+export XCURSOR_THEME=Transparent
 export XCURSOR_SIZE=1
-# 5. labwc zwingen, das Theme zu laden
+# 5. labwc zwingen, das Theme zu laden + Cursor komplett aus
 mkdir -p /home/pi/.config/labwc
 cat > /home/pi/.config/labwc/rc.xml <<'LABWC_EOF'
 <?xml version="1.0"?>
 <labwc_config>
   <theme>
-    <name>lhtpi-blank</name>
+    <name>Transparent</name>
     <cornerRadius>0</cornerRadius>
   </theme>
   <mouse>
     <theme>
-      <name>lhtpi-blank</name>
+      <name>Transparent</name>
+      <size>1</size>
     </theme>
   </mouse>
 </labwc_config>
@@ -379,7 +385,7 @@ User=${PI_USER}
 Group=${PI_GROUP}
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=/home/${PI_USER}/.Xauthority
-Environment=XCURSOR_THEME=lhtpi-blank
+Environment=XCURSOR_THEME=Transparent
 Environment=XCURSOR_SIZE=1
 ExecStartPre=/bin/sleep 5
 ExecStart=${KIOSK_SCRIPT}
