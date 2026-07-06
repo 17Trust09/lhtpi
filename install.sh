@@ -332,11 +332,14 @@ exec "$CHROMIUM" \
     --disable-pinch \
     --start-fullscreen \
     --disable-context-menu \
+    --password-store=basic \
     --touch-events=disabled \
     --simulate-outdated-no-au='01-01-2200' \
     --disable-component-update \
     --lang=de \
     --force-fieldtrials="*Translate/Disabled/" \
+    --disable-gpu \
+    --disable-gpu-compositing \
     "$APP_URL" >> "$LOG" 2>&1
 EOF
     chmod +x "${KIOSK_SCRIPT}"
@@ -455,7 +458,15 @@ EOF
 }
 EOF
 
-    ok "Chromium-Policy 'TranslateEnabled=false' gesetzt"
+    # Password-Manager deaktivieren (Schlüsselbund-Dialog)
+    cat > /etc/chromium/policies/managed/lhtpi-nopassword.json <<'EOF'
+{
+  "PasswordManagerEnabled": false,
+  "AutoFillEnabled": false
+}
+EOF
+
+    ok "Chromium-Policies gesetzt: Translate + PasswordManager deaktiviert"
 }
 
 configure_firewall() {
