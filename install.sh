@@ -374,10 +374,6 @@ cat > /home/pi/.config/chromium/Default/Preferences <<'CE_EOF'
 }
 CE_EOF
 
-chown -R "${PI_USER}:${PI_GROUP}" /home/pi/.config/chromium
-
-ok "Chrome Extension 'Hide Cursor' installiert und aktiviert"
-
 CHROMIUM="/usr/bin/chromium-browser"
 [ -x "$CHROMIUM" ] || CHROMIUM="/usr/bin/chromium"
 
@@ -410,6 +406,8 @@ exec "$CHROMIUM" \
 EOF
     chmod +x "${KIOSK_SCRIPT}"
     chown "${PI_USER}:${PI_GROUP}" "${KIOSK_SCRIPT}"
+    chown -R "${PI_USER}:${PI_GROUP}" /home/pi/.config/chromium
+    ok "Chrome Extension 'Hide Cursor' installiert und aktiviert"
 
     log "Erstelle systemd-Service für HDMI-Kiosk"
     cat > "/etc/systemd/system/${SERVICE_KIOSK}" <<EOF
@@ -564,10 +562,15 @@ dev="${1:-}"
 [ -n "$dev" ] || exit 0
 
 mkdir -p /mnt/lhtpi-usb
+# Verwaisten/alten Mount lösen, damit ein neuer Stick sauber mounted
 if mountpoint -q /mnt/lhtpi-usb; then
-    exit 0
+    umount -l /mnt/lhtpi-usb 2>/dev/null || true
 fi
-mount "$dev" /mnt/lhtpi-usb -o ro,umask=022 2>/dev/null || true
+# Read-only mounten (exFAT/FAT32/NTFS per Auto-Detect, mit explizitem Fallback)
+mount "$dev" /mnt/lhtpi-usb -o ro,umask=022 2>/dev/null \
+    || mount "$dev" /mnt/lhtpi-usb -o ro,umask=022 -t vfat 2>/dev/null \
+    || mount "$dev" /mnt/lhtpi-usb -o ro,umask=022 -t exfat 2>/dev/null \
+    || true
 exit 0
 EOF
     chmod +x /usr/local/bin/lhtpi-usb-mount.sh

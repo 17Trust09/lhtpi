@@ -190,17 +190,21 @@ def active_playlist_status():
 
     if mode == 'manual' and manual_source == 'web':
         status = _web_status()
+        source = 'web'
     elif mode == 'manual' and manual_source == 'usb':
         status = _usb_status(usb_dir)
+        source = 'usb'
     elif usb_dir is not None:
         # auto: USB hat Vorrang
         status = _usb_status(usb_dir)
+        source = 'usb'
     else:
         # auto: kein USB -> interne Playlist
         status = _web_status()
+        source = 'web'
 
     status.update({
-        'source': 'usb' if status.get('playlist_name') == 'USB-Stick' else 'web',
+        'source': source,
         'mode': mode,
         'manual_source': manual_source,
         'usb_present': usb_dir is not None,
@@ -465,7 +469,9 @@ def update_duration(id):
 @app.route('/present/api/status')
 def present_api_status():
     """Öffentliche API für den Kiosk (ohne Login)."""
-    return jsonify(active_playlist_status())
+    status = active_playlist_status()
+    status.pop('usb_slides_dir', None)  # keinen internen Pfad an Unangemeldete leaken
+    return jsonify(status)
 
 
 @app.route('/present/status')
@@ -483,6 +489,8 @@ def kiosk():
 @app.route('/present/usb-file/<filename>')
 def usb_file(filename):
     """Liefert eine Mediendatei direkt vom angeschlossenen USB-Stick aus."""
+    if not allowed_file(filename):
+        abort(404)
     slides_dir = find_usb_slides_dir()
     if not slides_dir:
         abort(404)

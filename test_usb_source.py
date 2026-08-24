@@ -1,6 +1,11 @@
 import os, tempfile, sys
 sys.path.insert(0, '/opt/data/projects/lhtpi')
 
+# Frische Test-DB sicherstellen (wird von app.py beim Import angelegt)
+dbpath = '/opt/data/projects/lhtpi/lhtpi.db'
+if os.path.exists(dbpath):
+    os.remove(dbpath)
+
 # ── 1. Reine USB-Funktionen ────────────────────────────────────────────
 import usb_source
 
@@ -11,7 +16,8 @@ open(os.path.join(slides, 'b.jpg'), 'w').write('B')
 open(os.path.join(slides, 'a.png'), 'w').write('A')
 open(os.path.join(slides, 'v.mp4'), 'w').write('V')
 open(os.path.join(slides, 'notes.txt'), 'w').write('ignore me')
-open(os.path.join(slides, 'settings.txt'), 'w').write('default=7\na.png=3\n')
+# Inline-Kommentare in settings.txt MÜSSEN jetzt funktionieren
+open(os.path.join(slides, 'settings.txt'), 'w').write('default=7\na.png=3  # Bild A\n')
 
 files = usb_source.list_usb_files(slides)
 assert files == ['a.png', 'b.jpg', 'v.mp4'], files
@@ -27,7 +33,7 @@ assert by['b.jpg']['display_duration'] == 7
 assert by['v.mp4']['display_duration'] == 0
 assert by['v.mp4']['file_type'] == 'video'
 assert by['a.png']['file_type'] == 'image'
-print('[OK] USB-Funktionen (Sortierung, settings.txt, Dauer)')
+print('[OK] USB-Funktionen (Sortierung, settings.txt inkl. Inline-Kommentar, Dauer)')
 
 # ── 2. Flask-App + Status (ohne USB) ───────────────────────────────────
 from app import app
@@ -39,7 +45,8 @@ d = r.get_json()
 for k in ('source', 'mode', 'manual_source', 'usb_present', 'active'):
     assert k in d, k
 assert d['mode'] == 'auto' and d['source'] == 'web', d
-print('[OK] Status default (auto, web, kein USB):', d['source'], d['mode'], d['usb_present'])
+assert 'usb_slides_dir' not in d, 'usb_slides_dir darf nicht öffentlich sein'
+print('[OK] Status default (auto, web, kein USB, kein usb_slides_dir-Leak)')
 
 # ── 3. Login + Settings-Endpoint ───────────────────────────────────────
 r = client.post('/login', data={'username': 'admin', 'password': 'admin'})
@@ -50,7 +57,6 @@ print('[OK] Login + GET /settings/source')
 
 # ── 4. USB vorhanden (monkeypatch) ─────────────────────────────────────
 import routes
-orig = routes.find_usb_slides_dir
 routes.find_usb_slides_dir = lambda: slides
 r = client.get('/present/api/status')
 d = r.get_json()
@@ -59,10 +65,16 @@ assert d['usb_present'] is True and d['playlist_name'] == 'USB-Stick'
 assert len(d['items']) == 3
 print('[OK] Status mit USB:', d['playlist_name'], len(d['items']), 'Items')
 
-# ── 5. USB-Datei-Auslieferung ──────────────────────────────────────────
+# ── 5. USB-Datei-Auslieferung + Allowlist ──────────────────────────────
 r = client.get('/present/usb-file/a.png')
 assert r.status_code == 200 and r.data == b'A', (r.status_code, r.data)
 print('[OK] USB-Datei-Auslieferung /present/usb-file/a.png')
+
+r = client.get('/present/usb-file/settings.txt')
+assert r.status_code == 404, ('settings.txt darf nicht ausgeliefert werden', r.status_code)
+r = client.get('/present/usb-file/notes.txt')
+assert r.status_code == 404, ('notes.txt darf nicht ausgeliefert werden', r.status_code)
+print('[OK] Allowlist: settings.txt/notes.txt -> 404')
 
 # ── 6. Manuell + Web (USB ignoriert) ───────────────────────────────────
 client.post('/settings/source', data={'mode': 'manual', 'manual_source': 'web'})
@@ -90,5 +102,16 @@ d = r.get_json()
 assert d['active'] is False and 'leer' in d['status'], d
 print('[OK] Leerer slides-Ordner ->', d['status'])
 
-routes.find_usb_slides_dir = orig
+# ── 9. source-Erkennung: Web-Playlist namens "USB-Stick" ───────────────
+routes.find_usb_slides_dir = lambda: None  # kein USB vorhanden
+from models import db, Playlist
+with app.app_context():
+    pl = Playlist(name='USB-Stick', is_active=True)
+    db.session.add(pl)
+    db.session.commit()
+r = client.get('/present/api/status')
+d = r.get_json()
+assert d['source'] == 'web', d
+print('[OK] Web-Playlist namens "USB-Stick" -> source bleibt korrekt web')
+
 print('\nALLES GRÜN ✅')

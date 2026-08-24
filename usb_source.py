@@ -154,7 +154,7 @@ def read_usb_settings(slides_dir):
                     continue
                 key, _, val = line.partition('=')
                 key = key.strip()
-                val = val.strip()
+                val = val.split('#', 1)[0].strip()  # Inline-Kommentare entfernen
                 if not key:
                     continue
                 try:
