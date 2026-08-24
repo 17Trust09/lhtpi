@@ -31,6 +31,18 @@
   opacity: .3;
   cursor: not-allowed;
 }
+/* Quellen-Umschalter (Auto/Manuell + Web/USB) */
+.source-panel{margin-bottom:2rem}
+.source-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;margin-bottom:1rem;flex-wrap:wrap}
+.source-controls{display:flex;gap:1.5rem;flex-wrap:wrap;align-items:flex-start}
+.source-group{display:flex;flex-direction:column;gap:.4rem}
+.source-label{font-size:.78rem;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.seg{display:inline-flex;gap:.3rem;padding:.3rem;border:1px solid var(--border);border-radius:12px;background:rgba(15,15,26,.7)}
+.seg-btn{padding:.55rem .95rem;border:0;border-radius:9px;background:transparent;color:var(--muted);font-weight:800;font-size:.88rem;cursor:pointer;transition:all .2s}
+.seg-btn:hover{color:#fff;background:rgba(255,255,255,.06)}
+.seg-btn.active{color:#fff;background:linear-gradient(135deg,var(--primary),#554df0);box-shadow:0 8px 22px rgba(108,99,255,.3)}
+.source-hint{margin-top:1rem}
+.pill.pill-usb{border-color:rgba(78,204,163,.4);color:#a6f5dd;background:rgba(78,204,163,.12)}
 </style>
 </head>
 <body>
@@ -85,6 +97,33 @@
       <small id="status-time"></small>
     </article>
   </div>
+
+  <section class="source-panel card glass-card">
+    <div class="source-head">
+      <div>
+        <p class="eyebrow">Quelle</p>
+        <h3>Wiedergabe-Quelle</h3>
+      </div>
+      <span id="source-active-badge" class="pill">Lade…</span>
+    </div>
+    <div class="source-controls">
+      <div class="source-group">
+        <span class="source-label">Modus</span>
+        <div class="seg" id="mode-seg">
+          <button type="button" class="seg-btn" data-mode="auto">🔄 Auto</button>
+          <button type="button" class="seg-btn" data-mode="manual">🎛️ Manuell</button>
+        </div>
+      </div>
+      <div class="source-group" id="manual-group" style="display:none">
+        <span class="source-label">Feste Quelle</span>
+        <div class="seg" id="manual-seg">
+          <button type="button" class="seg-btn" data-source="web">🌐 Web</button>
+          <button type="button" class="seg-btn" data-source="usb">💾 USB</button>
+        </div>
+      </div>
+    </div>
+    <p class="muted source-hint" id="source-hint"></p>
+  </section>
 </section>
 
 <section id="tab-media" class="tab-panel">
@@ -142,7 +181,8 @@ const urls={
   media:'{{ url_for("media_list") }}',
   playlists:'{{ url_for("playlist_list") }}',
   status:'{{ url_for("present_status") }}',
-  upload:'{{ url_for("upload") }}'
+  upload:'{{ url_for("upload") }}',
+  source:'{{ url_for("settings_source") }}'
 };
 let mediaCache=[];
 let playlistCache=[];
@@ -181,6 +221,7 @@ async function loadStatus(){
   try{
     const d=await fetchJson(urls.status);
     const card=$('#status-card');
+    updateSourceBadge(d);
     if(d.active){
       const total=(d.items||[]).length;
       const index=(d.current_item_index ?? 0)+1;
@@ -190,8 +231,8 @@ async function loadStatus(){
       $('#status-time').textContent=d.remaining ? `Restzeit: ${d.remaining}s` : '';
       card.classList.remove('status-error');card.classList.add('status-ready');
     }else{
-      $('#status-text').textContent='⏸️ Keine aktive Playlist';
-      $('#status-detail').textContent='Playlist auswählen und aktivieren';
+      $('#status-text').textContent='⏸️ '+(d.status||'Keine aktive Playlist');
+      $('#status-detail').textContent=d.status==='Kein USB-Stick erkannt'?'USB-Stick mit Ordner "slides/" anschließen':'Playlist auswählen und aktivieren';
       $('#status-time').textContent='';
       card.classList.remove('status-ready');card.classList.add('status-error');
     }
@@ -200,6 +241,65 @@ async function loadStatus(){
     $('#status-detail').textContent='Bitte Server oder Login prüfen';
     $('#status-time').textContent='';
   }
+}
+
+function updateSourceBadge(d){
+  const badge=$('#source-active-badge');
+  const hint=$('#source-hint');
+  if(d.source==='usb'){
+    badge.textContent='💾 USB-Stick';
+    badge.className='pill pill-usb';
+  }else{
+    badge.textContent='🌐 Web-Playlist';
+    badge.className='pill';
+  }
+  if(d.mode==='auto'){
+    hint.textContent=d.usb_present
+      ? 'Modus Auto: USB-Stick erkannt, es wird vom Stick abgespielt.'
+      : 'Modus Auto: Kein USB-Stick erkannt, es wird die interne Playlist abgespielt.';
+  }else{
+    hint.textContent='Modus Manuell: feste Quelle '+(d.manual_source==='usb'?'USB-Stick':'Web-Playlist')+' aktiv.';
+  }
+}
+
+let sourceSettings={mode:'auto',manual_source:'web'};
+
+async function loadSourceSettings(){
+  try{
+    const d=await fetchJson(urls.source);
+    sourceSettings={mode:d.mode||'auto',manual_source:d.manual_source||'web'};
+  }catch(e){}
+  renderSourceControls();
+}
+
+function renderSourceControls(){
+  $$('#mode-seg .seg-btn').forEach(b=>b.classList.toggle('active',b.dataset.mode===sourceSettings.mode));
+  $$('#manual-seg .seg-btn').forEach(b=>b.classList.toggle('active',b.dataset.source===sourceSettings.manual_source));
+  $('#manual-group').style.display=sourceSettings.mode==='manual'?'flex':'none';
+}
+
+async function postSourceSettings(){
+  const fd=new FormData();
+  fd.set('mode',sourceSettings.mode);
+  fd.set('manual_source',sourceSettings.manual_source);
+  const res=await fetch(urls.source,{method:'POST',body:fd,headers:{'X-Requested-With':'XMLHttpRequest'}});
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  showToast('Quelle aktualisiert');
+  loadStatus();
+}
+
+function setMode(mode){
+  if(sourceSettings.mode===mode)return;
+  sourceSettings.mode=mode;
+  renderSourceControls();
+  postSourceSettings().catch(()=>showToast('Quelle konnte nicht gespeichert werden','error'));
+}
+
+function setManualSource(src){
+  if(sourceSettings.manual_source===src)return;
+  sourceSettings.manual_source=src;
+  renderSourceControls();
+  postSourceSettings().catch(()=>showToast('Quelle konnte nicht gespeichert werden','error'));
 }
 
 async function loadMedia(render=true){
@@ -373,8 +473,11 @@ function updateMoveButtons(ul){
 
 $('#media-filter').addEventListener('submit',e=>{e.preventDefault();loadMedia();});
 ['media-search','media-sort','media-order'].forEach(id=>$('#'+id).addEventListener('change',()=>loadMedia()));
+$$('#mode-seg .seg-btn').forEach(btn=>btn.addEventListener('click',()=>setMode(btn.dataset.mode)));
+$$('#manual-seg .seg-btn').forEach(btn=>btn.addEventListener('click',()=>setManualSource(btn.dataset.source)));
 bindAjaxForms(document);
 loadDashboard();
+loadSourceSettings();
 setInterval(loadStatus,5000);
 </script>
 </body>

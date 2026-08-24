@@ -96,7 +96,8 @@ install_packages() {
         python3 python3-pip python3-venv \
         ufw curl git \
         xorg openbox unclutter-xfixes \
-        chromium-browser chromium-browser-l10n
+        chromium-browser chromium-browser-l10n \
+        exfatprogs ntfs-3g dosfstools usbutils
     ok "Systempakete installiert"
 }
 
@@ -547,6 +548,43 @@ configure_firewall() {
     ok "Firewall aktiv: SSH + Port ${APP_PORT}/tcp freigegeben"
 }
 
+configure_usb_automount() {
+    log "Richte USB-Stick-Auto-Mount ein (Ordner 'slides/' wird automatisch erkannt)"
+
+    mkdir -p /mnt/lhtpi-usb
+
+    # Mount-Helfer: mountet einen eingesteckten Stick nach /mnt/lhtpi-usb.
+    # Read-only, damit ein Herausziehen des Sticks keine Daten beschädigt.
+    cat > /usr/local/bin/lhtpi-usb-mount.sh <<'EOF'
+#!/bin/bash
+# LHTPi: USB-Stick nach /mnt/lhtpi-usb mounten (read-only, weltlesbar).
+# Aufruf: lhtpi-usb-mount.sh <device>   (z. B. /dev/sda1)
+set -u
+dev="${1:-}"
+[ -n "$dev" ] || exit 0
+
+mkdir -p /mnt/lhtpi-usb
+if mountpoint -q /mnt/lhtpi-usb; then
+    exit 0
+fi
+mount "$dev" /mnt/lhtpi-usb -o ro,umask=022 2>/dev/null || true
+exit 0
+EOF
+    chmod +x /usr/local/bin/lhtpi-usb-mount.sh
+
+    # udev-Regel: bei eingestecktem USB-Laufwerk den Helfer per systemd-run starten.
+    # systemd-run verlässt die udev-Sandbox, damit `mount` zuverlässig funktioniert.
+    cat > /etc/udev/rules.d/99-lhtpi-usb.rules <<'EOF'
+ACTION=="add", SUBSYSTEM=="block", ENV{ID_FS_USAGE}=="filesystem", ENV{ID_BUS}=="usb", RUN+="/usr/bin/systemd-run --no-block --on-active=2 /usr/local/bin/lhtpi-usb-mount.sh $env{DEVNAME}"
+ACTION=="remove", SUBSYSTEM=="block", ENV{ID_FS_USAGE}=="filesystem", ENV{ID_BUS}=="usb", RUN+="/usr/bin/systemd-run --no-block /bin/umount -l /mnt/lhtpi-usb"
+EOF
+
+    udevadm control --reload-rules 2>/dev/null || true
+    udevadm trigger --subsystem-match=block 2>/dev/null || true
+
+    ok "USB-Auto-Mount eingerichtet (exFAT/FAT32/NTFS, read-only nach /mnt/lhtpi-usb)"
+}
+
 print_summary() {
     echo ""
     echo "================================================"
@@ -560,6 +598,9 @@ print_summary() {
     echo ""
     echo "  📺 HDMI: Chromium-Kiosk mit ${KIOSK_URL}"
     echo "  🔗 SSH (LAN): ssh pi@<LAN-IP>"
+    echo ""
+    echo "  💾 USB-Stick: Ordner 'slides/' im Stick-Root anlegen und einstecken –"
+    echo "     wird automatisch abgespielt (Vorrang vor der Web-Playlist)."
     echo ""
     echo "  ⚠️  Wichtig: DHCP-Reservierung im Router für den Pi einrichten,"
     echo "     damit die LAN-IP stabil bleibt."
@@ -590,6 +631,7 @@ main() {
     configure_desktop
     configure_policies
     configure_firewall
+    configure_usb_automount
     print_summary
 }
 

@@ -7,6 +7,9 @@ from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.utils import secure_filename
 from app import app
 from models import db, User, Media, Playlist, PlaylistItem
+from usb_source import (find_usb_slides_dir, usb_items,
+                        get_mode, get_manual_source, set_setting,
+                        SETTING_MODE, SETTING_MANUAL_SOURCE)
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'mp4'}
 
@@ -85,32 +88,25 @@ def ajax_or_redirect(success_message, error_message=None, redirect_to='playlist_
     return redirect(url_for(redirect_to))
 
 
-def active_playlist_status():
-    """Gemeinsamer Status für Dashboard und Kiosk.
+def _status_from_items(items, playlist_name, status_text='Bereit'):
+    """Berechnet den deterministischen Player-Status aus einer Item-Liste.
 
     Der Kiosk hält seinen Player-Zustand im Browser. Für das Dashboard wird der
-    aktuelle Index deshalb deterministisch aus den Item-Dauern berechnet. So ist
-    der Status aussagekräftig, ohne eine Datenbank-Migration für Player-State zu
-    benötigen.
+    aktuelle Index deshalb deterministisch aus den Item-Dauern berechnet.
     """
-    active = Playlist.query.filter_by(is_active=True).first()
-    if not active or not active.items:
+    if not items:
         return {
             'active': False,
-            'playlist_name': None,
+            'playlist_name': playlist_name,
             'items': [],
             'current_media': None,
             'current_item_index': None,
             'current_item': None,
             'remaining': 0,
-            'status': 'Keine aktive Playlist'
+            'status': status_text,
         }
-
-    items = [playlist_item_to_dict(item) for item in active.items]
-    durations = [int(item.get('display_duration') or 10) for item in items]
-    # Bei Videos: display_duration=0 bedeutet "volle Videolänge", 
-    # für die Status-Berechnung nehmen wir 10s als Platzhalter
-    durations = [max(1, d if d > 0 else 10) for d in durations]
+    durations = [max(1, int(item.get('display_duration') or 10) or 10)
+                 for item in items]
     total_duration = sum(durations) or 1
     elapsed = int(datetime.utcnow().timestamp()) % total_duration
     current_index = 0
@@ -125,14 +121,92 @@ def active_playlist_status():
 
     return {
         'active': True,
-        'playlist_name': active.name,
+        'playlist_name': playlist_name,
         'items': items,
         'current_media': items[current_index]['original_name'],
         'current_item_index': current_index,
         'current_item': items[current_index],
         'remaining': remaining,
-        'status': 'Bereit'
+        'status': status_text,
     }
+
+
+def _web_status():
+    """Status der internen (Datenbank-)Playlist."""
+    active = Playlist.query.filter_by(is_active=True).first()
+    if not active or not active.items:
+        return {
+            'active': False,
+            'playlist_name': None,
+            'items': [],
+            'current_media': None,
+            'current_item_index': None,
+            'current_item': None,
+            'remaining': 0,
+            'status': 'Keine aktive Playlist'
+        }
+    items = [playlist_item_to_dict(item) for item in active.items]
+    return _status_from_items(items, active.name, 'Bereit')
+
+
+def _usb_status(usb_dir):
+    """Status der USB-Stick-Quelle."""
+    if usb_dir is None:
+        return {
+            'active': False,
+            'playlist_name': 'USB-Stick',
+            'items': [],
+            'current_media': None,
+            'current_item_index': None,
+            'current_item': None,
+            'remaining': 0,
+            'status': 'Kein USB-Stick erkannt'
+        }
+    items = usb_items(usb_dir, lambda fn: url_for('usb_file', filename=fn))
+    if not items:
+        return {
+            'active': False,
+            'playlist_name': 'USB-Stick',
+            'items': [],
+            'current_media': None,
+            'current_item_index': None,
+            'current_item': None,
+            'remaining': 0,
+            'status': 'USB-Stick ist leer (keine Medien in slides/)'
+        }
+    return _status_from_items(items, 'USB-Stick', 'USB-Stick aktiv')
+
+
+def active_playlist_status():
+    """Gemeinsamer Status für Dashboard und Kiosk.
+
+    Bestimmt die aktive Quelle:
+    * Modus ``manual``: feste Quelle aus ``manual_source`` (web/usb).
+    * Modus ``auto`` (Standard): USB-Stick hat Vorrang, sonst interne Playlist.
+    """
+    mode = get_mode()
+    manual_source = get_manual_source()
+    usb_dir = find_usb_slides_dir()
+
+    if mode == 'manual' and manual_source == 'web':
+        status = _web_status()
+    elif mode == 'manual' and manual_source == 'usb':
+        status = _usb_status(usb_dir)
+    elif usb_dir is not None:
+        # auto: USB hat Vorrang
+        status = _usb_status(usb_dir)
+    else:
+        # auto: kein USB -> interne Playlist
+        status = _web_status()
+
+    status.update({
+        'source': 'usb' if status.get('playlist_name') == 'USB-Stick' else 'web',
+        'mode': mode,
+        'manual_source': manual_source,
+        'usb_present': usb_dir is not None,
+        'usb_slides_dir': usb_dir,
+    })
+    return status
 
 
 # ── Login ─────────────────────────────────────────────────────────────
@@ -404,3 +478,37 @@ def present_status():
 @app.route('/present/kiosk')
 def kiosk():
     return render_template('kiosk.html')
+
+
+@app.route('/present/usb-file/<filename>')
+def usb_file(filename):
+    """Liefert eine Mediendatei direkt vom angeschlossenen USB-Stick aus."""
+    slides_dir = find_usb_slides_dir()
+    if not slides_dir:
+        abort(404)
+    return send_from_directory(slides_dir, filename)
+
+
+@app.route('/settings/source', methods=['GET', 'POST'])
+@login_required
+def settings_source():
+    """Quellen-Einstellung lesen (GET) oder ändern (POST).
+
+    ``mode``: 'auto' (Standard) oder 'manual'
+    ``manual_source``: 'web' oder 'usb' (nur relevant bei mode='manual')
+    """
+    if request.method == 'POST':
+        mode = (request.form.get('mode') or 'auto').strip()
+        manual_source = (request.form.get('manual_source') or 'web').strip()
+        if mode not in ('auto', 'manual'):
+            mode = 'auto'
+        if manual_source not in ('web', 'usb'):
+            manual_source = 'web'
+        set_setting(SETTING_MODE, mode)
+        set_setting(SETTING_MANUAL_SOURCE, manual_source)
+        return ajax_or_redirect('Quelle aktualisiert', redirect_to='dashboard')
+
+    return jsonify({
+        'mode': get_mode(),
+        'manual_source': get_manual_source(),
+    })

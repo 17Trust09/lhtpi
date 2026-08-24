@@ -12,6 +12,7 @@ LHTPi verwandelt einen Raspberry Pi 4/5 in einen autarken Präsentations-Player:
 - Standard-Login: `admin` / `admin`
 - Upload von Bildern/Videos in `uploads/`
 - Playlist-Verwaltung und Endlos-Wiedergabe
+- **USB-Stick als Quelle**: Ordner `slides/` im Stick-Root wird automatisch abgespielt (Vorrang vor der Web-Playlist)
 - Automatischer HDMI-Kiosk mit Chromium: `http://localhost:8000/present/kiosk`
 - LAN bleibt über `eth0` per DHCP erreichbar
 - WLAN `wlan0` wird als Access Point über **NetworkManager** betrieben
@@ -124,6 +125,55 @@ Der Kiosk lädt automatisch:
 ```text
 http://localhost:8000/present/kiosk
 ```
+
+---
+
+## USB-Stick als Quelle (Auto-Play)
+
+Der Pi erkennt einen eingesteckten USB-Stick automatisch und spielt ihn ab, **ohne dass jemand das Dashboard öffnen muss**. Das ist der schnellste Weg für Personen, die nur die Bilder austauschen wollen.
+
+### Ordner-Struktur auf dem Stick
+
+Im Stick-Root einen Ordner `slides/` anlegen und dort die Bilder/Videos ablegen:
+
+```text
+/stick/
+└── slides/
+    ├── bild1.jpg
+    ├── bild2.png
+    ├── video.mp4
+    └── settings.txt   (optional)
+```
+
+* Dateien werden **alphabetisch** (nach Dateiname) abgespielt.
+* Erlaubte Formate: `png`, `jpg`, `jpeg`, `gif`, `mp4`.
+* Videos laufen standardmäßig in voller Länge.
+* Unterordner werden ignoriert (nur Dateien direkt in `slides/`).
+
+### Anzeigedauer konfigurieren (optional)
+
+Mit einer `settings.txt` im `slides/`-Ordner lässt sich die Dauer steuern:
+
+```text
+# Standarddauer für alle Bilder (Sekunden). Default: 10
+default=10
+
+# Dauer für einzelne Dateien überschreiben
+bild1.jpg=5
+bild2.png=20
+video.mp4=0     # 0 = volle Videolänge
+```
+
+Wird keine Dauer angegeben, gilt `default` (bzw. 10 Sekunden).
+
+### Umschalt-Verhalten
+
+| Modus | Verhalten |
+|---|---|
+| **Auto** (Standard) | USB-Stick hat Vorrang. Stick rein → spielt vom Stick. Stick raus → interne Playlist. Stick wieder rein → wieder vom Stick. |
+| **Manuell** | Im Dashboard lässt sich eine feste Quelle erzwingen (Web oder USB). |
+
+Die Umschaltung erfolgt im Dashboard unter **„Wiedergabe-Quelle"**.
 
 ---
 

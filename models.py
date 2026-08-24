@@ -46,3 +46,9 @@ class PlaylistItem(db.Model):
     display_duration = db.Column(db.Integer, default=10)  # seconds
     playlist = db.relationship('Playlist', back_populates='items')
     media = db.relationship('Media')
+
+
+class Setting(db.Model):
+    """Einfacher Key/Value-Speicher für App-weite Einstellungen."""
+    key = db.Column(db.String(80), primary_key=True)
+    value = db.Column(db.String(200), nullable=False, default='')
