@@ -11,6 +11,8 @@ _db_name = os.environ.get('TERMINBOARD_DB', 'terminboard.db')
 _db_path = _db_name if os.path.isabs(_db_name) else os.path.join(BASE_DIR, _db_name)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + _db_path
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_HTTPONLY'] = True
 
 from models import db
 db.init_app(app)
@@ -23,7 +25,7 @@ login_manager.login_view = 'login'
 @login_manager.user_loader
 def load_user(user_id):
     from models import User
-    return User.query.get(int(user_id))
+    return db.session.get(User, int(user_id))
 
 
 with app.app_context():

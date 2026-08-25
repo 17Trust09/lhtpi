@@ -100,6 +100,36 @@ def test_csv_whitespace_stripped():
     assert r['text'] == 'Note'
 
 
+def test_csv_skips_row_without_start():
+    text = _CSV + "info;Ohne Start;;;\n"
+    assert usb_source.parse_termin_csv(text) == []
+
+
+def test_csv_skips_invalid_start():
+    text = _CSV + "info;Ungueltig;;31.13.2026;;\n"
+    assert usb_source.parse_termin_csv(text) == []
+
+
+def test_csv_skips_too_few_columns():
+    text = _CSV + "info;Titel\n"
+    assert usb_source.parse_termin_csv(text) == []
+
+
+def test_csv_no_header_first_line_is_data():
+    text = "kalibrierung;Ohne Header;P1;01.09.2026;03.09.2026;\n"
+    rows = usb_source.parse_termin_csv(text)
+    assert len(rows) == 1
+    assert rows[0]['titel'] == 'Ohne Header'
+
+
+def test_csv_quoted_semicolon():
+    text = _CSV + 'info;"Titel; mit Semikolon";;01.09.2026;;"Text; mit Semikolon"\n'
+    rows = usb_source.parse_termin_csv(text)
+    assert len(rows) == 1
+    assert rows[0]['titel'] == 'Titel; mit Semikolon'
+    assert rows[0]['text'] == 'Text; mit Semikolon'
+
+
 # ── Einstellungen / Source-Logik ─────────────────────────────────────
 
 def test_mode_default_auto():
@@ -169,7 +199,23 @@ def test_manual_web_ignores_usb(monkeypatch, tmp_path):
     _clean_termine()
 
 
-# ── Routen / Zugriffsschutz ──────────────────────────────────────────
+def test_manual_usb_without_stick_returns_empty(monkeypatch):
+    _clean_termine()
+    with app.app_context():
+        db.session.add(Termin(typ='info', titel='Intern', start=date(2026, 9, 1)))
+        usb_source.set_setting(usb_source.SETTING_MODE, 'manual')
+        usb_source.set_setting(usb_source.SETTING_MANUAL_SOURCE, 'usb')
+        db.session.commit()
+    monkeypatch.setattr(routes, 'find_usb_csv_dir', lambda: None)
+    with app.test_client() as c:
+        d = c.get('/board/api/status').get_json()
+        assert d['source'] == 'usb'
+        assert d['termine'] == []
+        assert d['kalibrierungen'] == []
+    with app.app_context():
+        usb_source.set_setting(usb_source.SETTING_MODE, 'auto')
+        db.session.commit()
+    _clean_termine()
 
 def test_kiosk_public():
     with app.test_client() as c:

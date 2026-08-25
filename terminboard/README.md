@@ -77,6 +77,14 @@ cd terminboard
 ./venv/bin/python -m pytest tests/ -q
 ```
 
+## Sicherheit
+
+- Session-Cookies mit `SameSite=Lax` und `HttpOnly` gesetzt.
+- Kein CSRF-Schutz (bewusste Entscheidung wie bei LHTPi — LAN/Offline-Kiosk mit
+  Login). Bei Bedarf später `Flask-WTF` ergänzen.
+- Default-Login `admin`/`admin` — für den Produktivbetrieb das Passwort ändern
+  (aktuell kein UI dafür; per Env/DB oder zukünftiges Feature).
+
 ## Farbthema
 
 Lufthansa-Stil: Navy `#05164D`, Gelb `#FFAD00`, Sekundär-Blau `#1B4B8F`,

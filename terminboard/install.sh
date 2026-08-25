@@ -46,7 +46,7 @@ prepare_project() {
         for f in "${SCRIPT_DIR}"/*; do
             [ -f "$f" ] && cp "$f" "${PROJECT_DIR}/" 2>/dev/null || true
         done
-        for d in templates static; do
+        for d in templates static tests; do
             [ -d "${SCRIPT_DIR}/${d}" ] && cp -r "${SCRIPT_DIR}/${d}" "${PROJECT_DIR}/" 2>/dev/null || true
         done
     fi
@@ -154,13 +154,11 @@ exec "$CHROMIUM" \
     --autoplay-policy=no-user-gesture-required \
     --disable-popup-blocking \
     --disable-translate \
-    --start-fullscreen \
     --disable-context-menu \
     --password-store=basic \
     --lang=de \
     --disable-gpu \
-    --disable-gpu-compositing \
-    "$APP_URL" >> "$LOG" 2>&1
+    --disable-gpu-compositing >> "$LOG" 2>&1
 EOF
     chmod +x "${KIOSK_SCRIPT}"
     chown "${PI_USER}:${PI_GROUP}" "${KIOSK_SCRIPT}"
@@ -204,10 +202,13 @@ mkdir -p /mnt/terminboard-usb
 if mountpoint -q /mnt/terminboard-usb; then
     umount -l /mnt/terminboard-usb 2>/dev/null || true
 fi
-mount "$dev" /mnt/terminboard-usb -o ro,umask=022 2>/dev/null \
+if mount "$dev" /mnt/terminboard-usb -o ro,umask=022 2>/dev/null \
     || mount "$dev" /mnt/terminboard-usb -o ro,umask=022 -t vfat 2>/dev/null \
-    || mount "$dev" /mnt/terminboard-usb -o ro,umask=022 -t exfat 2>/dev/null \
-    || true
+    || mount "$dev" /mnt/terminboard-usb -o ro,umask=022 -t exfat 2>/dev/null; then
+    :
+else
+    logger -t terminboard-usb "Mount von $dev nach /mnt/terminboard-usb fehlgeschlagen"
+fi
 exit 0
 EOF
     chmod +x /usr/local/bin/terminboard-usb-mount.sh

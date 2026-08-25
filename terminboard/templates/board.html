@@ -93,16 +93,14 @@ function badgeFor(t){
   const today=startOfToday();
   const start=t.start?new Date(t.start+'T00:00:00'):null;
   const ende=t.ende?new Date(t.ende+'T00:00:00'):null;
-  if(start&&start<=today&&(ende===null||ende>=today)){
-    if(ende||t.typ==='kalibrierung')return{cls:'b-blue',text:'läuft'};
-  }
-  if(start&&start>today){
+  if(start&&ende&&start<=today&&today<=ende)return{cls:'b-blue',text:'läuft'};
+  if(start){
     const days=daysUntil(t.start);
     if(days===0)return{cls:'b-red',text:'heute'};
-    if(days<=7)return{cls:'b-yellow',text:'in '+days+' Tagen'};
-    return{cls:'b-green',text:'in '+days+' Tagen'};
+    if(days>0&&days<=7)return{cls:'b-yellow',text:'in '+days+' Tagen'};
+    if(days>7)return{cls:'b-green',text:'in '+days+' Tagen'};
+    if(t.typ==='kalibrierung'&&days<0)return{cls:'b-red',text:'überfällig'};
   }
-  if(t.typ==='kalibrierung'&&start&&start<today)return{cls:'b-red',text:'überfällig'};
   return null;
 }
 

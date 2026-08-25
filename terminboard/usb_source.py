@@ -14,14 +14,18 @@ mit Header-Zeile). Spalten (exakt)::
 * ``ende``    – optional, gleiche Datumsformate
 * ``text``    – optionaler Einzeiler
 
-Leer- und Kommentarzeilen (``#``) werden ignoriert.
+Leer- und Kommentarzeilen (``#``) werden ignoriert. Zeilen ohne gültiges
+Startdatum, ohne Titel oder mit zu wenigen Spalten werden übersprungen.
 """
+import csv
 import os
 from datetime import datetime
 
 from models import db, Setting
 
 ALLOWED_TYPES = {'kalibrierung', 'audit', 'info', 'wartung'}
+
+EXPECTED_HEADER = ['typ', 'titel', 'referenz', 'start', 'ende', 'text']
 
 USB_CSV_FILENAME = 'termine.csv'
 FIXED_MOUNT = '/mnt/terminboard-usb'
@@ -49,36 +53,52 @@ def parse_date(value):
 
 
 def parse_termin_csv(text):
-    """Parst CSV-Text in eine Liste von Termin-Dicts (``date``-Objekte)."""
+    """Parst CSV-Text in eine Liste von Termin-Dicts (``date``-Objekte).
+
+    Verwendet das ``csv``-Modul (unterstützt Quoting), erkennt die Header-Zeile
+    und überspringt Zeilen ohne gültiges Pflicht-Startdatum oder ohne Titel.
+    """
     rows = []
-    header_seen = False
-    for raw in text.splitlines():
-        line = raw.strip()
-        if not line or line.startswith('#'):
-            continue
-        parts = [p.strip() for p in line.split(';')]
-        if not header_seen:
-            header_seen = True  # erste Nicht-Kommentarzeile = Header
-            continue
+    lines = [l for l in (x.strip() for x in text.splitlines())
+             if l and not l.startswith('#')]
+    if not lines:
+        return rows
+
+    reader = csv.reader(lines, delimiter=';')
+    first = next(reader, None)
+    if first is None:
+        return rows
+
+    is_header = [c.strip().lower() for c in first] == EXPECTED_HEADER
+    records = list(reader)
+    if not is_header:
+        # Keine Header-Zeile vorhanden → erste Zeile ist ein Datensatz
+        records.insert(0, first)
+
+    for parts in records:
+        if len(parts) < 4:
+            continue  # zu wenige Spalten (mind. typ;titel;referenz;start)
         while len(parts) < 6:
             parts.append('')
-        typ = parts[0].lower() if len(parts) > 0 else ''
-        titel = parts[1] if len(parts) > 1 else ''
-        referenz = parts[2] if len(parts) > 2 else ''
-        start = parse_date(parts[3] if len(parts) > 3 else '')
-        ende = parse_date(parts[4] if len(parts) > 4 else '')
-        text = parts[5] if len(parts) > 5 else ''
+        typ = parts[0].strip().lower()
+        titel = parts[1].strip()
+        referenz = parts[2].strip() or None
+        start = parse_date(parts[3].strip())
+        ende = parse_date(parts[4].strip())
+        text = parts[5].strip() or None
         if not titel:
             continue
+        if start is None:
+            continue  # Pflicht-Startdatum fehlt oder ist ungültig
         if typ not in ALLOWED_TYPES:
             typ = 'info'
         rows.append({
             'typ': typ,
             'titel': titel,
-            'referenz': referenz or None,
+            'referenz': referenz,
             'start': start,
             'ende': ende,
-            'text': text or None,
+            'text': text,
         })
     return rows
 
@@ -98,12 +118,12 @@ def read_csv_from_dir(mount_dir):
 # ── Einstellungs-Helfer (DB) ──────────────────────────────────────────
 
 def get_setting(key, default=None):
-    row = Setting.query.get(key)
+    row = db.session.get(Setting, key)
     return row.value if row else default
 
 
 def set_setting(key, value):
-    row = Setting.query.get(key)
+    row = db.session.get(Setting, key)
     if row is None:
         row = Setting(key=key, value='')
         db.session.add(row)

@@ -75,9 +75,12 @@ def active_termine():
     else:
         source = 'usb' if usb_dir is not None else 'web'
 
-    if source == 'usb' and usb_dir is not None:
-        termine = [usb_termin_to_dict(t, i)
-                   for i, t in enumerate(usb_termine(usb_dir))]
+    if source == 'usb':
+        if usb_dir is not None:
+            termine = [usb_termin_to_dict(t, i)
+                       for i, t in enumerate(usb_termine(usb_dir))]
+        else:
+            termine = []  # manuell USB gewählt, aber kein Stick vorhanden
     else:
         termine = [db_termin_to_dict(t)
                    for t in Termin.query.order_by(Termin.start).all()]
