@@ -52,17 +52,22 @@ Titel sowie Leer-/Kommentarzeilen (`#`) werden ignoriert.
 
 ## Installation auf dem Pi
 
-**Voraussetzung:** LHTPi `install.sh` wurde bereits ausgeführt (X11/Openbox/
-LightDM/NetworkManager-AP vorhanden).
+Der kombinierte Installer im Repo-Root installiert LHTPi und/oder Terminboard
+in einem Durchgang und fragt am Anfang nach der gewünschten Auswahl.
 
 ```bash
-cd /home/pi/lhtpi/terminboard
+cd /home/pi/lhtpi
 sudo bash install.sh
 ```
 
-Das Skript legt `terminboard.service` (Port 8001) und
-`terminboard-kiosk.service` (zweiter Monitor) an, richtet den USB-Auto-Mount
-nach `/mnt/terminboard-usb` ein und gibt Port 8001 in der Firewall frei.
+Menü: `1) Nur LHTPi` · `2) Nur Terminboard` · `3) Beides`. Oder
+nicht-interaktiv: `sudo bash install.sh 3` (bzw. `1`/`2`), optional
+`--no-reboot` für manuellen Neustart.
+
+Der Installer erledigt für die gewählten Komponenten: Systempakete, venv +
+Abhängigkeiten, systemd-Services (LHTPi Port 8000, Terminboard Port 8001),
+beide Chromium-Kiosks (HDMI-0 + HDMI-1), USB-Auto-Mount, Firewall — und
+startet am Ende **einmal** neu.
 
 > ⚠️ **Dual-Screen-Hinweis:** Die Positionierung des zweiten Chromium-Fensters
 > auf HDMI-1 (`SCREEN2_X` in `/home/pi/start_terminboard_kiosk.sh`) muss einmal

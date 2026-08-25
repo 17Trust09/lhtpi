@@ -1,5 +1,10 @@
 # Terminboard — Anzeigetafel für Kalibrierungen & News/Audits
 
+> **Hinweis (aktueller Stand):** Die Installation läuft inzwischen über den
+> **kombinierten Installer im Repo-Root** (`install.sh` mit Menü 1/2/3). Der
+> unten beschriebene eigenständige `terminboard/install.sh` wurde in diesen
+> integriert und entfernt.
+
 ## Ziel
 
 Zweites Kiosk-Projekt auf demselben Raspberry Pi wie LHTPi (Raspberry Pi 4/5,

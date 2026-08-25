@@ -22,6 +22,20 @@ KIOSK_LOG="/home/pi/lhtpi-kiosk.log"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_DIR="/root/lhtpi-backup-$(date +%Y%m%d%H%M%S)"
 
+# ── Terminboard (Add-on, zweiter HDMI-Ausgang) ────────────────────────
+TERMIN_DIR="/home/pi/lhtpi/terminboard"
+TERMIN_PORT="8001"
+TERMIN_KIOSK_URL="http://localhost:8001/board/kiosk"
+SERVICE_TERMIN_APP="terminboard.service"
+SERVICE_TERMIN_KIOSK="terminboard-kiosk.service"
+TERMIN_KIOSK_SCRIPT="/home/pi/start_terminboard_kiosk.sh"
+TERMIN_KIOSK_LOG="/home/pi/terminboard-kiosk.log"
+
+# ── Installations-Auswahl ─────────────────────────────────────────────
+INSTALL_LHTPI=0
+INSTALL_TERMIN=0
+NO_REBOOT=0
+
 # ── Hilfsfunktionen ────────────────────────────────────────────────────
 log()  { echo -e "\n==> $*"; }
 ok()   { echo "  ✅ $*"; }
@@ -541,9 +555,14 @@ configure_firewall() {
     ufw default deny incoming
     ufw default allow outgoing
     ufw allow ssh
-    ufw allow "${APP_PORT}/tcp"
+    if [ "$INSTALL_LHTPI" = "1" ]; then
+        ufw allow "${APP_PORT}/tcp"
+    fi
+    if [ "$INSTALL_TERMIN" = "1" ]; then
+        ufw allow "${TERMIN_PORT}/tcp"
+    fi
     ufw --force enable
-    ok "Firewall aktiv: SSH + Port ${APP_PORT}/tcp freigegeben"
+    ok "Firewall aktiv: SSH + freigegebene App-Ports"
 }
 
 configure_usb_automount() {
@@ -609,32 +628,272 @@ print_summary() {
     echo "     damit die LAN-IP stabil bleibt."
     echo "-----------------------------------------------"
     echo ""
-    echo "👉 Neustart in 5 Sekunden..."
-    sleep 5
-    echo "🔄 Reboot..."
-    reboot
+    if [ "$INSTALL_TERMIN" = "1" ]; then
+        echo "  🌐 Terminboard:  http://192.168.4.1:${TERMIN_PORT}  (admin / admin)"
+        echo "  📺 HDMI-1:       Terminboard-Kiosk"
+    fi
+    if [ "$NO_REBOOT" = "1" ]; then
+        echo ""
+        echo "  ⚠️  --no-reboot gesetzt: kein automatischer Neustart."
+        echo "      Bitte manuell neu starten, damit die Kiosks erscheinen."
+    else
+        echo "👉 Neustart in 5 Sekunden..."
+        sleep 5
+        echo "🔄 Reboot..."
+        reboot
+    fi
+}
+
+# ── Auswahl ───────────────────────────────────────────────────────────
+
+select_components() {
+    local choice="${1:-}"
+    if [ -z "$choice" ]; then
+        echo ""
+        echo "  Was möchtest du installieren?"
+        echo "    1) Nur LHTPi (Präsentations-Player)"
+        echo "    2) Nur Terminboard (Anzeigetafel)"
+        echo "    3) Beides (LHTPi + Terminboard)"
+        printf "  Auswahl (1/2/3): "
+        read -r choice
+    fi
+    case "$choice" in
+        1) INSTALL_LHTPI=1; INSTALL_TERMIN=0 ;;
+        2) INSTALL_LHTPI=0; INSTALL_TERMIN=1 ;;
+        3) INSTALL_LHTPI=1; INSTALL_TERMIN=1 ;;
+        *) fail "Ungültige Auswahl '$choice'. Erlaubt: 1, 2, 3" ;;
+    esac
+}
+
+# ── Terminboard (Add-on) ─────────────────────────────────────────────
+
+prepare_termin() {
+    log "Richte Terminboard unter ${TERMIN_DIR} ein"
+    mkdir -p "${TERMIN_DIR}"
+    local term_src="${SCRIPT_DIR}/terminboard"
+    if [ ! -d "${term_src}" ]; then
+        fail "Terminboard-Ordner ${term_src} nicht gefunden (Branch feature/terminboard nötig)"
+    fi
+    if [ "${term_src}" != "${TERMIN_DIR}" ]; then
+        for f in "${term_src}"/*; do
+            [ -f "$f" ] && cp "$f" "${TERMIN_DIR}/" 2>/dev/null || true
+        done
+        for d in templates static tests; do
+            [ -d "${term_src}/${d}" ] && cp -r "${term_src}/${d}" "${TERMIN_DIR}/" 2>/dev/null || true
+        done
+    fi
+    if [ ! -f "${TERMIN_DIR}/requirements.txt" ]; then
+        fail "${TERMIN_DIR}/requirements.txt fehlt."
+    fi
+    chown -R "${PI_USER}:${PI_GROUP}" "${TERMIN_DIR}"
+    ok "Terminboard-Verzeichnis bereit"
+}
+
+setup_termin_python() {
+    log "Erstelle Terminboard-Virtualenv"
+    cd "${TERMIN_DIR}"
+    sudo -u "${PI_USER}" python3 -m venv venv
+    sudo -u "${PI_USER}" "${TERMIN_DIR}/venv/bin/python" -m pip install --upgrade pip -q
+    sudo -u "${PI_USER}" "${TERMIN_DIR}/venv/bin/pip" install -r requirements.txt -q
+    chown -R "${PI_USER}:${PI_GROUP}" "${TERMIN_DIR}"
+    ok "Terminboard-Python-Umgebung fertig"
+}
+
+configure_terminboard() {
+    log "Erstelle Terminboard-Systemd-Service"
+    local secret
+    secret="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 48 || true)"
+    [ -n "${secret}" ] || secret="terminboard-change-me-$(date +%s)"
+
+    cat > "/etc/systemd/system/${SERVICE_TERMIN_APP}" <<EOF
+[Unit]
+Description=Terminboard - Flask Web-App
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=${PI_USER}
+Group=${PI_GROUP}
+WorkingDirectory=${TERMIN_DIR}
+Environment=PYTHONUNBUFFERED=1
+Environment=TERMINBOARD_HOST=0.0.0.0
+Environment=TERMINBOARD_PORT=${TERMIN_PORT}
+Environment=TERMINBOARD_SECRET=${secret}
+ExecStart=${TERMIN_DIR}/venv/bin/python ${TERMIN_DIR}/app.py
+Restart=always
+RestartSec=5
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    log "Erstelle Terminboard-Kiosk-Skript ${TERMIN_KIOSK_SCRIPT}"
+    cat > "${TERMIN_KIOSK_SCRIPT}" <<'EOF'
+#!/bin/bash
+set -u
+LOG="/home/pi/terminboard-kiosk.log"
+APP_URL="http://localhost:8001/board/kiosk"
+READY_URL="http://localhost:8001/login"
+# Position des zweiten Monitors (X-Offset = Breite des ersten Monitors).
+SCREEN2_X="1920"
+SCREEN2_Y="0"
+SCREEN2_W="1920"
+SCREEN2_H="1080"
+# Eigenes Chromium-Profil (NICHT mit LHTPi teilen!)
+PROFILE="/home/pi/.config/chromium-terminboard"
+
+mkdir -p "$(dirname "$LOG")"
+touch "$LOG"
+echo "$(date '+%F %T') - Terminboard-Kiosk gestartet, warte auf Flask-App" >> "$LOG"
+
+ready=0
+for i in $(seq 1 30); do
+    if curl -fsS --connect-timeout 2 --max-time 5 "$READY_URL" >/dev/null 2>&1; then
+        ready=1
+        echo "$(date '+%F %T') - Flask-App erreichbar, starte Chromium" >> "$LOG"
+        break
+    fi
+    sleep 2
+done
+[ "$ready" -ne 1 ] && echo "$(date '+%F %T') - App nicht erreichbar, starte Chromium trotzdem" >> "$LOG"
+
+xset s off >/dev/null 2>&1 || true
+xset -dpms >/dev/null 2>&1 || true
+xset s noblank >/dev/null 2>&1 || true
+
+mkdir -p "$PROFILE"
+CHROMIUM="/usr/bin/chromium-browser"
+[ -x "$CHROMIUM" ] || CHROMIUM="/usr/bin/chromium"
+
+exec "$CHROMIUM" \
+    --kiosk \
+    --app="$APP_URL" \
+    --user-data-dir="$PROFILE" \
+    --window-position="${SCREEN2_X},${SCREEN2_Y}" \
+    --window-size="${SCREEN2_W},${SCREEN2_H}" \
+    --noerrdialogs \
+    --disable-infobars \
+    --disable-session-crashed-bubble \
+    --disable-features=Translate,TranslateUI \
+    --no-first-run \
+    --check-for-update-interval=31536000 \
+    --autoplay-policy=no-user-gesture-required \
+    --disable-popup-blocking \
+    --disable-translate \
+    --disable-context-menu \
+    --password-store=basic \
+    --lang=de \
+    --disable-gpu \
+    --disable-gpu-compositing >> "$LOG" 2>&1
+EOF
+    chmod +x "${TERMIN_KIOSK_SCRIPT}"
+    chown "${PI_USER}:${PI_GROUP}" "${TERMIN_KIOSK_SCRIPT}"
+
+    log "Erstelle Terminboard-Kiosk-Service"
+    cat > "/etc/systemd/system/${SERVICE_TERMIN_KIOSK}" <<EOF
+[Unit]
+Description=Terminboard - HDMI Chromium Kiosk (zweiter Monitor)
+After=graphical.target ${SERVICE_TERMIN_APP}
+Requires=${SERVICE_TERMIN_APP}
+
+[Service]
+Type=simple
+User=${PI_USER}
+Group=${PI_GROUP}
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/${PI_USER}/.Xauthority
+ExecStartPre=/bin/sleep 5
+ExecStart=${TERMIN_KIOSK_SCRIPT}
+Restart=on-failure
+RestartSec=10
+StartLimitIntervalSec=120
+StartLimitBurst=3
+
+[Install]
+WantedBy=graphical.target
+EOF
+
+    log "Richte Terminboard-USB-Auto-Mount ein"
+    mkdir -p /mnt/terminboard-usb
+    cat > /usr/local/bin/terminboard-usb-mount.sh <<'EOF'
+#!/bin/bash
+# Terminboard: USB-Stick nach /mnt/terminboard-usb mounten (read-only, weltlesbar).
+set -u
+dev="${1:-}"
+[ -n "$dev" ] || exit 0
+mkdir -p /mnt/terminboard-usb
+if mountpoint -q /mnt/terminboard-usb; then
+    umount -l /mnt/terminboard-usb 2>/dev/null || true
+fi
+if mount "$dev" /mnt/terminboard-usb -o ro,umask=022 2>/dev/null \
+    || mount "$dev" /mnt/terminboard-usb -o ro,umask=022 -t vfat 2>/dev/null \
+    || mount "$dev" /mnt/terminboard-usb -o ro,umask=022 -t exfat 2>/dev/null; then
+    :
+else
+    logger -t terminboard-usb "Mount von $dev nach /mnt/terminboard-usb fehlgeschlagen"
+fi
+exit 0
+EOF
+    chmod +x /usr/local/bin/terminboard-usb-mount.sh
+
+    cat > /etc/udev/rules.d/99-terminboard-usb.rules <<'EOF'
+ACTION=="add", SUBSYSTEM=="block", ENV{ID_FS_USAGE}=="filesystem", ENV{ID_BUS}=="usb", RUN+="/usr/bin/systemd-run --no-block --on-active=2 /usr/local/bin/terminboard-usb-mount.sh $env{DEVNAME}"
+ACTION=="remove", SUBSYSTEM=="block", ENV{ID_FS_USAGE}=="filesystem", ENV{ID_BUS}=="usb", RUN+="/usr/bin/systemd-run --no-block /bin/umount -l /mnt/terminboard-usb"
+EOF
+    udevadm control --reload-rules 2>/dev/null || true
+    udevadm trigger --subsystem-match=block 2>/dev/null || true
+
+    systemctl enable "${SERVICE_TERMIN_APP}" "${SERVICE_TERMIN_KIOSK}"
+    ok "Terminboard-Services aktiviert"
 }
 
 # ── Hauptprogramm ──────────────────────────────────────────────────────
 main() {
     echo "================================================"
-    echo "  ${PROJECT_NAME} Installation"
+    echo "  ${PROJECT_NAME} + Terminboard Installation"
     echo "  Raspberry Pi OS Desktop (Trixie)"
     echo "================================================"
 
     require_root
     require_desktop_target
     ensure_pi_user
+
+    # Auswahl: 1) LHTPi  2) Terminboard  3) Beides  (optional als Argument)
+    local selection=""
+    for arg in "$@"; do
+        case "$arg" in
+            --no-reboot) NO_REBOOT=1 ;;
+            1|2|3) selection="$arg" ;;
+        esac
+    done
+    select_components "$selection"
+
     install_packages
-    prepare_project
-    setup_python
+    if [ "$INSTALL_LHTPI" = "1" ]; then
+        prepare_project
+        setup_python
+    fi
+    if [ "$INSTALL_TERMIN" = "1" ]; then
+        prepare_termin
+        setup_termin_python
+    fi
     backup_configs
     configure_network
-    configure_services
+    if [ "$INSTALL_LHTPI" = "1" ]; then
+        configure_services
+    fi
+    if [ "$INSTALL_TERMIN" = "1" ]; then
+        configure_terminboard
+    fi
     configure_desktop
     configure_policies
     configure_firewall
-    configure_usb_automount
+    if [ "$INSTALL_LHTPI" = "1" ]; then
+        configure_usb_automount
+    fi
     print_summary
 }
 
