@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Terminboard – Anmelden</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="login-body">
+<div class="login-card">
+  <div class="login-brand">TERMIN<span class="accent">BOARD</span></div>
+  <p class="muted">Bitte anmelden</p>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, m in messages %}
+      <div class="flash flash-{{ 'error' if cat=='error' else 'success' }}">{{ m }}</div>
+    {% endfor %}
+  {% endwith %}
+  <form method="post">
+    <label>Benutzername
+      <input type="text" name="username" autofocus required>
+    </label>
+    <label>Passwort
+      <input type="password" name="password" required>
+    </label>
+    <button type="submit">Anmelden</button>
+  </form>
+</div>
+</body>
+</html>

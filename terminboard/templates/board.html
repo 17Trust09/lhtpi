@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Terminübersicht</title>
+<style>
+:root{--navy:#05164D;--yellow:#FFAD00;--blue2:#1B4B8F;--bg:#F4F6FA;--card:#FFFFFF;
+--text:#1A1A1A;--muted:#5D6B7C;--border:#E4E8F0;--green:#1E8E3E;--red:#D93025}
+*{margin:0;padding:0;box-sizing:border-box;cursor:none!important}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+font-family:Inter,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;user-select:none}
+.topbar{background:var(--navy);color:#fff;padding:1.05rem 2.2rem;display:flex;align-items:center;justify-content:space-between}
+.topbar .brand{font-size:1.7rem;font-weight:900;letter-spacing:.02em}
+.topbar .brand span{color:var(--yellow)}
+.topbar .date{font-size:1.25rem;font-weight:600;opacity:.92}
+.grid{display:grid;grid-template-columns:1.55fr 1fr;gap:1.4rem;padding:1.5rem 2.2rem;height:calc(100% - 4.7rem)}
+.panel{background:var(--card);border:1px solid var(--border);border-radius:16px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 6px 22px rgba(5,22,77,.06)}
+.panel h2{background:linear-gradient(135deg,var(--navy),var(--blue2));color:#fff;padding:.95rem 1.3rem;font-size:1.25rem;letter-spacing:.05em}
+.panel h2 .accent{color:var(--yellow)}
+.scroll{flex:1;overflow-y:auto}
+table{width:100%;border-collapse:collapse}
+thead th{background:var(--bg);color:var(--muted);text-transform:uppercase;letter-spacing:.06em;font-size:.76rem;text-align:left;padding:.7rem 1rem;border-bottom:1px solid var(--border);position:sticky;top:0}
+tbody td{padding:.85rem 1rem;border-bottom:1px solid var(--border);font-size:1.05rem;vertical-align:middle}
+tbody tr:last-child td{border-bottom:0}
+.ref{font-weight:800;color:var(--navy)}
+.muted{color:var(--muted)}
+.badge{display:inline-flex;align-items:center;gap:.4rem;padding:.3rem .7rem;border-radius:999px;font-size:.82rem;font-weight:800;white-space:nowrap}
+.b-green{background:rgba(30,142,62,.12);color:var(--green)}
+.b-yellow{background:rgba(255,173,0,.18);color:#9a6a00}
+.b-red{background:rgba(217,48,37,.12);color:var(--red)}
+.b-blue{background:rgba(27,75,143,.12);color:var(--blue2)}
+.dot{width:.58rem;height:.58rem;border-radius:50%;display:inline-block;background:currentColor}
+.feed{list-style:none;padding:.5rem 0}
+.feed li{display:flex;gap:.9rem;align-items:flex-start;padding:.95rem 1.3rem;border-bottom:1px solid var(--border)}
+.feed li:last-child{border-bottom:0}
+.type-badge{flex:0 0 auto;padding:.34rem .72rem;border-radius:8px;font-size:.76rem;font-weight:800;color:#fff;letter-spacing:.05em;text-transform:uppercase;margin-top:.12rem}
+.feed .body{flex:1;min-width:0}
+.feed .title{font-weight:700;font-size:1.08rem}
+.feed .sub{color:var(--muted);font-size:.92rem;margin-top:.15rem}
+.empty{color:var(--muted);text-align:center;padding:2.5rem 1rem;font-size:1.05rem}
+@media (max-width:1100px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">TERMIN<span>ÜBERSICHT</span></div>
+  <div class="date" id="header-date"></div>
+</div>
+<div class="grid">
+  <div class="panel">
+    <h2><span class="accent">■</span>&nbsp; KALIBRIERUNGEN</h2>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Prüfstand</th><th>Kalibrierung</th><th>Zeitraum</th><th>Status</th></tr></thead>
+        <tbody id="cal-body"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="panel">
+    <h2><span class="accent">■</span>&nbsp; NEWS &amp; AUDITS</h2>
+    <ul class="feed scroll" id="news-list"></ul>
+  </div>
+</div>
+
+<script>
+const TYPE_META = {
+  kalibrierung:{label:'Kalibrierung',bg:'#05164D'},
+  audit:{label:'Audit',bg:'#C77E00'},
+  wartung:{label:'Wartung',bg:'#1B4B8F'},
+  info:{label:'Info',bg:'#5D6B7C'}
+};
+
+function pad(n){return String(n).padStart(2,'0');}
+function fmtDate(iso){if(!iso)return '';const d=new Date(iso+'T00:00:00');return pad(d.getDate())+'.'+pad(d.getMonth()+1)+'.'+d.getFullYear();}
+function startOfToday(){const d=new Date();d.setHours(0,0,0,0);return d;}
+function daysUntil(iso){const s=new Date(iso+'T00:00:00');return Math.round((s-startOfToday())/86400000);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+function setHeader(){
+  const d=new Date();
+  document.getElementById('header-date').textContent =
+    d.toLocaleDateString('de-DE',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+}
+
+function isPast(t){
+  const today=startOfToday();
+  if(t.ende){const e=new Date(t.ende+'T00:00:00');if(e<today)return true;}
+  return false;
+}
+
+function badgeFor(t){
+  const today=startOfToday();
+  const start=t.start?new Date(t.start+'T00:00:00'):null;
+  const ende=t.ende?new Date(t.ende+'T00:00:00'):null;
+  if(start&&start<=today&&(ende===null||ende>=today)){
+    if(ende||t.typ==='kalibrierung')return{cls:'b-blue',text:'läuft'};
+  }
+  if(start&&start>today){
+    const days=daysUntil(t.start);
+    if(days===0)return{cls:'b-red',text:'heute'};
+    if(days<=7)return{cls:'b-yellow',text:'in '+days+' Tagen'};
+    return{cls:'b-green',text:'in '+days+' Tagen'};
+  }
+  if(t.typ==='kalibrierung'&&start&&start<today)return{cls:'b-red',text:'überfällig'};
+  return null;
+}
+
+function renderCal(cal){
+  const body=document.getElementById('cal-body');
+  if(!cal.length){body.innerHTML='<tr><td colspan="4" class="empty">Keine anstehenden Kalibrierungen</td></tr>';return;}
+  body.innerHTML=cal.map(t=>{
+    const b=badgeFor(t);
+    const zt=t.ende?(fmtDate(t.start)+' – '+fmtDate(t.ende)):fmtDate(t.start);
+    return '<tr><td class="ref">'+esc(t.referenz||'–')+'</td>'
+      +'<td>'+esc(t.titel)+'</td>'
+      +'<td class="muted">'+zt+'</td>'
+      +'<td>'+(b?'<span class="badge '+b.cls+'"><span class="dot"></span>'+b.text+'</span>':'<span class="muted">–</span>')+'</td></tr>';
+  }).join('');
+}
+
+function renderNews(news){
+  const list=document.getElementById('news-list');
+  if(!news.length){list.innerHTML='<li class="empty">Keine Einträge</li>';return;}
+  list.innerHTML=news.map(t=>{
+    const meta=TYPE_META[t.typ]||TYPE_META.info;
+    const when=t.start?(t.ende?(fmtDate(t.start)+' – '+fmtDate(t.ende)):fmtDate(t.start)):'ohne Datum';
+    const sub=[when,t.text].filter(Boolean).join(' · ');
+    return '<li><span class="type-badge" style="background:'+meta.bg+'">'+esc(meta.label)+'</span>'
+      +'<div class="body"><div class="title">'+esc(t.titel)+'</div>'
+      +(sub?'<div class="sub">'+esc(sub)+'</div>':'')
+      +'</div></li>';
+  }).join('');
+}
+
+async function refresh(){
+  try{
+    const r=await fetch('/board/api/status');
+    const d=await r.json();
+    const cal=(d.kalibrierungen||[]).filter(t=>!isPast(t));
+    const news=(d.news||[]).filter(t=>!isPast(t));
+    renderCal(cal);
+    renderNews(news);
+  }catch(e){}
+}
+
+setHeader();
+refresh();
+setInterval(refresh,30000);
+setInterval(setHeader,60000);
+</script>
+</body>
+</html>

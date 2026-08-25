@@ -1,0 +1,74 @@
+/* Terminboard – Lufthansa-Stil (Navy + Gelb), helles corporate Theme */
+:root{
+  --navy:#05164D;--yellow:#FFAD00;--blue2:#1B4B8F;
+  --bg:#F4F6FA;--surface:#FFFFFF;--surface-2:#EEF1F7;
+  --text:#1A1A1A;--muted:#5D6B7C;--border:#E4E8F0;
+  --danger:#D93025;--success:#1E8E3E;
+  --shadow:0 10px 30px rgba(5,22,77,.08);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+  background:var(--bg);color:var(--text);min-height:100vh;line-height:1.5}
+a{color:inherit}
+.accent{color:var(--yellow)}
+.muted{color:var(--muted)}
+code{background:var(--surface-2);padding:.1rem .4rem;border-radius:6px;font-size:.9em}
+
+/* Navigation */
+.navbar{position:sticky;top:0;z-index:20;background:var(--navy);color:#fff;
+  padding:.9rem clamp(1rem,4vw,2.5rem);display:flex;align-items:center;justify-content:space-between;gap:1rem}
+.nav-brand{font-size:1.35rem;font-weight:900;letter-spacing:.02em}
+.nav-links{display:flex;gap:.5rem;align-items:center}
+.nav-links a{padding:.55rem .9rem;border-radius:10px;color:rgba(255,255,255,.8);text-decoration:none;font-weight:700;font-size:.92rem;transition:background .2s,color .2s}
+.nav-links a:hover,.nav-links a.active{background:rgba(255,255,255,.14);color:#fff}
+.top-logout{background:rgba(255,173,0,.16);color:var(--yellow)!important}
+
+.container{width:min(1180px,100%);margin:0 auto;padding:2rem clamp(1rem,4vw,2rem) 4rem}
+h1{font-size:clamp(1.7rem,3vw,2.4rem);margin-bottom:.3rem;color:var(--navy)}
+h2{font-size:1.15rem;color:var(--navy);margin-bottom:1rem;letter-spacing:.02em}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;
+  padding:1.4rem;box-shadow:var(--shadow);margin-bottom:1.4rem}
+
+/* Flash */
+.flash-stack{margin-bottom:1rem}
+.flash{padding:.85rem 1rem;border-radius:12px;margin-bottom:.7rem;border:1px solid var(--border)}
+.flash-success{background:rgba(30,142,62,.1);color:var(--success);border-color:rgba(30,142,62,.3)}
+.flash-error{background:rgba(217,48,37,.1);color:var(--danger);border-color:rgba(217,48,37,.3)}
+
+/* Forms */
+.grid2{display:grid;grid-template-columns:1.4fr 1fr;gap:1.4rem;margin-bottom:1.4rem}
+@media (max-width:860px){.grid2{grid-template-columns:1fr}}
+.row{display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:1rem}
+.row.actions{align-items:center}
+label{display:flex;flex-direction:column;gap:.35rem;font-weight:700;font-size:.88rem;color:var(--muted);flex:1;min-width:180px}
+input[type=text],input[type=password],input[type=date],select{
+  padding:.72rem .85rem;border:1px solid var(--border);border-radius:10px;background:#fff;
+  color:var(--text);font-size:.95rem;outline:none;transition:border-color .2s,box-shadow .2s;font-weight:500}
+input:focus,select:focus{border-color:var(--blue2);box-shadow:0 0 0 3px rgba(27,75,143,.14)}
+button,.btn{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;
+  padding:.72rem 1.1rem;background:var(--navy);color:#fff;border:0;border-radius:10px;
+  cursor:pointer;font-size:.92rem;font-weight:800;text-decoration:none;transition:transform .15s,box-shadow .15s,filter .15s}
+button:hover,.btn:hover{transform:translateY(-1px);box-shadow:0 6px 18px rgba(5,22,77,.22);filter:brightness(1.08)}
+.btn-ghost{background:var(--surface-2);color:var(--navy);border:1px solid var(--border)}
+.btn-delete{background:rgba(217,48,37,.1);color:var(--danger);border:1px solid rgba(217,48,37,.28);padding:.45rem .7rem;font-size:.85rem}
+.btn-delete:hover{background:rgba(217,48,37,.2);box-shadow:none}
+
+/* Listen-Tabellen */
+.list-table{width:100%;border-collapse:collapse}
+.list-table thead th{background:var(--surface-2);color:var(--muted);text-transform:uppercase;
+  letter-spacing:.05em;font-size:.76rem;text-align:left;padding:.65rem .8rem;border-bottom:1px solid var(--border)}
+.list-table tbody td{padding:.7rem .8rem;border-bottom:1px solid var(--border);font-size:.95rem;vertical-align:middle}
+.list-table tbody tr:last-child td{border-bottom:0}
+.ref{font-weight:800;color:var(--navy)}
+.row-actions{display:flex;gap:.5rem;justify-content:flex-end;align-items:center}
+.empty-note{color:var(--muted);padding:1rem .8rem}
+.usb-ok{color:var(--success);font-weight:700}
+.usb-off{color:var(--muted)}
+
+/* Login */
+.login-body{display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--navy),var(--blue2));min-height:100vh}
+.login-card{width:min(400px,calc(100% - 2rem));background:#fff;border-radius:18px;padding:2rem;box-shadow:0 24px 60px rgba(0,0,0,.3)}
+.login-brand{font-size:1.7rem;font-weight:900;color:var(--navy);margin-bottom:.2rem}
+.login-card form{display:flex;flex-direction:column;gap:1rem;margin-top:1.2rem}
+.login-card button{margin-top:.4rem}

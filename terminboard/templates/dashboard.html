@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Terminboard – Verwaltung</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<nav class="navbar">
+  <span class="nav-brand">TERMIN<span class="accent">BOARD</span></span>
+  <div class="nav-links">
+    <a href="{{ url_for('dashboard') }}" class="active">Termine</a>
+    <a class="top-logout" href="{{ url_for('logout') }}">Abmelden</a>
+  </div>
+</nav>
+
+<div class="container">
+  <h1>Terminverwaltung</h1>
+  <p class="muted">Kalibrierungen und News/Audits für die Anzeigetafel.</p>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-stack">
+      {% for cat, m in messages %}
+        <div class="flash flash-{{ 'error' if cat=='error' else 'success' }}">{{ m }}</div>
+      {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <div class="grid2">
+    <section class="card">
+      <h2 id="form-title">Neuer Termin</h2>
+      <form id="termin-form" method="post" action="{{ url_for('create_termin') }}">
+        <input type="hidden" name="id" id="f-id" value="">
+        <div class="row">
+          <label>Typ
+            <select name="typ" id="f-typ">
+              <option value="kalibrierung">Kalibrierung</option>
+              <option value="audit">Audit</option>
+              <option value="wartung">Wartung</option>
+              <option value="info">Info</option>
+            </select>
+          </label>
+          <label>Titel *
+            <input type="text" name="titel" id="f-titel" required>
+          </label>
+        </div>
+        <div class="row">
+          <label>Prüfstand / Referenz
+            <input type="text" name="referenz" id="f-referenz" placeholder="z. B. P3">
+          </label>
+        </div>
+        <div class="row">
+          <label>Start *
+            <input type="date" name="start" id="f-start" required>
+          </label>
+          <label>Ende
+            <input type="date" name="ende" id="f-ende">
+          </label>
+        </div>
+        <div class="row">
+          <label>Notiz
+            <input type="text" name="text" id="f-text" placeholder="optionaler Einzeiler">
+          </label>
+        </div>
+        <div class="row actions">
+          <button type="submit" id="f-submit">Anlegen</button>
+          <button type="button" class="btn-ghost" onclick="resetForm()">Zurücksetzen</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Quelle</h2>
+      <form method="post" action="{{ url_for('settings_source') }}">
+        <div class="row">
+          <label>Modus
+            <select name="mode">
+              <option value="auto" {{ 'selected' if status.mode=='auto' }}>Automatisch (USB vorrang)</option>
+              <option value="manual" {{ 'selected' if status.mode=='manual' }}>Manuell</option>
+            </select>
+          </label>
+          <label>Manuelle Quelle
+            <select name="manual_source">
+              <option value="web" {{ 'selected' if status.manual_source=='web' }}>Web (Datenbank)</option>
+              <option value="usb" {{ 'selected' if status.manual_source=='usb' }}>USB-Stick</option>
+            </select>
+          </label>
+        </div>
+        <div class="row actions">
+          <button type="submit">Quelle speichern</button>
+        </div>
+      </form>
+      <p class="muted">
+        {% if status.usb_present %}<span class="usb-ok">🟢 USB-Stick mit <code>termine.csv</code> erkannt</span>
+        {% else %}<span class="usb-off">⚪ Kein USB-Stick erkannt</span>{% endif %}
+        · aktive Quelle: <strong>{{ status.source }}</strong>
+      </p>
+    </section>
+  </div>
+
+  <script>const TERMINE = {{ termine|tojson }};</script>
+
+  <section class="card">
+    <h2>Kalibrierungen</h2>
+    <table class="list-table">
+      <thead><tr><th>Prüfstand</th><th>Titel</th><th>Zeitraum</th><th></th></tr></thead>
+      <tbody id="cal-list"></tbody>
+    </table>
+    <p class="empty-note" id="cal-empty" style="display:none">Keine Kalibrierungen vorhanden.</p>
+  </section>
+
+  <section class="card">
+    <h2>News &amp; Audits</h2>
+    <table class="list-table">
+      <thead><tr><th>Typ</th><th>Titel</th><th>Zeitraum</th><th></th></tr></thead>
+      <tbody id="news-list"></tbody>
+    </table>
+    <p class="empty-note" id="news-empty" style="display:none">Keine Einträge vorhanden.</p>
+  </section>
+</div>
+
+<script>
+const TYPE_LABEL = {kalibrierung:'Kalibrierung',audit:'Audit',wartung:'Wartung',info:'Info'};
+const cal = TERMINE.filter(t => t.typ === 'kalibrierung');
+const news = TERMINE.filter(t => t.typ !== 'kalibrierung');
+
+function fmtDate(iso){
+  if(!iso) return '';
+  const d = new Date(iso+'T00:00:00');
+  const p = n => String(n).padStart(2,'0');
+  return p(d.getDate())+'.'+p(d.getMonth()+1)+'.'+d.getFullYear();
+}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function zeit(t){ return t.ende ? (fmtDate(t.start)+' – '+fmtDate(t.ende)) : fmtDate(t.start); }
+
+function renderRows(list, tbodyId, emptyId, isCal){
+  const tb = document.getElementById(tbodyId);
+  const empty = document.getElementById(emptyId);
+  if(!list.length){ tb.innerHTML=''; empty.style.display='block'; return; }
+  empty.style.display='none';
+  tb.innerHTML = list.map(t => {
+    const edit = '<button type="button" class="btn-ghost" onclick="editTermin('+t.id+')">Bearbeiten</button>';
+    const del = '<form method="post" action="/termine/'+t.id+'/delete" style="display:inline" onsubmit="return confirm(\'Wirklich löschen?\')"><button type="submit" class="btn-delete">Löschen</button></form>';
+    const label = isCal ? esc(t.referenz||'–') : esc(TYPE_LABEL[t.typ]||'Info');
+    return '<tr><td class="ref">'+label+'</td><td>'+esc(t.titel)+'</td><td class="muted">'+zeit(t)+'</td><td class="row-actions">'+edit+del+'</td></tr>';
+  }).join('');
+}
+
+function editTermin(id){
+  const t = TERMINE.find(x => x.id === id);
+  if(!t) return;
+  document.getElementById('f-id').value = t.id;
+  document.getElementById('f-typ').value = t.typ;
+  document.getElementById('f-titel').value = t.titel;
+  document.getElementById('f-referenz').value = t.referenz || '';
+  document.getElementById('f-start').value = t.start || '';
+  document.getElementById('f-ende').value = t.ende || '';
+  document.getElementById('f-text').value = t.text || '';
+  document.getElementById('termin-form').action = '/termine/'+t.id+'/update';
+  document.getElementById('f-submit').textContent = 'Aktualisieren';
+  document.getElementById('form-title').textContent = 'Termin bearbeiten';
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+function resetForm(){
+  document.getElementById('f-id').value = '';
+  document.getElementById('termin-form').action = '/termine/create';
+  document.getElementById('termin-form').reset();
+  document.getElementById('f-submit').textContent = 'Anlegen';
+  document.getElementById('form-title').textContent = 'Neuer Termin';
+}
+
+renderRows(cal, 'cal-list', 'cal-empty', true);
+renderRows(news, 'news-list', 'news-empty', false);
+</script>
+</body>
+</html>
