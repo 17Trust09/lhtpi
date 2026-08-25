@@ -85,7 +85,10 @@ function setHeader(){
 
 function isPast(t){
   const today=startOfToday();
-  if(t.ende){const e=new Date(t.ende+'T00:00:00');if(e<today)return true;}
+  // Maßgeblich ist das Ende-Datum, sonst das Start-Datum:
+  // abgelaufen = relevantes Datum liegt vor heute.
+  const cutoff=t.ende||t.start;
+  if(cutoff){const c=new Date(cutoff+'T00:00:00');if(c<today)return true;}
   return false;
 }
 
@@ -99,7 +102,6 @@ function badgeFor(t){
     if(days===0)return{cls:'b-red',text:'heute'};
     if(days>0&&days<=7)return{cls:'b-yellow',text:'in '+days+' Tagen'};
     if(days>7)return{cls:'b-green',text:'in '+days+' Tagen'};
-    if(t.typ==='kalibrierung'&&days<0)return{cls:'b-red',text:'überfällig'};
   }
   return null;
 }

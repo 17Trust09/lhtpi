@@ -122,7 +122,8 @@ AJAX-Helfer `is_ajax()` + `ajax_or_redirect()` wie in LHTPi übernehmen. Jeder
 - **Resttage** live in JS berechnet: `start − heute`.
 - **Status-Farbcode:** 🟢 grün >7 Tage · 🟡 gelb 0–7 Tage · 🔴 rot heute ·
   🔵 blau „läuft" (start ≤ heute ≤ ende).
-- **Vergangene Einträge ausblenden** (`ende < heute` → nicht anzeigen).
+- **Vergangene Einträge ausblenden** (`ende < heute`, bzw. ohne Ende
+  `start < heute` → komplett aus der Anzeige entfernen).
 - Einträge nach `start` aufsteigend sortieren (ohne `start` ans Ende).
 - Poll `GET /board/api/status` alle **30 s**.
 - `cursor:none`, reine Anzeige (keine Interaktion).
