@@ -217,6 +217,34 @@ def test_manual_usb_without_stick_returns_empty(monkeypatch):
         db.session.commit()
     _clean_termine()
 
+
+def test_iter_mount_candidates_no_deep_under_mnt(monkeypatch):
+    tree = {
+        '/media': ['pi'],
+        '/media/pi': ['MYSTICK'],
+        '/run/media': [],
+        '/mnt': ['lhtpi-usb', 'backup'],
+        '/mnt/lhtpi-usb': ['slides'],
+        '/mnt/backup': ['data'],
+    }
+    dirs = {
+        '/media', '/run/media', '/mnt',
+        '/media/pi', '/media/pi/MYSTICK',
+        '/mnt/lhtpi-usb', '/mnt/lhtpi-usb/slides',
+        '/mnt/backup', '/mnt/backup/data',
+    }
+    monkeypatch.setattr(os, 'listdir', lambda p: tree.get(p, []))
+    monkeypatch.setattr(os.path, 'isdir', lambda p: p in dirs)
+
+    cands = list(usb_source._iter_mount_candidates())
+
+    assert '/mnt/lhtpi-usb' in cands
+    assert '/mnt/backup' in cands                # direkte Kinder von /mnt werden erkannt
+    assert '/mnt/lhtpi-usb/slides' not in cands  # kein Deep-Scan unter /mnt
+    assert '/mnt/backup/data' not in cands       # kein Deep-Scan unter /mnt
+    assert '/media/pi/MYSTICK' in cands          # Deep-Scan unter /media bleibt
+
+
 def test_kiosk_public():
     with app.test_client() as c:
         assert c.get('/board/kiosk').status_code == 200

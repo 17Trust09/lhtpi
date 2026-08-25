@@ -153,10 +153,17 @@ def _is_valid_dir(path):
 
 
 def _iter_mount_candidates():
-    """Mögliche Pfade, unter denen ein Stick (mit ``termine.csv``) liegen kann."""
+    """Mögliche Pfade, unter denen ein Stick (mit ``termine.csv``) liegen kann.
+
+    Unter ``/media`` und ``/run/media`` wird zusätzlich eine Ebene tiefer
+    gesucht (Auto-Mount-Layout ``/media/<user>/<label>``). Unter ``/mnt``
+    liegen Mount-Points direkt als Kinder (z. B. ``/mnt/lhtpi-usb``) — hier
+    wird nicht tiefer gesucht, damit ``termine.csv`` nicht fälschlich aus
+    Unterordnern wie ``slides/`` erkannt wird.
+    """
     seen = {FIXED_MOUNT}
     yield FIXED_MOUNT
-    for root in ('/media', '/run/media', '/mnt'):
+    for root, deep in (('/media', True), ('/run/media', True), ('/mnt', False)):
         if not os.path.isdir(root):
             continue
         try:
@@ -170,12 +177,16 @@ def _iter_mount_candidates():
             if userdir not in seen:
                 yield userdir
                 seen.add(userdir)
+            if not deep:
+                continue
             try:
                 subs = os.listdir(userdir)
             except OSError:
                 continue
             for sub in subs:
                 cand = os.path.join(userdir, sub)
+                if not os.path.isdir(cand):
+                    continue
                 if cand not in seen:
                     yield cand
                     seen.add(cand)
