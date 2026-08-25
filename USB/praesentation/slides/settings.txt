@@ -1,0 +1,11 @@
+# LHTPi – Anzeigedauern für die Präsentation
+# Zeilen mit '#' sind Kommentare und werden ignoriert.
+
+# Standarddauer pro Bild in Sekunden (gilt, wenn unten nichts anderes steht):
+default=10
+
+# Dauer für einzelne Dateien überschreiben (Beispiele, aktuell auskommentiert):
+# beispiel-folie-1.png=8
+# beispiel-folie-2.png=12
+
+# Videos: 0 = volle Länge abspielen (Standard), sonst Sekunden angeben.
