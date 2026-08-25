@@ -28,7 +28,7 @@ ALLOWED_TYPES = {'kalibrierung', 'audit', 'info', 'wartung'}
 EXPECTED_HEADER = ['typ', 'titel', 'referenz', 'start', 'ende', 'text']
 
 USB_CSV_FILENAME = 'termine.csv'
-FIXED_MOUNT = '/mnt/terminboard-usb'
+FIXED_MOUNT = '/mnt/lhtpi-usb'  # gemeinsamer Mount-Point mit LHTPi (ein Stick für beide Apps)
 
 # Einstellungs-Keys
 SETTING_MODE = 'player_mode'            # 'auto' | 'manual'

@@ -566,7 +566,7 @@ configure_firewall() {
 }
 
 configure_usb_automount() {
-    log "Richte USB-Stick-Auto-Mount ein (Ordner 'slides/' wird automatisch erkannt)"
+    log "Richte gemeinsamen USB-Auto-Mount ein (slides/ + termine.csv)"
 
     mkdir -p /mnt/lhtpi-usb
 
@@ -816,36 +816,6 @@ StartLimitBurst=3
 WantedBy=graphical.target
 EOF
 
-    log "Richte Terminboard-USB-Auto-Mount ein"
-    mkdir -p /mnt/terminboard-usb
-    cat > /usr/local/bin/terminboard-usb-mount.sh <<'EOF'
-#!/bin/bash
-# Terminboard: USB-Stick nach /mnt/terminboard-usb mounten (read-only, weltlesbar).
-set -u
-dev="${1:-}"
-[ -n "$dev" ] || exit 0
-mkdir -p /mnt/terminboard-usb
-if mountpoint -q /mnt/terminboard-usb; then
-    umount -l /mnt/terminboard-usb 2>/dev/null || true
-fi
-if mount "$dev" /mnt/terminboard-usb -o ro,umask=022 2>/dev/null \
-    || mount "$dev" /mnt/terminboard-usb -o ro,umask=022 -t vfat 2>/dev/null \
-    || mount "$dev" /mnt/terminboard-usb -o ro,umask=022 -t exfat 2>/dev/null; then
-    :
-else
-    logger -t terminboard-usb "Mount von $dev nach /mnt/terminboard-usb fehlgeschlagen"
-fi
-exit 0
-EOF
-    chmod +x /usr/local/bin/terminboard-usb-mount.sh
-
-    cat > /etc/udev/rules.d/99-terminboard-usb.rules <<'EOF'
-ACTION=="add", SUBSYSTEM=="block", ENV{ID_FS_USAGE}=="filesystem", ENV{ID_BUS}=="usb", RUN+="/usr/bin/systemd-run --no-block --on-active=2 /usr/local/bin/terminboard-usb-mount.sh $env{DEVNAME}"
-ACTION=="remove", SUBSYSTEM=="block", ENV{ID_FS_USAGE}=="filesystem", ENV{ID_BUS}=="usb", RUN+="/usr/bin/systemd-run --no-block /bin/umount -l /mnt/terminboard-usb"
-EOF
-    udevadm control --reload-rules 2>/dev/null || true
-    udevadm trigger --subsystem-match=block 2>/dev/null || true
-
     systemctl enable "${SERVICE_TERMIN_APP}" "${SERVICE_TERMIN_KIOSK}"
     ok "Terminboard-Services aktiviert"
 }
@@ -891,9 +861,7 @@ main() {
     configure_desktop
     configure_policies
     configure_firewall
-    if [ "$INSTALL_LHTPI" = "1" ]; then
-        configure_usb_automount
-    fi
+    configure_usb_automount
     print_summary
 }
 
