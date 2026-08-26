@@ -130,6 +130,88 @@ def test_csv_quoted_semicolon():
     assert rows[0]['text'] == 'Text; mit Semikolon'
 
 
+# ── XLSX-Parsing ─────────────────────────────────────────────────────
+
+def _write_xlsx(path, rows, header=("Art", "Titel", "Referenz", "Von", "Bis", "Hinweis")):
+    from openpyxl import Workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Termine"
+    ws.append(list(header))
+    for r in rows:
+        ws.append(list(r))
+    wb.save(path)
+
+
+def test_xlsx_basic(tmp_path):
+    xlsx = tmp_path / 'termine.xlsx'
+    _write_xlsx(xlsx, [
+        ["Kalibrierung", "Druckprüfstand P3", "P3", date(2026, 8, 25), date(2026, 8, 30), "Jährlich"],
+    ])
+    rows = usb_source.parse_termin_xlsx(str(xlsx))
+    assert len(rows) == 1
+    r = rows[0]
+    assert r['typ'] == 'kalibrierung'
+    assert r['titel'] == 'Druckprüfstand P3'
+    assert r['referenz'] == 'P3'
+    assert r['start'] == date(2026, 8, 25)
+    assert r['ende'] == date(2026, 8, 30)
+    assert r['text'] == 'Jährlich'
+
+
+def test_xlsx_deutsche_art_und_optionale_felder(tmp_path):
+    xlsx = tmp_path / 'termine.xlsx'
+    _write_xlsx(xlsx, [
+        ["Audit", "ISO-Audit QS", "", date(2026, 9, 14), "", ""],
+        ["Wartung", "Druckluft", "", date(2026, 9, 1), date(2026, 9, 2), ""],
+        ["Info", "Meldung", "", date(2026, 9, 1), "", ""],
+    ])
+    rows = usb_source.parse_termin_xlsx(str(xlsx))
+    assert [r['typ'] for r in rows] == ['audit', 'wartung', 'info']
+    assert rows[0]['ende'] is None
+    assert rows[0]['referenz'] is None
+
+
+def test_xlsx_skips_header_and_invalid(tmp_path):
+    xlsx = tmp_path / 'termine.xlsx'
+    _write_xlsx(xlsx, [
+        ["Kalibrierung", "Gültig", "P1", date(2026, 9, 1), "", ""],
+        ["Info", "", "", date(2026, 9, 1), "", ""],          # kein Titel
+        ["Info", "Ohne Start", "", "", "", ""],               # kein Startdatum
+    ])
+    rows = usb_source.parse_termin_xlsx(str(xlsx))
+    assert len(rows) == 1
+    assert rows[0]['titel'] == 'Gültig'
+
+
+def test_xlsx_datum_als_string(tmp_path):
+    xlsx = tmp_path / 'termine.xlsx'
+    _write_xlsx(xlsx, [
+        ["Kalibrierung", "String-Datum", "P2", "25.08.2026", "30.08.2026", ""],
+    ])
+    rows = usb_source.parse_termin_xlsx(str(xlsx))
+    assert rows[0]['start'] == date(2026, 8, 25)
+    assert rows[0]['ende'] == date(2026, 8, 30)
+
+
+def test_xlsx_unbekannte_art_faellt_auf_info(tmp_path):
+    xlsx = tmp_path / 'termine.xlsx'
+    _write_xlsx(xlsx, [
+        ["Sonstiges", "Titel", "", date(2026, 9, 1), "", ""],
+    ])
+    assert usb_source.parse_termin_xlsx(str(xlsx))[0]['typ'] == 'info'
+
+
+def test_read_termin_from_dir_bevorzugt_xlsx(tmp_path):
+    (tmp_path / 'termine.csv').write_text(_CSV + "info;Aus CSV;;01.09.2026;;\n", encoding='utf-8')
+    _write_xlsx(tmp_path / 'termine.xlsx', [
+        ["Info", "Aus XLSX", "", date(2026, 9, 1), "", ""],
+    ])
+    rows = usb_source.read_termin_from_dir(str(tmp_path))
+    assert len(rows) == 1
+    assert rows[0]['titel'] == 'Aus XLSX'
+
+
 # ── Einstellungen / Source-Logik ─────────────────────────────────────
 
 def test_mode_default_auto():
@@ -168,8 +250,8 @@ def test_active_termine_usb_priority(monkeypatch, tmp_path):
         db.session.commit()
     csv = tmp_path / 'termine.csv'
     csv.write_text(_CSV + "kalibrierung;Von USB;P9;10.10.2026;12.10.2026;\n", encoding='utf-8')
-    # routes.py nutzt seine eigene importierte Referenz auf find_usb_csv_dir
-    monkeypatch.setattr(routes, 'find_usb_csv_dir', lambda: str(tmp_path))
+    # routes.py nutzt seine eigene importierte Referenz auf find_usb_termin_dir
+    monkeypatch.setattr(routes, 'find_usb_termin_dir', lambda: str(tmp_path))
     with app.test_client() as c:
         d = c.get('/board/api/status').get_json()
         assert d['source'] == 'usb'
@@ -188,7 +270,7 @@ def test_manual_web_ignores_usb(monkeypatch, tmp_path):
         db.session.commit()
     csv = tmp_path / 'termine.csv'
     csv.write_text(_CSV + "info;Von USB;;10.10.2026;;\n", encoding='utf-8')
-    monkeypatch.setattr(routes, 'find_usb_csv_dir', lambda: str(tmp_path))
+    monkeypatch.setattr(routes, 'find_usb_termin_dir', lambda: str(tmp_path))
     with app.test_client() as c:
         d = c.get('/board/api/status').get_json()
         assert d['source'] == 'web'
@@ -206,7 +288,7 @@ def test_manual_usb_without_stick_returns_empty(monkeypatch):
         usb_source.set_setting(usb_source.SETTING_MODE, 'manual')
         usb_source.set_setting(usb_source.SETTING_MANUAL_SOURCE, 'usb')
         db.session.commit()
-    monkeypatch.setattr(routes, 'find_usb_csv_dir', lambda: None)
+    monkeypatch.setattr(routes, 'find_usb_termin_dir', lambda: None)
     with app.test_client() as c:
         d = c.get('/board/api/status').get_json()
         assert d['source'] == 'usb'

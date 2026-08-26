@@ -10,8 +10,28 @@ Ein **einziger** USB-Stick versorgt **beide** Anzeigen: die Präsentation
 │   ├── 01-start.jpg
 │   ├── video.mp4
 │   └── settings.txt        ← optional: Anzeigedauern
-└── termine.csv             ← Terminboard
+└── termine.xlsx            ← Terminboard (bevorzugt, Excel-Vorlage)
 ```
+
+## Terminboard (`termine.xlsx`)
+
+Für Nicht-Techniker gedacht: eine **Excel-Vorlage** mit verständlichen
+deutschen Spalten, einem **Dropdown** für die Art und **Datumsfeldern**.
+
+- Spalten: `Art | Titel | Referenz | Von | Bis | Hinweis`
+- `Art` über Dropdown: `Kalibrierung`, `Audit`, `Wartung`, `Info`
+- `Von` ist Pflicht; `Bis`, `Referenz` und `Hinweis` dürfen leer bleiben.
+- Datum `TT.MM.JJJJ`.
+- Die Datei enthält ein zweites Blatt **„Anleitung“** und Beispielzeilen,
+  die man einfach überschreiben oder löschen kann.
+- Abgelaufene Termine werden automatisch von der Anzeige entfernt.
+
+### Fallback `termine.csv`
+
+Falls keine `termine.xlsx` vorhanden ist, liest das Terminboard weiterhin die
+alte `termine.csv` (UTF-8, Semikolon-getrennt, Header
+`typ;titel;referenz;start;ende;text`). Die `xlsx` hat aber **Vorrang**, wenn
+beide Dateien auf dem Stick liegen.
 
 ## Präsentation (`slides/`)
 
@@ -22,24 +42,10 @@ Ein **einziger** USB-Stick versorgt **beide** Anzeigen: die Präsentation
 - Mit `settings.txt` (siehe Beispiel): `default=` für die Standarddauer,
   `dateiname=sekunden` für einzelne Dateien, `0` = volle Videolänge.
 
-## Terminboard (`termine.csv`)
-
-- Eine Datei `termine.csv` im Stick-Root (UTF-8, Semikolon-getrennt).
-- Erste Zeile = Spaltenüberschrift (exakt):
-
-      typ;titel;referenz;start;ende;text
-
-- Datum: `TT.MM.JJJJ` oder `JJJJ-MM-TT`.
-- `typ` ∈ `kalibrierung | audit | info | wartung` (sonst `info`).
-- `referenz`, `ende` und `text` dürfen leer sein.
-- Zeilen ohne Titel sowie Leer-/Kommentarzeilen (`#`) werden ignoriert.
-
 ## Hinweise
 
-- Stick einstecken → der Pi erkennt `slides/` **und** `termine.csv` automatisch
-  (USB hat Vorrang, solange im jeweiligen Dashboard „Automatisch" steht).
-- Abgelaufene Termine (Ende-Datum bzw. Start-Datum ohne Ende überschritten)
-  werden automatisch aus der Tafel entfernt — Datum neu setzen, um sie wieder
-  sichtbar zu machen.
+- Stick einstecken → der Pi erkennt `slides/` **und** `termine.xlsx`
+  automatisch (USB hat Vorrang, solange im jeweiligen Dashboard „Automatisch“
+  steht).
 - Die zwei `beispiel-folie-*.png` in `slides/` sind echte Beispielbilder — du
   kannst diesen Ordner 1:1 auf einen Stick kopieren und direkt testen.

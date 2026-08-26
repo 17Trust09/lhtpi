@@ -1,25 +1,31 @@
-"""Terminboard – USB-Stick mit ``termine.csv`` als Terminquelle.
+"""Terminboard – USB-Stick mit ``termine.xlsx`` (oder ``termine.csv``) als Terminquelle.
 
 Konvention
 ----------
-Der Stick-Root enthält eine Datei ``termine.csv`` (UTF-8, Semikolon-getrennt,
-mit Header-Zeile). Spalten (exakt)::
+Der Stick-Root enthält eine Datei ``termine.xlsx`` (bevorzugt) oder ``termine.csv``
+(Fallback). Beide liefern Termine mit denselben sechs Feldern.
+
+Excel-Vorlage (``USB/termine.xlsx``), Spalten::
+
+    Art | Titel | Referenz | Von | Bis | Hinweis
+
+* ``Art``      – Kalibrierung | Audit | Wartung | Info (sonst → info)
+* ``Titel``    – Pflicht (Zeilen ohne Titel werden ignoriert)
+* ``Referenz`` – optional (z. B. ``P3``)
+* ``Von``      – Startdatum ``TT.MM.JJJJ`` oder ``JJJJ-MM-TT`` (Pflicht)
+* ``Bis``      – optional, gleiche Datumsformate
+* ``Hinweis``  – optionaler Einzeiler
+
+CSV-Variante (``termine.csv``), Semikolon-getrennt, Header-Zeile::
 
     typ;titel;referenz;start;ende;text
-
-* ``typ``     – kalibrierung | audit | info | wartung (sonst → info)
-* ``titel``   – Pflicht (Zeilen ohne Titel werden ignoriert)
-* ``referenz``– optional (z. B. ``P3``)
-* ``start``   – ``TT.MM.JJJJ`` oder ``JJJJ-MM-TT`` (Pflicht)
-* ``ende``    – optional, gleiche Datumsformate
-* ``text``    – optionaler Einzeiler
 
 Leer- und Kommentarzeilen (``#``) werden ignoriert. Zeilen ohne gültiges
 Startdatum, ohne Titel oder mit zu wenigen Spalten werden übersprungen.
 """
 import csv
 import os
-from datetime import datetime
+from datetime import date, datetime
 
 from models import db, Setting
 
@@ -28,7 +34,19 @@ ALLOWED_TYPES = {'kalibrierung', 'audit', 'info', 'wartung'}
 EXPECTED_HEADER = ['typ', 'titel', 'referenz', 'start', 'ende', 'text']
 
 USB_CSV_FILENAME = 'termine.csv'
+USB_XLSX_FILENAME = 'termine.xlsx'
+USB_TERMIN_FILENAMES = (USB_XLSX_FILENAME, USB_CSV_FILENAME)  # xlsx hat Vorrang
 FIXED_MOUNT = '/mnt/lhtpi-usb'  # gemeinsamer Mount-Point mit LHTPi (ein Stick für beide Apps)
+
+# Verständliche Spaltenüberschriften → interner Schlüssel (für die Kopfzeilen-Erkennung)
+HEADER_ALIASES = {
+    'art': 'typ', 'typ': 'typ', 'type': 'typ',
+    'titel': 'titel', 'title': 'titel',
+    'referenz': 'referenz', 'reference': 'referenz', 'ref': 'referenz',
+    'von': 'start', 'start': 'start',
+    'bis': 'ende', 'ende': 'ende', 'end': 'ende',
+    'hinweis': 'text', 'text': 'text', 'bemerkung': 'text', 'notiz': 'text',
+}
 
 # Einstellungs-Keys
 SETTING_MODE = 'player_mode'            # 'auto' | 'manual'
@@ -50,6 +68,30 @@ def parse_date(value):
         except ValueError:
             continue
     return None
+
+
+def normalize_type(value):
+    """Normalisiert die Art auf ``kalibrierung|audit|wartung|info`` (sonst ``info``)."""
+    t = str(value or '').strip().lower()
+    return t if t in ALLOWED_TYPES else 'info'
+
+
+def _cell_to_date(value):
+    """Wandelt einen Excel-Zellenwert (``date``/``datetime``/String) in ``date``."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    return parse_date(value)
+
+
+def _looks_like_header(cells):
+    """True, wenn die erste Zelle wie eine Spaltenüberschrift aussieht."""
+    if not cells:
+        return False
+    return str(cells[0] or '').strip().lower() in HEADER_ALIASES
 
 
 def parse_termin_csv(text):
@@ -80,7 +122,7 @@ def parse_termin_csv(text):
             continue  # zu wenige Spalten (mind. typ;titel;referenz;start)
         while len(parts) < 6:
             parts.append('')
-        typ = parts[0].strip().lower()
+        typ = normalize_type(parts[0])
         titel = parts[1].strip()
         referenz = parts[2].strip() or None
         start = parse_date(parts[3].strip())
@@ -90,8 +132,6 @@ def parse_termin_csv(text):
             continue
         if start is None:
             continue  # Pflicht-Startdatum fehlt oder ist ungültig
-        if typ not in ALLOWED_TYPES:
-            typ = 'info'
         rows.append({
             'typ': typ,
             'titel': titel,
@@ -100,6 +140,60 @@ def parse_termin_csv(text):
             'ende': ende,
             'text': text,
         })
+    return rows
+
+
+def parse_termin_xlsx(file_path):
+    """Liest ``termine.xlsx`` (openpyxl) in Termin-Dicts.
+
+    Spalten positionell: Art, Titel, Referenz, Von, Bis, Hinweis. Die erste
+    Datenzeile wird als Kopfzeile erkannt und übersprungen. Datumszellen
+    werden als ``date`` übernommen.
+    """
+    try:
+        from openpyxl import load_workbook
+    except ImportError:
+        return []
+
+    try:
+        wb = load_workbook(file_path, data_only=True, read_only=True)
+    except Exception:
+        return []
+
+    rows = []
+    try:
+        ws = wb['Termine'] if 'Termine' in wb.sheetnames else wb.worksheets[0]
+        header_seen = False
+        for row in ws.iter_rows(values_only=True):
+            if row is None or all(c is None or str(c).strip() == '' for c in row):
+                continue
+            if not header_seen and _looks_like_header(row):
+                header_seen = True
+                continue
+            header_seen = True
+            parts = list(row[:6])
+            while len(parts) < 6:
+                parts.append('')
+            typ = normalize_type(parts[0])
+            titel = str(parts[1] or '').strip()
+            referenz = str(parts[2] or '').strip() or None
+            start = _cell_to_date(parts[3])
+            ende = _cell_to_date(parts[4])
+            text = str(parts[5] or '').strip() or None
+            if not titel:
+                continue
+            if start is None:
+                continue
+            rows.append({
+                'typ': typ,
+                'titel': titel,
+                'referenz': referenz,
+                'start': start,
+                'ende': ende,
+                'text': text,
+            })
+    finally:
+        wb.close()
     return rows
 
 
@@ -113,6 +207,14 @@ def read_csv_from_dir(mount_dir):
             return parse_termin_csv(fh.read())
     except OSError:
         return []
+
+
+def read_termin_from_dir(mount_dir):
+    """Liest Termine aus ``mount_dir`` — bevorzugt ``termine.xlsx``, sonst ``termine.csv``."""
+    xlsx = os.path.join(mount_dir, USB_XLSX_FILENAME)
+    if os.path.isfile(xlsx):
+        return parse_termin_xlsx(xlsx)
+    return read_csv_from_dir(mount_dir)
 
 
 # ── Einstellungs-Helfer (DB) ──────────────────────────────────────────
@@ -153,12 +255,12 @@ def _is_valid_dir(path):
 
 
 def _iter_mount_candidates():
-    """Mögliche Pfade, unter denen ein Stick (mit ``termine.csv``) liegen kann.
+    """Mögliche Pfade, unter denen ein Stick (mit ``termine.xlsx``/``termine.csv``) liegen kann.
 
     Unter ``/media`` und ``/run/media`` wird zusätzlich eine Ebene tiefer
     gesucht (Auto-Mount-Layout ``/media/<user>/<label>``). Unter ``/mnt``
     liegen Mount-Points direkt als Kinder (z. B. ``/mnt/lhtpi-usb``) — hier
-    wird nicht tiefer gesucht, damit ``termine.csv`` nicht fälschlich aus
+    wird nicht tiefer gesucht, damit die Termin-Datei nicht fälschlich aus
     Unterordnern wie ``slides/`` erkannt wird.
     """
     seen = {FIXED_MOUNT}
@@ -192,17 +294,20 @@ def _iter_mount_candidates():
                     seen.add(cand)
 
 
-def find_usb_csv_dir():
-    """Liefert den Ordner mit ``termine.csv`` eines Sticks oder ``None``."""
+def find_usb_termin_dir():
+    """Liefert den Ordner mit ``termine.xlsx`` oder ``termine.csv`` (oder ``None``)."""
     for cand in _iter_mount_candidates():
-        if _is_valid_dir(cand) and os.path.isfile(os.path.join(cand, USB_CSV_FILENAME)):
-            return cand
+        if not _is_valid_dir(cand):
+            continue
+        for fname in USB_TERMIN_FILENAMES:
+            if os.path.isfile(os.path.join(cand, fname)):
+                return cand
     return None
 
 
 def usb_termine(mount_dir=None):
     """Liefert die Termin-Dicts vom Stick (oder ``[]`` wenn keiner erkannt)."""
-    mount_dir = mount_dir or find_usb_csv_dir()
+    mount_dir = mount_dir or find_usb_termin_dir()
     if not mount_dir:
         return []
-    return read_csv_from_dir(mount_dir)
+    return read_termin_from_dir(mount_dir)

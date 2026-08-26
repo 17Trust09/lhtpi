@@ -5,7 +5,7 @@ from flask_login import login_user, logout_user, login_required, current_user
 
 from app import app
 from models import db, User, Termin
-from usb_source import (find_usb_csv_dir, usb_termine, parse_date,
+from usb_source import (find_usb_termin_dir, usb_termine, parse_date,
                         get_mode, get_manual_source, set_setting,
                         SETTING_MODE, SETTING_MANUAL_SOURCE, ALLOWED_TYPES)
 
@@ -67,7 +67,7 @@ def active_termine():
     """Bestimmt die aktive Quelle (auto/manual) und liefert alle Termine."""
     mode = get_mode()
     manual_source = get_manual_source()
-    usb_dir = find_usb_csv_dir()
+    usb_dir = find_usb_termin_dir()
     usb_present = usb_dir is not None
 
     if mode == 'manual':
