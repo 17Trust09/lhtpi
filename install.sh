@@ -303,7 +303,7 @@ xset -dpms >/dev/null 2>&1 || true
 xset s noblank >/dev/null 2>&1 || true
 
 # Mauszeiger sofort ausblenden (funktioniert auf X11 + Wayland)
-unclutter -idle 0 -root >/dev/null 2>&1 || true
+unclutter -idle 0 -root >/dev/null 2>&1 &
 mkdir -p /home/pi/.icons
 cd /tmp
 rm -rf Transparent_Cursor_Theme 2>/dev/null || true
