@@ -497,7 +497,7 @@ EOF
   <applications>
     <!-- Terminboard-Kiosk fest auf den zweiten Monitor (HDMI-A-2). Openbox
          ignoriert Chromiums --window-position, daher hier erzwingen. -->
-    <application name="Terminboard*" class="Chromium*">
+    <application name="Terminboard*">
       <monitor>2</monitor>
     </application>
   </applications>
