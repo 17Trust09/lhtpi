@@ -141,19 +141,22 @@ def parse_termin_csv(text):
 def parse_termin_xlsx(file_path):
     """Liest ``termine.xlsx`` (openpyxl) in Termin-Dicts.
 
-    Spalten positionell: Art, Titel, Referenz, Von, Bis, Hinweis. Die erste
-    Datenzeile wird als Kopfzeile erkannt und übersprungen. Datumszellen
-    werden als ``date`` übernommen.
+    Spalten positionell: Art, Prüfstand/Referenz, Referenz, Von, Bis, Info.
+    Die erste Datenzeile wird als Kopfzeile erkannt und übersprungen.
+    Datumszellen werden als ``date`` übernommen.
+
+    Liefert bei Lesefehlern ``None`` (damit der Aufrufer auf ``termine.csv``
+    zurückfallen kann), sonst eine Liste (auch leer).
     """
     try:
         from openpyxl import load_workbook
     except ImportError:
-        return []
+        return None
 
     try:
         wb = load_workbook(file_path, data_only=True, read_only=True)
     except Exception:
-        return []
+        return None
 
     rows = []
     try:
@@ -187,6 +190,8 @@ def parse_termin_xlsx(file_path):
                 'ende': ende,
                 'text': text,
             })
+    except Exception:
+        return None
     finally:
         wb.close()
     return rows
@@ -205,10 +210,16 @@ def read_csv_from_dir(mount_dir):
 
 
 def read_termin_from_dir(mount_dir):
-    """Liest Termine aus ``mount_dir`` — bevorzugt ``termine.xlsx``, sonst ``termine.csv``."""
+    """Liest Termine aus ``mount_dir`` — bevorzugt ``termine.xlsx``, sonst ``termine.csv``.
+
+    Ist die ``termine.xlsx`` vorhanden, aber nicht lesbar (kaputt oder
+    ``openpyxl`` fehlt), wird auf eine vorhandene ``termine.csv`` zurückgefallen.
+    """
     xlsx = os.path.join(mount_dir, USB_XLSX_FILENAME)
     if os.path.isfile(xlsx):
-        return parse_termin_xlsx(xlsx)
+        rows = parse_termin_xlsx(xlsx)
+        if rows is not None:
+            return rows
     return read_csv_from_dir(mount_dir)
 
 

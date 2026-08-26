@@ -225,6 +225,14 @@ def test_read_termin_from_dir_bevorzugt_xlsx(tmp_path):
     assert rows[0]['titel'] == 'Aus XLSX'
 
 
+def test_read_termin_from_dir_faellt_bei_kaputter_xlsx_auf_csv_zurueck(tmp_path):
+    (tmp_path / 'termine.xlsx').write_bytes(b'kaputte datei')
+    (tmp_path / 'termine.csv').write_text(_CSV + "info;Aus CSV;;01.09.2026;;\n", encoding='utf-8')
+    rows = usb_source.read_termin_from_dir(str(tmp_path))
+    assert len(rows) == 1
+    assert rows[0]['titel'] == 'Aus CSV'
+
+
 # ── Einstellungen / Source-Logik ─────────────────────────────────────
 
 def test_mode_default_auto():
