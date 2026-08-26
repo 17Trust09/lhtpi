@@ -7,14 +7,14 @@ Der Stick-Root enthält eine Datei ``termine.xlsx`` (bevorzugt) oder ``termine.c
 
 Excel-Vorlage (``USB/termine.xlsx``), Spalten::
 
-    Art | Titel | Referenz | Von | Bis | Hinweis
+    Art | Prüfstand/Referenz | Referenz | Von | Bis | Info
 
-* ``Art``      – Kalibrierung | Audit | Wartung | Info (sonst → info)
-* ``Titel``    – Pflicht (Zeilen ohne Titel werden ignoriert)
-* ``Referenz`` – optional (z. B. ``P3``)
-* ``Von``      – Startdatum ``TT.MM.JJJJ`` oder ``JJJJ-MM-TT`` (Pflicht)
-* ``Bis``      – optional, gleiche Datumsformate
-* ``Hinweis``  – optionaler Einzeiler
+* ``Art``                – Kalibrierung | Audit | Wartung | Info (sonst → info)
+* ``Prüfstand/Referenz`` – Pflicht (Zeilen ohne Eintrag werden ignoriert)
+* ``Referenz``           – optional (z. B. ``P3``)
+* ``Von``                – Startdatum ``TT.MM.JJJJ`` oder ``JJJJ-MM-TT`` (Pflicht)
+* ``Bis``                – optional, gleiche Datumsformate
+* ``Info``               – optionaler Einzeiler
 
 CSV-Variante (``termine.csv``), Semikolon-getrennt, Header-Zeile::
 
@@ -38,15 +38,10 @@ USB_XLSX_FILENAME = 'termine.xlsx'
 USB_TERMIN_FILENAMES = (USB_XLSX_FILENAME, USB_CSV_FILENAME)  # xlsx hat Vorrang
 FIXED_MOUNT = '/mnt/lhtpi-usb'  # gemeinsamer Mount-Point mit LHTPi (ein Stick für beide Apps)
 
-# Verständliche Spaltenüberschriften → interner Schlüssel (für die Kopfzeilen-Erkennung)
-HEADER_ALIASES = {
-    'art': 'typ', 'typ': 'typ', 'type': 'typ',
-    'titel': 'titel', 'title': 'titel',
-    'referenz': 'referenz', 'reference': 'referenz', 'ref': 'referenz',
-    'von': 'start', 'start': 'start',
-    'bis': 'ende', 'ende': 'ende', 'end': 'ende',
-    'hinweis': 'text', 'text': 'text', 'bemerkung': 'text', 'notiz': 'text',
-}
+# Erste Spalte einer Kopfzeile („Art“) — erkennt die Kopfzeile zuverlässig.
+# Wichtig: bewusst NICHT über alle Spalten geprüft, weil „Info“ sowohl
+# Spaltenname (Spalte F) als auch gültiger Art-Wert ist.
+HEADER_TYPE_KEYS = ('art', 'typ', 'type')
 
 # Einstellungs-Keys
 SETTING_MODE = 'player_mode'            # 'auto' | 'manual'
@@ -88,10 +83,10 @@ def _cell_to_date(value):
 
 
 def _looks_like_header(cells):
-    """True, wenn die erste Zelle wie eine Spaltenüberschrift aussieht."""
+    """True, wenn die erste Zelle eine Kopfzeilen-Spalte (Art) ist."""
     if not cells:
         return False
-    return str(cells[0] or '').strip().lower() in HEADER_ALIASES
+    return str(cells[0] or '').strip().lower() in HEADER_TYPE_KEYS
 
 
 def parse_termin_csv(text):

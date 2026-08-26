@@ -132,7 +132,7 @@ def test_csv_quoted_semicolon():
 
 # ── XLSX-Parsing ─────────────────────────────────────────────────────
 
-def _write_xlsx(path, rows, header=("Art", "Titel", "Referenz", "Von", "Bis", "Hinweis")):
+def _write_xlsx(path, rows, header=("Art", "Prüfstand/Referenz", "Referenz", "Von", "Bis", "Info")):
     from openpyxl import Workbook
     wb = Workbook()
     ws = wb.active
@@ -200,6 +200,19 @@ def test_xlsx_unbekannte_art_faellt_auf_info(tmp_path):
         ["Sonstiges", "Titel", "", date(2026, 9, 1), "", ""],
     ])
     assert usb_source.parse_termin_xlsx(str(xlsx))[0]['typ'] == 'info'
+
+
+def test_xlsx_info_als_art_wird_nicht_als_header_uebersprungen(tmp_path):
+    # "Info" ist sowohl Spaltenname (F) als auch gültiger Art-Wert → eine
+    # Datenzeile mit Art="Info" darf NICHT als Kopfzeile verworfen werden.
+    xlsx = tmp_path / 'termine.xlsx'
+    _write_xlsx(xlsx, [
+        ["Info", "Wichtige Meldung", "", date(2026, 9, 1), "", ""],
+    ])
+    rows = usb_source.parse_termin_xlsx(str(xlsx))
+    assert len(rows) == 1
+    assert rows[0]['typ'] == 'info'
+    assert rows[0]['titel'] == 'Wichtige Meldung'
 
 
 def test_read_termin_from_dir_bevorzugt_xlsx(tmp_path):

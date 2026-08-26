@@ -19,7 +19,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUTPUT = os.path.join(REPO_ROOT, "USB", "termine.xlsx")
 
-HEADERS = ["Art", "Titel", "Referenz", "Von", "Bis", "Hinweis"]
+HEADERS = ["Art", "Prüfstand/Referenz", "Referenz", "Von", "Bis", "Info"]
 
 # Werte für das Dropdown in Spalte A (ohne Umlaute, damit sie 1:1 in die
 # CSV-Semantik kalibrierung/audit/wartung/info gemappt werden können).
@@ -48,12 +48,12 @@ def _build_legend():
         ["5. Fertig – den Stick einfach wieder in den Pi stecken."],
         [""],
         ["Spalten:"],
-        ["A  Art        – Kalibrierung / Audit / Wartung / Info (Dropdown)"],
-        ["B  Titel      – Kurzbezeichnung (Pflicht)"],
-        ["C  Referenz   – z. B. Prüfstandsnummer P3 (optional)"],
-        ["D  Von        – Startdatum TT.MM.JJJJ (Pflicht)"],
-        ["E  Bis        – Enddatum TT.MM.JJJJ (optional)"],
-        ["F  Hinweis    – freier Einzeiler (optional)"],
+        ["A  Art               – Kalibrierung / Audit / Wartung / Info (Dropdown)"],
+        ["B  Prüfstand/Referenz – Bezeichnung des Prüfstands (Pflicht)"],
+        ["C  Referenz          – z. B. Prüfstandsnummer P3 (optional)"],
+        ["D  Von               – Startdatum TT.MM.JJJJ (Pflicht)"],
+        ["E  Bis               – Enddatum TT.MM.JJJJ (optional)"],
+        ["F  Info              – freier Einzeiler (optional)"],
         [""],
         ["Hinweis: Die ersten Beispielzeilen kannst du einfach überschreiben oder löschen."],
         ["Abgelaufene Termine werden automatisch von der Anzeige entfernt."],

@@ -18,9 +18,10 @@ Ein **einziger** USB-Stick versorgt **beide** Anzeigen: die Präsentation
 Für Nicht-Techniker gedacht: eine **Excel-Vorlage** mit verständlichen
 deutschen Spalten, einem **Dropdown** für die Art und **Datumsfeldern**.
 
-- Spalten: `Art | Titel | Referenz | Von | Bis | Hinweis`
+- Spalten: `Art | Prüfstand/Referenz | Referenz | Von | Bis | Info`
 - `Art` über Dropdown: `Kalibrierung`, `Audit`, `Wartung`, `Info`
-- `Von` ist Pflicht; `Bis`, `Referenz` und `Hinweis` dürfen leer bleiben.
+- `Prüfstand/Referenz` und `Von` sind Pflicht; `Referenz`, `Bis` und `Info`
+  dürfen leer bleiben.
 - Datum `TT.MM.JJJJ`.
 - Die Datei enthält ein zweites Blatt **„Anleitung“** und Beispielzeilen,
   die man einfach überschreiben oder löschen kann.
