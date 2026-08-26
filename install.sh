@@ -271,8 +271,8 @@ EOF
 set -u
 
 # Feste Monitor-Zuordnung: HDMI-A-1 = primär (LHTPi), HDMI-A-2 rechts daneben (Terminboard)
-xrandr --output HDMI-A-1 --primary --auto >/dev/null 2>&1 || true
-xrandr --output HDMI-A-2 --auto --right-of HDMI-A-1 >/dev/null 2>&1 || true
+xrandr --output HDMI-A-1 --primary --auto --pos 0x0 \
+       --output HDMI-A-2 --auto --right-of HDMI-A-1 >/dev/null 2>&1 || true
 
 LOG="/home/pi/lhtpi-kiosk.log"
 APP_URL="http://localhost:8000/present/kiosk"
@@ -740,16 +740,16 @@ EOF
 set -u
 
 # Feste Monitor-Zuordnung: HDMI-A-1 = primär (LHTPi), HDMI-A-2 rechts daneben (Terminboard)
-xrandr --output HDMI-A-1 --primary --auto >/dev/null 2>&1 || true
-xrandr --output HDMI-A-2 --auto --right-of HDMI-A-1 >/dev/null 2>&1 || true
+xrandr --output HDMI-A-1 --primary --auto --pos 0x0 \
+       --output HDMI-A-2 --auto --right-of HDMI-A-1 >/dev/null 2>&1 || true
 
 LOG="/home/pi/terminboard-kiosk.log"
 APP_URL="http://localhost:8001/board/kiosk"
 READY_URL="http://localhost:8001/login"
 # Position + Größe des zweiten Monitors dynamisch aus der xrandr-Geometrie ermitteln.
-SCREEN1_W=$(xrandr --current 2>/dev/null | awk '/HDMI-A-1 connected/{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+/){split($i,a,"[x+]"); print a[1]; exit}}')
-SCREEN2_W=$(xrandr --current 2>/dev/null | awk '/HDMI-A-2 connected/{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+/){split($i,a,"[x+]"); print a[1]; exit}}')
-SCREEN2_H=$(xrandr --current 2>/dev/null | awk '/HDMI-A-2 connected/{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+/){split($i,a,"[x+]"); print a[2]; exit}}')
+SCREEN1_W=$(xrandr --current 2>/dev/null | awk '$1=="HDMI-A-1" && $2=="connected"{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+/){split($i,a,"[x+]"); print a[1]; exit}}')
+SCREEN2_W=$(xrandr --current 2>/dev/null | awk '$1=="HDMI-A-2" && $2=="connected"{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+/){split($i,a,"[x+]"); print a[1]; exit}}')
+SCREEN2_H=$(xrandr --current 2>/dev/null | awk '$1=="HDMI-A-2" && $2=="connected"{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+/){split($i,a,"[x+]"); print a[2]; exit}}')
 SCREEN2_X="${SCREEN1_W:-1920}"
 SCREEN2_Y="0"
 SCREEN2_W="${SCREEN2_W:-1920}"
