@@ -23,7 +23,7 @@ class Termin(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     typ = db.Column(db.String(20), nullable=False, default='info')
     titel = db.Column(db.String(200), nullable=False)
-    referenz = db.Column(db.String(100))
+    referenz = db.Column(db.String(100), nullable=False)
     start = db.Column(db.Date, nullable=False)
     ende = db.Column(db.Date)
     text = db.Column(db.String(500))

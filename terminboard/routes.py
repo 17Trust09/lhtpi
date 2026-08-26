@@ -147,7 +147,7 @@ def _parse_form():
     if typ not in ALLOWED_TYPES:
         typ = 'info'
     titel = (request.form.get('titel') or '').strip()
-    referenz = (request.form.get('referenz') or '').strip() or None
+    referenz = (request.form.get('referenz') or '').strip()
     start = parse_date(request.form.get('start'))
     ende = parse_date(request.form.get('ende'))
     text = (request.form.get('text') or '').strip() or None
@@ -158,8 +158,10 @@ def _parse_form():
 @login_required
 def create_termin():
     typ, titel, referenz, start, ende, text = _parse_form()
+    if not referenz:
+        return ajax_or_redirect('', 'Bitte einen Prüfstand eingeben')
     if not titel:
-        return ajax_or_redirect('', 'Bitte einen Titel eingeben')
+        return ajax_or_redirect('', 'Bitte eine Info eingeben')
     if start is None:
         return ajax_or_redirect('', 'Bitte ein gültiges Startdatum angeben (TT.MM.JJJJ oder JJJJ-MM-TT)')
     t = Termin(typ=typ, titel=titel, referenz=referenz,
@@ -174,8 +176,10 @@ def create_termin():
 def update_termin(id):
     t = Termin.query.get_or_404(id)
     typ, titel, referenz, start, ende, text = _parse_form()
+    if not referenz:
+        return ajax_or_redirect('', 'Bitte einen Prüfstand eingeben')
     if not titel:
-        return ajax_or_redirect('', 'Bitte einen Titel eingeben')
+        return ajax_or_redirect('', 'Bitte eine Info eingeben')
     if start is None:
         return ajax_or_redirect('', 'Bitte ein gültiges Startdatum angeben (TT.MM.JJJJ oder JJJJ-MM-TT)')
     t.typ = typ

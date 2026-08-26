@@ -7,14 +7,13 @@ Der Stick-Root enthält eine Datei ``termine.xlsx`` (bevorzugt) oder ``termine.c
 
 Excel-Vorlage (``USB/termine.xlsx``), Spalten::
 
-    Art | Prüfstand/Referenz | Referenz | Von | Bis | Info
+    Art | Prüfstand | Von | Bis | Info
 
-* ``Art``                – Kalibrierung | Audit | Wartung | Info (sonst → info)
-* ``Prüfstand/Referenz`` – Pflicht (Zeilen ohne Eintrag werden ignoriert)
-* ``Referenz``           – optional (z. B. ``P3``)
-* ``Von``                – Startdatum ``TT.MM.JJJJ`` oder ``JJJJ-MM-TT`` (Pflicht)
-* ``Bis``                – optional, gleiche Datumsformate
-* ``Info``               – optionaler Einzeiler
+* ``Art``      – Kalibrierung | Audit | Wartung | Info (sonst → info)
+* ``Prüfstand``– Pflicht (z. B. ``P3``)
+* ``Von``      – Startdatum ``TT.MM.JJJJ`` oder ``JJJJ-MM-TT`` (Pflicht)
+* ``Bis``      – optional, gleiche Datumsformate
+* ``Info``     – Beschreibung (Pflicht)
 
 CSV-Variante (``termine.csv``), Semikolon-getrennt, Header-Zeile::
 
@@ -141,7 +140,7 @@ def parse_termin_csv(text):
 def parse_termin_xlsx(file_path):
     """Liest ``termine.xlsx`` (openpyxl) in Termin-Dicts.
 
-    Spalten positionell: Art, Prüfstand/Referenz, Referenz, Von, Bis, Info.
+    Spalten positionell: Art, Prüfstand, Von, Bis, Info.
     Die erste Datenzeile wird als Kopfzeile erkannt und übersprungen.
     Datumszellen werden als ``date`` übernommen.
 
@@ -169,15 +168,16 @@ def parse_termin_xlsx(file_path):
                 header_seen = True
                 continue
             header_seen = True
-            parts = list(row[:6])
-            while len(parts) < 6:
+            parts = list(row[:5])
+            while len(parts) < 5:
                 parts.append('')
             typ = normalize_type(parts[0])
-            titel = str(parts[1] or '').strip()
-            referenz = str(parts[2] or '').strip() or None
-            start = _cell_to_date(parts[3])
-            ende = _cell_to_date(parts[4])
-            text = str(parts[5] or '').strip() or None
+            referenz = str(parts[1] or '').strip()
+            start = _cell_to_date(parts[2])
+            ende = _cell_to_date(parts[3])
+            titel = str(parts[4] or '').strip()
+            if not referenz:
+                continue
             if not titel:
                 continue
             if start is None:
@@ -188,7 +188,7 @@ def parse_termin_xlsx(file_path):
                 'referenz': referenz,
                 'start': start,
                 'ende': ende,
-                'text': text,
+                'text': None,
             })
     except Exception:
         return None

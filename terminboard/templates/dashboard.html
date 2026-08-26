@@ -43,13 +43,13 @@
               <option value="info">Info</option>
             </select>
           </label>
-          <label>Titel *
-            <input type="text" name="titel" id="f-titel" required>
+          <label>Prüfstand *
+            <input type="text" name="referenz" id="f-referenz" placeholder="z. B. P3" required>
           </label>
         </div>
         <div class="row">
-          <label>Prüfstand / Referenz
-            <input type="text" name="referenz" id="f-referenz" placeholder="z. B. P3">
+          <label>Info *
+            <input type="text" name="titel" id="f-titel" required>
           </label>
         </div>
         <div class="row">
@@ -106,7 +106,7 @@
   <section class="card">
     <h2>Kalibrierungen</h2>
     <table class="list-table">
-      <thead><tr><th>Prüfstand</th><th>Titel</th><th>Zeitraum</th><th></th></tr></thead>
+      <thead><tr><th>Prüfstand</th><th>Info</th><th>Zeitraum</th><th></th></tr></thead>
       <tbody id="cal-list"></tbody>
     </table>
     <p class="empty-note" id="cal-empty" style="display:none">Keine Kalibrierungen vorhanden.</p>
@@ -115,7 +115,7 @@
   <section class="card">
     <h2>News &amp; Audits</h2>
     <table class="list-table">
-      <thead><tr><th>Typ</th><th>Titel</th><th>Zeitraum</th><th></th></tr></thead>
+      <thead><tr><th>Typ</th><th>Info</th><th>Zeitraum</th><th></th></tr></thead>
       <tbody id="news-list"></tbody>
     </table>
     <p class="empty-note" id="news-empty" style="display:none">Keine Einträge vorhanden.</p>

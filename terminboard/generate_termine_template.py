@@ -3,6 +3,8 @@
 Die Vorlage ist für Nicht-Techniker gedacht: verständliche deutsche
 Spaltenüberschriften, Dropdown für die Art, Datumsfelder und Beispielzeilen.
 
+Spalten: ``Art | Prüfstand | Von | Bis | Info``
+
 Ausführen (aus dem Repo-Root)::
 
     python terminboard/generate_termine_template.py
@@ -19,7 +21,7 @@ from openpyxl.worksheet.datavalidation import DataValidation
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUTPUT = os.path.join(REPO_ROOT, "USB", "termine.xlsx")
 
-HEADERS = ["Art", "Prüfstand/Referenz", "Referenz", "Von", "Bis", "Info"]
+HEADERS = ["Art", "Prüfstand", "Von", "Bis", "Info"]
 
 # Werte für das Dropdown in Spalte A (ohne Umlaute, damit sie 1:1 in die
 # CSV-Semantik kalibrierung/audit/wartung/info gemappt werden können).
@@ -27,11 +29,11 @@ ART_TYPES = ["Kalibrierung", "Audit", "Wartung", "Info"]
 
 # Beispielzeilen (realistisch, dürfen überschrieben/gelöscht werden).
 EXAMPLE_ROWS = [
-    ["Kalibrierung", "Druckprüfstand P3", "P3", date(2026, 8, 25), date(2026, 8, 30), "Jährliche Kalibrierung"],
-    ["Kalibrierung", "Leckprüfstand P7", "P7", date(2026, 9, 14), date(2026, 9, 16), ""],
-    ["Audit", "ISO-Audit Qualitätssicherung", "", date(2026, 9, 14), "", "Audit der QS"],
-    ["Wartung", "Druckluft-Wartung", "", date(2026, 9, 1), date(2026, 9, 2), ""],
-    ["Info", "Neue Schichtregelung", "", date(2026, 9, 1), "", "ab dann gültig"],
+    ["Kalibrierung", "P3", date(2026, 8, 25), date(2026, 8, 30), "Druckprüfstand – jährliche Kalibrierung"],
+    ["Kalibrierung", "P7", date(2026, 9, 14), date(2026, 9, 16), "Leckprüfstand"],
+    ["Audit", "QS", date(2026, 9, 14), "", "ISO-Audit Qualitätssicherung"],
+    ["Wartung", "Druckluft", date(2026, 9, 1), date(2026, 9, 2), "Wartung Druckluftanlage"],
+    ["Info", "Alle", date(2026, 9, 1), "", "Neue Schichtregelung"],
 ]
 
 
@@ -42,18 +44,17 @@ def _build_legend():
         [""],
         ["So trägst du einen Termin ein:"],
         ["1. Gehe auf das Blatt „Termine“."],
-        ["2. Trage pro Termin eine Zeile ein (Spalten A–F)."],
+        ["2. Trage pro Termin eine Zeile ein (Spalten A–E)."],
         ["3. Wähle die „Art“ über das Dropdown (Spalte A)."],
-        ["4. „Von“ ist Pflicht – „Bis“ und „Hinweis“ dürfen leer bleiben."],
+        ["4. „Prüfstand“, „Von“ und „Info“ sind Pflicht – „Bis“ darf leer bleiben."],
         ["5. Fertig – den Stick einfach wieder in den Pi stecken."],
         [""],
         ["Spalten:"],
-        ["A  Art               – Kalibrierung / Audit / Wartung / Info (Dropdown)"],
-        ["B  Prüfstand/Referenz – Bezeichnung des Prüfstands (Pflicht)"],
-        ["C  Referenz          – z. B. Prüfstandsnummer P3 (optional)"],
-        ["D  Von               – Startdatum TT.MM.JJJJ (Pflicht)"],
-        ["E  Bis               – Enddatum TT.MM.JJJJ (optional)"],
-        ["F  Info              – freier Einzeiler (optional)"],
+        ["A  Art       – Kalibrierung / Audit / Wartung / Info (Dropdown)"],
+        ["B  Prüfstand – z. B. P3 (Pflicht)"],
+        ["C  Von       – Startdatum TT.MM.JJJJ (Pflicht)"],
+        ["D  Bis       – Enddatum TT.MM.JJJJ (optional)"],
+        ["E  Info      – Beschreibung / freier Einzeiler (Pflicht)"],
         [""],
         ["Hinweis: Die ersten Beispielzeilen kannst du einfach überschreiben oder löschen."],
         ["Abgelaufene Termine werden automatisch von der Anzeige entfernt."],
@@ -83,20 +84,20 @@ def main():
         for c, value in enumerate(row, start=1):
             cell = ws.cell(row=r, column=c, value=value)
             cell.font = body_font
-            if c in (4, 5) and isinstance(value, date):
+            if c in (3, 4) and isinstance(value, date):
                 cell.number_format = "DD.MM.YYYY"
 
-    # Datumsformat für die Datumsspalten D/E auch für leere Zellen vorbereiten
+    # Datumsformat für die Datumsspalten C/D auch für leere Zellen vorbereiten
     for r in range(2, 200):
+        ws.cell(row=r, column=3).number_format = "DD.MM.YYYY"
         ws.cell(row=r, column=4).number_format = "DD.MM.YYYY"
-        ws.cell(row=r, column=5).number_format = "DD.MM.YYYY"
+        ws.cell(row=r, column=3).font = body_font
         ws.cell(row=r, column=4).font = body_font
-        ws.cell(row=r, column=5).font = body_font
-        for c in (1, 2, 3, 6):
+        for c in (1, 2, 5):
             ws.cell(row=r, column=c).font = body_font
 
     # Spaltenbreiten
-    widths = {"A": 16, "B": 34, "C": 14, "D": 14, "E": 14, "F": 30}
+    widths = {"A": 16, "B": 16, "C": 14, "D": 14, "E": 40}
     for col, w in widths.items():
         ws.column_dimensions[col].width = w
 

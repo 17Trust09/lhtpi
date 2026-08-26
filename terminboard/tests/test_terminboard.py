@@ -132,7 +132,7 @@ def test_csv_quoted_semicolon():
 
 # ── XLSX-Parsing ─────────────────────────────────────────────────────
 
-def _write_xlsx(path, rows, header=("Art", "Prüfstand/Referenz", "Referenz", "Von", "Bis", "Info")):
+def _write_xlsx(path, rows, header=("Art", "Prüfstand", "Von", "Bis", "Info")):
     from openpyxl import Workbook
     wb = Workbook()
     ws = wb.active
@@ -146,38 +146,37 @@ def _write_xlsx(path, rows, header=("Art", "Prüfstand/Referenz", "Referenz", "V
 def test_xlsx_basic(tmp_path):
     xlsx = tmp_path / 'termine.xlsx'
     _write_xlsx(xlsx, [
-        ["Kalibrierung", "Druckprüfstand P3", "P3", date(2026, 8, 25), date(2026, 8, 30), "Jährlich"],
+        ["Kalibrierung", "P3", date(2026, 8, 25), date(2026, 8, 30), "Jährliche Kalibrierung"],
     ])
     rows = usb_source.parse_termin_xlsx(str(xlsx))
     assert len(rows) == 1
     r = rows[0]
     assert r['typ'] == 'kalibrierung'
-    assert r['titel'] == 'Druckprüfstand P3'
     assert r['referenz'] == 'P3'
     assert r['start'] == date(2026, 8, 25)
     assert r['ende'] == date(2026, 8, 30)
-    assert r['text'] == 'Jährlich'
+    assert r['titel'] == 'Jährliche Kalibrierung'
+    assert r['text'] is None
 
 
-def test_xlsx_deutsche_art_und_optionale_felder(tmp_path):
+def test_xlsx_deutsche_art(tmp_path):
     xlsx = tmp_path / 'termine.xlsx'
     _write_xlsx(xlsx, [
-        ["Audit", "ISO-Audit QS", "", date(2026, 9, 14), "", ""],
-        ["Wartung", "Druckluft", "", date(2026, 9, 1), date(2026, 9, 2), ""],
-        ["Info", "Meldung", "", date(2026, 9, 1), "", ""],
+        ["Audit", "QS", date(2026, 9, 14), "", "ISO-Audit"],
+        ["Wartung", "Druckluft", date(2026, 9, 1), date(2026, 9, 2), "Wartung"],
+        ["Info", "Alle", date(2026, 9, 1), "", "Meldung"],
     ])
     rows = usb_source.parse_termin_xlsx(str(xlsx))
     assert [r['typ'] for r in rows] == ['audit', 'wartung', 'info']
     assert rows[0]['ende'] is None
-    assert rows[0]['referenz'] is None
 
 
 def test_xlsx_skips_header_and_invalid(tmp_path):
     xlsx = tmp_path / 'termine.xlsx'
     _write_xlsx(xlsx, [
-        ["Kalibrierung", "Gültig", "P1", date(2026, 9, 1), "", ""],
-        ["Info", "", "", date(2026, 9, 1), "", ""],          # kein Titel
-        ["Info", "Ohne Start", "", "", "", ""],               # kein Startdatum
+        ["Kalibrierung", "P1", date(2026, 9, 1), "", "Gültig"],
+        ["Info", "", date(2026, 9, 1), "", ""],          # kein Prüfstand
+        ["Info", "P2", "", "", ""],                       # kein Startdatum
     ])
     rows = usb_source.parse_termin_xlsx(str(xlsx))
     assert len(rows) == 1
@@ -187,7 +186,7 @@ def test_xlsx_skips_header_and_invalid(tmp_path):
 def test_xlsx_datum_als_string(tmp_path):
     xlsx = tmp_path / 'termine.xlsx'
     _write_xlsx(xlsx, [
-        ["Kalibrierung", "String-Datum", "P2", "25.08.2026", "30.08.2026", ""],
+        ["Kalibrierung", "P2", "25.08.2026", "30.08.2026", "String-Datum"],
     ])
     rows = usb_source.parse_termin_xlsx(str(xlsx))
     assert rows[0]['start'] == date(2026, 8, 25)
@@ -197,17 +196,17 @@ def test_xlsx_datum_als_string(tmp_path):
 def test_xlsx_unbekannte_art_faellt_auf_info(tmp_path):
     xlsx = tmp_path / 'termine.xlsx'
     _write_xlsx(xlsx, [
-        ["Sonstiges", "Titel", "", date(2026, 9, 1), "", ""],
+        ["Sonstiges", "P1", date(2026, 9, 1), "", "Titel"],
     ])
     assert usb_source.parse_termin_xlsx(str(xlsx))[0]['typ'] == 'info'
 
 
 def test_xlsx_info_als_art_wird_nicht_als_header_uebersprungen(tmp_path):
-    # "Info" ist sowohl Spaltenname (F) als auch gültiger Art-Wert → eine
+    # "Info" ist sowohl Spaltenname (E) als auch gültiger Art-Wert → eine
     # Datenzeile mit Art="Info" darf NICHT als Kopfzeile verworfen werden.
     xlsx = tmp_path / 'termine.xlsx'
     _write_xlsx(xlsx, [
-        ["Info", "Wichtige Meldung", "", date(2026, 9, 1), "", ""],
+        ["Info", "Alle", date(2026, 9, 1), "", "Wichtige Meldung"],
     ])
     rows = usb_source.parse_termin_xlsx(str(xlsx))
     assert len(rows) == 1
@@ -218,7 +217,7 @@ def test_xlsx_info_als_art_wird_nicht_als_header_uebersprungen(tmp_path):
 def test_read_termin_from_dir_bevorzugt_xlsx(tmp_path):
     (tmp_path / 'termine.csv').write_text(_CSV + "info;Aus CSV;;01.09.2026;;\n", encoding='utf-8')
     _write_xlsx(tmp_path / 'termine.xlsx', [
-        ["Info", "Aus XLSX", "", date(2026, 9, 1), "", ""],
+        ["Info", "Alle", date(2026, 9, 1), "", "Aus XLSX"],
     ])
     rows = usb_source.read_termin_from_dir(str(tmp_path))
     assert len(rows) == 1
@@ -252,7 +251,7 @@ def test_active_termine_splits_cal_and_news():
     with app.app_context():
         db.session.add(Termin(typ='kalibrierung', titel='Kal P3', referenz='P3',
                               start=date(2026, 9, 1), ende=date(2026, 9, 3)))
-        db.session.add(Termin(typ='audit', titel='Audit QS', start=date(2026, 9, 14)))
+        db.session.add(Termin(typ='audit', titel='Audit QS', referenz='QS', start=date(2026, 9, 14)))
         db.session.commit()
     with app.test_client() as c:
         d = c.get('/board/api/status').get_json()
@@ -267,7 +266,7 @@ def test_active_termine_splits_cal_and_news():
 def test_active_termine_usb_priority(monkeypatch, tmp_path):
     _clean_termine()
     with app.app_context():
-        db.session.add(Termin(typ='info', titel='Intern', start=date(2026, 9, 1)))
+        db.session.add(Termin(typ='info', titel='Intern', referenz='Alle', start=date(2026, 9, 1)))
         db.session.commit()
     csv = tmp_path / 'termine.csv'
     csv.write_text(_CSV + "kalibrierung;Von USB;P9;10.10.2026;12.10.2026;\n", encoding='utf-8')
@@ -285,7 +284,7 @@ def test_active_termine_usb_priority(monkeypatch, tmp_path):
 def test_manual_web_ignores_usb(monkeypatch, tmp_path):
     _clean_termine()
     with app.app_context():
-        db.session.add(Termin(typ='info', titel='Intern', start=date(2026, 9, 1)))
+        db.session.add(Termin(typ='info', titel='Intern', referenz='Alle', start=date(2026, 9, 1)))
         usb_source.set_setting(usb_source.SETTING_MODE, 'manual')
         usb_source.set_setting(usb_source.SETTING_MANUAL_SOURCE, 'web')
         db.session.commit()
@@ -305,7 +304,7 @@ def test_manual_web_ignores_usb(monkeypatch, tmp_path):
 def test_manual_usb_without_stick_returns_empty(monkeypatch):
     _clean_termine()
     with app.app_context():
-        db.session.add(Termin(typ='info', titel='Intern', start=date(2026, 9, 1)))
+        db.session.add(Termin(typ='info', titel='Intern', referenz='Alle', start=date(2026, 9, 1)))
         usb_source.set_setting(usb_source.SETTING_MODE, 'manual')
         usb_source.set_setting(usb_source.SETTING_MANUAL_SOURCE, 'usb')
         db.session.commit()
