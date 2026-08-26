@@ -2,15 +2,19 @@
 
 Anzeigetafel (Digital Signage) für Kalibrierungen und News/Audits — als
 eigenständige Flask-App, die **parallel zu LHTPi** auf demselben Raspberry Pi
-läuft und auf dem **zweiten HDMI-Ausgang** angezeigt wird.
+läuft und auf dem **zweiten HDMI-Ausgang (HDMI-A-2)** angezeigt wird.
 
 ## Architektur
 
 - Flask + Flask-SQLAlchemy + Flask-Login, SQLite (`terminboard.db`).
 - Port **8001** (LHTPi bleibt auf 8000).
-- Eigener Chromium-Kiosk auf HDMI-1 (`--window-position=1920,0`).
-- USB-Stick mit `termine.csv` als alternative Datenquelle (wie LHTPi: USB hat
-  in `auto`-Modus Vorrang, sonst interne DB, manueller Override im Dashboard).
+- Eigener Chromium-Kiosk auf **HDMI-A-2** — feste Zuordnung via `xrandr`
+  (`HDMI-A-1` primär, `HDMI-A-2` rechts) plus Openbox-Regel
+  (`<application name="Terminboard*"><monitor>2</monitor>`), auflösungs- und
+  positionsunabhängig.
+- USB-Stick mit **`termine.xlsx`** als Datenquelle (Excel-Vorlage, Fallback
+  `termine.csv`). In `auto`-Modus hat USB Vorrang, sonst interne DB, manueller
+  Override im Dashboard.
 
 ## Schnellstart (lokal)
 
@@ -35,51 +39,65 @@ Login: `admin` / `admin`.
 | `/board/kiosk` | öffentlich | Kiosk-Anzeige |
 | `/board/api/status` | öffentlich | JSON-Status für den Kiosk |
 
-## USB-Stick (`termine.csv`)
+## Datenmodell (`models.py`)
 
-Semikolon-getrennt, UTF-8, mit Header-Zeile. Datum als `TT.MM.JJJJ` oder
-`JJJJ-MM-TT`.
+| Feld | Typ | Hinweis |
+|------|-----|---------|
+| `typ` | String | `kalibrierung`/`audit`/`info`/`wartung` (sonst `info`) |
+| `titel` | String | **Pflicht**, UI-Label „Info" |
+| `referenz` | String | **Pflicht**, UI-Label „Prüfstand" (z. B. `P3`) |
+| `start` | Date | **Pflicht**, UI-Label „Von" |
+| `ende` | Date | optional, UI-Label „Bis" |
+| `text` | String | optional, UI-Label „Notiz" (nur Web-Formular) |
 
+## USB-Stick (`termine.xlsx`)
+
+Bevorzugte Quelle ist die **Excel-Vorlage** mit 5 Spalten, Dropdown für die
+Art, Datumsfeldern und einem Anleitung-Blatt:
+
+```text
+Art | Prüfstand | Von | Bis | Info
 ```
-typ;titel;referenz;start;ende;text
-kalibrierung;Druckprüfstand P3;P3;25.08.2026;30.08.2026;Jährlich
-audit;ISO-Audit QS;;14.09.2026;;
-info;Neue Schichtregelung;;01.09.2026;;
-```
 
-`typ` ∈ `kalibrierung | audit | info | wartung` (sonst `info`). Zeilen ohne
-Titel sowie Leer-/Kommentarzeilen (`#`) werden ignoriert.
+| Spalte | Bedeutung | Pflicht |
+|---|---|---|
+| Art | Kalibrierung/Audit/Wartung/Info | ✓ Dropdown |
+| Prüfstand | z. B. `P3` | ✓ |
+| Von | Startdatum `TT.MM.JJJJ` | ✓ |
+| Bis | Enddatum | – |
+| Info | Beschreibung | ✓ |
+
+**Fallback `termine.csv`** (Semikolon-getrennt, UTF-8, Header
+`typ;titel;referenz;start;ende;text`, Datum `TT.MM.JJJJ` ODER `JJJJ-MM-TT`).
+Liegt eine gültige `.xlsx` vor, hat sie Vorrang; ist sie kaputt/nicht lesbar,
+fällt die App automatisch auf die CSV zurück.
+
+Vorlage neu erzeugen (lokal):
+
+```bash
+cd terminboard
+./venv/bin/python generate_termine_template.py
+```
 
 ## Installation auf dem Pi
 
 Der kombinierte Installer im Repo-Root installiert LHTPi und/oder Terminboard
-in einem Durchgang und fragt am Anfang nach der gewünschten Auswahl.
+in einem Durchgang (Menü `1) LHTPi · 2) Terminboard · 3) Beides`):
 
 ```bash
 cd /home/pi/lhtpi
-sudo bash install.sh
+sudo bash install.sh 3
 ```
 
-Menü: `1) Nur LHTPi` · `2) Nur Terminboard` · `3) Beides`. Oder
-nicht-interaktiv: `sudo bash install.sh 3` (bzw. `1`/`2`), optional
-`--no-reboot` für manuellen Neustart.
-
-Der Installer erledigt für die gewählten Komponenten: Systempakete, venv +
-Abhängigkeiten, systemd-Services (LHTPi Port 8000, Terminboard Port 8001),
-beide Chromium-Kiosks (HDMI-0 + HDMI-1), USB-Auto-Mount, Firewall — und
-startet am Ende **einmal** neu.
-
-> ⚠️ **Dual-Screen-Hinweis:** Die Positionierung des zweiten Chromium-Fensters
-> auf HDMI-1 (`SCREEN2_X` in `/home/pi/start_terminboard_kiosk.sh`) muss einmal
-> auf echter Hardware verifiziert werden — das ist der einzige hardwareabhängige
-> Punkt. Standardannahme: erster Monitor 1920 px breit.
+Der Installer erledigt: Systempakete, venv + Abhängigkeiten, systemd-Services
+(`terminboard.service` Port 8001, `terminboard-kiosk.service`), Chromium-Kiosk
+auf HDMI-A-2, gemeinsamer USB-Auto-Mount (`/mnt/lhtpi-usb`), Firewall.
 
 ## Tests
 
 ```bash
 cd terminboard
-./venv/bin/pip install pytest
-./venv/bin/python -m pytest tests/ -q
+./venv/bin/python -m pytest tests/ -q    # 34 passed
 ```
 
 ## Sicherheit
@@ -87,8 +105,7 @@ cd terminboard
 - Session-Cookies mit `SameSite=Lax` und `HttpOnly` gesetzt.
 - Kein CSRF-Schutz (bewusste Entscheidung wie bei LHTPi — LAN/Offline-Kiosk mit
   Login). Bei Bedarf später `Flask-WTF` ergänzen.
-- Default-Login `admin`/`admin` — für den Produktivbetrieb das Passwort ändern
-  (aktuell kein UI dafür; per Env/DB oder zukünftiges Feature).
+- Default-Login `admin`/`admin` — für den Produktivbetrieb das Passwort ändern.
 
 ## Farbthema
 

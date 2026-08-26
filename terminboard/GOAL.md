@@ -1,9 +1,10 @@
 # Terminboard — Anzeigetafel für Kalibrierungen & News/Audits
 
-> **Hinweis (aktueller Stand):** Die Installation läuft inzwischen über den
-> **kombinierten Installer im Repo-Root** (`install.sh` mit Menü 1/2/3). Der
-> unten beschriebene eigenständige `terminboard/install.sh` wurde in diesen
-> integriert und entfernt.
+> ⚠️ **HISTORISCH** — diese Datei ist die ursprüngliche Projektspezifikation
+> und in vielen Details überholt (CSV statt Excel-Vorlage, „HDMI-1" statt
+> „HDMI-A-2", `referenz` optional statt Pflicht, eigener Mount-Punkt
+> `/mnt/terminboard-usb`, eigenes `install.sh`).
+> **Aktueller Stand:** siehe `terminboard/README.md` und `STAND.md` im Repo-Root.
 
 ## Ziel
 

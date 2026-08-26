@@ -141,5 +141,3 @@ sudo dd if=/home/icekey/lhtpi-backup-20260826.img of=/dev/mmcblk0 bs=4M status=p
 
 - [ ] Openbox-Regel „Terminboard auf Monitor 2" final auf echter Hardware prüfen
 - [ ] Standard-Login `admin`/`admin` ändern (Produktivbetrieb)
-- [ ] `terminboard/README.md` beschreibt noch die alte CSV (6 Spalten) —
-      auf Excel-Vorlage (5 Spalten) aktualisieren

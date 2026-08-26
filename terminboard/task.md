@@ -1,3 +1,7 @@
+> ⚠️ **HISTORISCH** — Arbeitsauftrag (Prompt) für die ursprüngliche
+> Implementierung des Terminboards. Erledigt. Aktueller Stand:
+> `terminboard/README.md` und `STAND.md` im Repo-Root.
+
 Du bist ein erfahrener Full-Stack-Entwickler (Flask + SQLAlchemy + Vanilla JS).
 
 ## Aufgabe
