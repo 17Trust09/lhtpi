@@ -270,6 +270,10 @@ EOF
 #!/bin/bash
 set -u
 
+# Feste Monitor-Zuordnung: HDMI-A-1 = primär (LHTPi), HDMI-A-2 rechts daneben (Terminboard)
+xrandr --output HDMI-A-1 --primary --auto >/dev/null 2>&1 || true
+xrandr --output HDMI-A-2 --auto --right-of HDMI-A-1 >/dev/null 2>&1 || true
+
 LOG="/home/pi/lhtpi-kiosk.log"
 APP_URL="http://localhost:8000/present/kiosk"
 READY_URL="http://localhost:8000/login"
@@ -734,14 +738,22 @@ EOF
     cat > "${TERMIN_KIOSK_SCRIPT}" <<'EOF'
 #!/bin/bash
 set -u
+
+# Feste Monitor-Zuordnung: HDMI-A-1 = primär (LHTPi), HDMI-A-2 rechts daneben (Terminboard)
+xrandr --output HDMI-A-1 --primary --auto >/dev/null 2>&1 || true
+xrandr --output HDMI-A-2 --auto --right-of HDMI-A-1 >/dev/null 2>&1 || true
+
 LOG="/home/pi/terminboard-kiosk.log"
 APP_URL="http://localhost:8001/board/kiosk"
 READY_URL="http://localhost:8001/login"
-# Position des zweiten Monitors (X-Offset = Breite des ersten Monitors).
-SCREEN2_X="1920"
+# Position + Größe des zweiten Monitors dynamisch aus der xrandr-Geometrie ermitteln.
+SCREEN1_W=$(xrandr --current 2>/dev/null | awk '/HDMI-A-1 connected/{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+/){split($i,a,"[x+]"); print a[1]; exit}}')
+SCREEN2_W=$(xrandr --current 2>/dev/null | awk '/HDMI-A-2 connected/{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+/){split($i,a,"[x+]"); print a[1]; exit}}')
+SCREEN2_H=$(xrandr --current 2>/dev/null | awk '/HDMI-A-2 connected/{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+/){split($i,a,"[x+]"); print a[2]; exit}}')
+SCREEN2_X="${SCREEN1_W:-1920}"
 SCREEN2_Y="0"
-SCREEN2_W="1920"
-SCREEN2_H="1080"
+SCREEN2_W="${SCREEN2_W:-1920}"
+SCREEN2_H="${SCREEN2_H:-1080}"
 # Eigenes Chromium-Profil (NICHT mit LHTPi teilen!)
 PROFILE="/home/pi/.config/chromium-terminboard"
 
