@@ -494,6 +494,13 @@ EOF
   <resistance>
     <move>0</move>
   </resistance>
+  <applications>
+    <!-- Terminboard-Kiosk fest auf den zweiten Monitor (HDMI-A-2). Openbox
+         ignoriert Chromiums --window-position, daher hier erzwingen. -->
+    <application name="Terminboard*" class="Chromium*">
+      <monitor>2</monitor>
+    </application>
+  </applications>
 </openbox_config>
 EOF
     cat > "/home/${PI_USER}/.config/openbox/autostart" <<'EOF'
