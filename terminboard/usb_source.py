@@ -51,7 +51,7 @@ SETTING_AZUBI_WEEKS = 'azubi_weeks'     # Anzeigedauer in Wochen (Default 2)
 # Azubi-Info-Flyer: Bilder liegen im Ordner 'azubi' auf dem Stick (z. B. /mnt/lhtpi-usb/azubi/).
 AZUBI_DIR_NAME = 'azubi'
 AZUBI_IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'}
-# Optionale Einstellungs-Datei im Stick-Root (Startdatum + Anzeigedauer). Hat Vorrang vor dem Dashboard.
+# Optionale Einstellungs-Datei im azubi-Ordner (Startdatum + Anzeigedauer). Hat Vorrang vor dem Dashboard.
 AZUBI_SETTINGS_FILENAME = 'azubi.txt'
 
 
@@ -435,13 +435,13 @@ def find_azubi_images():
 
 
 def find_azubi_settings_file():
-    """Liefert den Pfad zur ``azubi.txt`` im Stick-Root (oder ``None``)."""
-    for cand in _iter_mount_candidates():
-        if not _is_valid_dir(cand):
-            continue
-        p = os.path.join(cand, AZUBI_SETTINGS_FILENAME)
-        if os.path.isfile(p):
-            return p
+    """Liefert den Pfad zur ``azubi.txt`` im ``azubi``-Ordner (oder ``None``)."""
+    d = find_azubi_dir()
+    if not d:
+        return None
+    p = os.path.join(d, AZUBI_SETTINGS_FILENAME)
+    if os.path.isfile(p):
+        return p
     return None
 
 

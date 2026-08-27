@@ -383,6 +383,19 @@ def test_azubi_settings_db_fallback(monkeypatch):
         assert usb_source.get_azubi_weeks() == 3
 
 
+def test_find_azubi_settings_file_in_azubi_dir(monkeypatch, tmp_path):
+    azubi = tmp_path / 'azubi'
+    azubi.mkdir()
+    (azubi / 'azubi.txt').write_text('start=2026-09-01\n', encoding='utf-8')
+    monkeypatch.setattr(usb_source, 'find_azubi_dir', lambda: str(azubi))
+    assert usb_source.find_azubi_settings_file() == str(azubi / 'azubi.txt')
+
+
+def test_find_azubi_settings_file_none(monkeypatch):
+    monkeypatch.setattr(usb_source, 'find_azubi_dir', lambda: None)
+    assert usb_source.find_azubi_settings_file() is None
+
+
 def test_active_termine_usb_priority(monkeypatch, tmp_path):
     _clean_termine()
     with app.app_context():
