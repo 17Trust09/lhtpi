@@ -618,6 +618,68 @@ EOF
     ok "USB-Auto-Mount eingerichtet (exFAT/FAT32/NTFS, read-only nach /mnt/lhtpi-usb)"
 }
 
+configure_clock() {
+    log "Richte offline-fähige Uhr ein (mini fake-hwclock, kein RTC/NTP)"
+
+    # Skript: Zeit bei 'load' wiederherstellen, bei 'save' auf Disk schreiben.
+    cat > /usr/local/sbin/lhtpi-hwclock <<'EOF'
+#!/bin/bash
+SAVE=/etc/fake-hwclock.data
+case "${1:-}" in
+  save) date '+%Y-%m-%d %H:%M:%S' > "$SAVE" ;;
+  load) [ -f "$SAVE" ] && date -s "$(cat "$SAVE")" >/dev/null 2>&1 ;;
+esac
+EOF
+    chmod +x /usr/local/sbin/lhtpi-hwclock
+
+    # Boot: Zeit laden (vor time-sync.target, damit NTP sie nicht überschreibt)
+    cat > /etc/systemd/system/lhtpi-fake-hwclock.service <<'EOF'
+[Unit]
+Description=Restore clock from disk (offline Pi, no RTC)
+Before=time-sync.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/lhtpi-hwclock load
+RemainAfterExit=yes
+
+[Install]
+WantedBy=sysinit.target
+EOF
+
+    # Shutdown: Zeit speichern
+    cat > /etc/systemd/system/lhtpi-fake-hwclock-save.service <<'EOF'
+[Unit]
+Description=Save clock to disk (offline Pi)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/lhtpi-hwclock save
+
+[Install]
+WantedBy=shutdown.target
+EOF
+
+    # Alle 15 Minuten speichern
+    cat > /etc/systemd/system/lhtpi-fake-hwclock-save.timer <<'EOF'
+[Unit]
+Description=Save clock every 15 min
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=15min
+
+[Install]
+WantedBy=timers.target
+EOF
+
+    systemctl daemon-reload
+    systemctl enable lhtpi-fake-hwclock.service lhtpi-fake-hwclock-save.service lhtpi-fake-hwclock-save.timer
+    /usr/local/sbin/lhtpi-hwclock save
+
+    ok "Uhr-Speicherung eingerichtet (Boot=load, Shutdown+15min=save)"
+}
+
 print_summary() {
     echo ""
     echo "================================================"
@@ -881,6 +943,7 @@ main() {
     configure_policies
     configure_firewall
     configure_usb_automount
+    configure_clock
     print_summary
 }
 
