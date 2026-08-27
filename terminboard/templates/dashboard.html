@@ -103,7 +103,7 @@
 
   <section class="card">
     <h2>Azubi-Info-Flyer</h2>
-    <form method="post" action="{{ url_for('settings_azubi') }}" enctype="multipart/form-data">
+    <form method="post" action="{{ url_for('settings_azubi') }}">
       <div class="row">
         <label>Startdatum (optional)
           <input type="date" name="azubi_start" value="{{ azubi.start }}">
@@ -112,18 +112,13 @@
           <input type="number" name="azubi_weeks" value="{{ azubi.weeks }}" min="0" max="104" step="1">
         </label>
       </div>
-      <div class="row">
-        <label>Bild (PNG / JPG / …)
-          <input type="file" name="azubi_image" accept="image/*">
-        </label>
-      </div>
       <div class="row actions">
-        <button type="submit">Flyer speichern</button>
+        <button type="submit">Speichern</button>
       </div>
     </form>
     <p class="muted">
-      {% if azubi.image %}🖼️ Aktuelles Bild: <code>{{ azubi.image }}</code> · {% else %}⚪ Noch kein Bild hochgeladen · {% endif %}
-      {% if azubi.start %}zeigt ab <strong>{{ azubi.start }}</strong> für {{ azubi.weeks }} Woche(n).{% else %}ohne Startdatum dauerhaft aktiv.{% endif %}
+      Bild kommt vom USB-Stick (Ordner <code>azubi/</code>).
+      {% if azubi.start %}Zeigt ab <strong>{{ azubi.start }}</strong> für {{ azubi.weeks }} Woche(n).{% else %}Ohne Startdatum dauerhaft aktiv.{% endif %}
     </p>
   </section>
 

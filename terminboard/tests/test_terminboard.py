@@ -1,6 +1,5 @@
 import os
 import sys
-import io
 import tempfile
 from datetime import date
 
@@ -341,35 +340,14 @@ def test_settings_azubi_save():
         assert usb_source.get_azubi_weeks() == 3
 
 
-def test_settings_azubi_upload(monkeypatch, tmp_path):
-    monkeypatch.setattr(routes, 'AZUBI_UPLOAD_DIR', str(tmp_path))
-    with app.test_client() as c:
-        c.post('/login', data={'username': 'admin', 'password': 'admin'})
-        r = c.post('/settings/azubi', data={
-            'azubi_start': '',
-            'azubi_weeks': '2',
-            'azubi_image': (io.BytesIO(b'fake-png'), 'flyer.png'),
-        }, content_type='multipart/form-data')
-        assert r.status_code in (200, 302)
-    assert (tmp_path / 'azubi.png').exists()
-
-
-def test_board_azubi_uploaded_serves_image(monkeypatch, tmp_path):
-    monkeypatch.setattr(routes, 'AZUBI_UPLOAD_DIR', str(tmp_path))
-    (tmp_path / 'azubi.png').write_bytes(b'PNGDATA')
-    with app.test_client() as c:
-        r = c.get('/board/azubi/uploaded/azubi.png')
-        assert r.status_code == 200
-        assert r.data == b'PNGDATA'
-
-
-def test_azubi_image_urls_prefers_uploaded(monkeypatch, tmp_path):
-    monkeypatch.setattr(routes, 'AZUBI_UPLOAD_DIR', str(tmp_path))
-    (tmp_path / 'azubi.png').write_bytes(b'x')
-    monkeypatch.setattr(routes, 'find_azubi_images', lambda: ['usb.png'])
+def test_azubi_image_urls_respects_window(monkeypatch):
+    monkeypatch.setattr(routes, 'find_azubi_images', lambda: ['flyer.png'])
+    monkeypatch.setattr(routes, 'azubi_is_active', lambda: True)
     with app.test_request_context():
-        urls = routes.azubi_image_urls()
-    assert urls == ['/board/azubi/uploaded/azubi.png']
+        assert routes.azubi_image_urls() == ['/board/azubi/flyer.png']
+    monkeypatch.setattr(routes, 'azubi_is_active', lambda: False)
+    with app.test_request_context():
+        assert routes.azubi_image_urls() == []
 
 
 def test_active_termine_usb_priority(monkeypatch, tmp_path):

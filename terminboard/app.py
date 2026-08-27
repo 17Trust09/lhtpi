@@ -3,7 +3,6 @@ from flask import Flask
 from flask_login import LoginManager
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-AZUBI_UPLOAD_DIR = os.path.join(BASE_DIR, 'azubi_uploads')
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('TERMINBOARD_SECRET', 'terminboard-dev-secret-change-me')
