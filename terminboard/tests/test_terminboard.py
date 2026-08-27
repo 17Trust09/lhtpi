@@ -277,6 +277,19 @@ def test_active_termine_wartung_in_kalibrierungen():
     _clean_termine()
 
 
+def test_find_azubi_images(monkeypatch, tmp_path):
+    (tmp_path / 'flyer.png').write_bytes(b'x')
+    (tmp_path / 'seite2.jpg').write_bytes(b'y')
+    (tmp_path / 'notiz.txt').write_text('x')
+    monkeypatch.setattr(usb_source, 'find_azubi_dir', lambda: str(tmp_path))
+    assert usb_source.find_azubi_images() == ['flyer.png', 'seite2.jpg']
+
+
+def test_find_azubi_images_none(monkeypatch):
+    monkeypatch.setattr(usb_source, 'find_azubi_dir', lambda: None)
+    assert usb_source.find_azubi_images() == []
+
+
 def test_active_termine_usb_priority(monkeypatch, tmp_path):
     _clean_termine()
     with app.app_context():

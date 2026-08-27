@@ -1,13 +1,15 @@
+import os
 from datetime import date, datetime
 from flask import (render_template, request, redirect, url_for,
-                   jsonify, flash)
+                   jsonify, flash, send_from_directory)
 from flask_login import login_user, logout_user, login_required, current_user
 
 from app import app
 from models import db, User, Termin
 from usb_source import (find_usb_termin_dir, usb_termine, parse_date,
                         get_mode, get_manual_source, set_setting,
-                        SETTING_MODE, SETTING_MANUAL_SOURCE, ALLOWED_TYPES)
+                        SETTING_MODE, SETTING_MANUAL_SOURCE, ALLOWED_TYPES,
+                        find_azubi_dir, find_azubi_images, AZUBI_IMAGE_EXTS)
 
 
 def is_ajax():
@@ -229,4 +231,18 @@ def board_kiosk():
 @app.route('/board/api/status')
 def board_api_status():
     """Öffentliche API für den Kiosk (ohne Login)."""
-    return jsonify(active_termine())
+    data = active_termine()
+    data['azubi'] = [url_for('board_azubi_image', filename=f)
+                     for f in find_azubi_images()]
+    return jsonify(data)
+
+
+@app.route('/board/azubi/<path:filename>')
+def board_azubi_image(filename):
+    """Liefert ein Azubi-Info-Bild vom Stick (nur Bild-Extensions, kein Pfad-Traversal)."""
+    d = find_azubi_dir()
+    if not d:
+        return ('', 404)
+    if os.path.splitext(filename)[1].lower() not in AZUBI_IMAGE_EXTS:
+        return ('', 404)
+    return send_from_directory(d, filename)

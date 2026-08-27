@@ -46,6 +46,10 @@ HEADER_TYPE_KEYS = ('art', 'typ', 'type')
 SETTING_MODE = 'player_mode'            # 'auto' | 'manual'
 SETTING_MANUAL_SOURCE = 'manual_source'  # 'web' | 'usb'
 
+# Azubi-Info-Flyer: Bilder liegen im Ordner 'azubi' auf dem Stick (z. B. /mnt/lhtpi-usb/azubi/).
+AZUBI_DIR_NAME = 'azubi'
+AZUBI_IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'}
+
 
 # ── Reine Helfer (ohne DB, gut testbar) ───────────────────────────────
 
@@ -317,3 +321,39 @@ def usb_termine(mount_dir=None):
     if not mount_dir:
         return []
     return read_termin_from_dir(mount_dir)
+
+
+def find_azubi_dir():
+    """Liefert den ``azubi``-Ordner auf dem Stick (oder ``None``).
+
+    Groß-/Kleinschreibung des Ordnernamens wird ignoriert (``azubi``/``Azubi``).
+    """
+    for cand in _iter_mount_candidates():
+        if not _is_valid_dir(cand):
+            continue
+        try:
+            entries = os.listdir(cand)
+        except OSError:
+            continue
+        for name in entries:
+            if name.lower() == AZUBI_DIR_NAME:
+                p = os.path.join(cand, name)
+                if os.path.isdir(p):
+                    return p
+    return None
+
+
+def find_azubi_images():
+    """Liefert sortierte Bild-Dateinamen im ``azubi``-Ordner (oder ``[]``)."""
+    d = find_azubi_dir()
+    if not d:
+        return []
+    try:
+        entries = os.listdir(d)
+    except OSError:
+        return []
+    return sorted(
+        f for f in entries
+        if os.path.isfile(os.path.join(d, f))
+        and os.path.splitext(f)[1].lower() in AZUBI_IMAGE_EXTS
+    )
