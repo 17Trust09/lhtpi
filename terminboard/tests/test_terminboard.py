@@ -263,6 +263,20 @@ def test_active_termine_splits_cal_and_news():
     _clean_termine()
 
 
+def test_active_termine_wartung_in_kalibrierungen():
+    _clean_termine()
+    with app.app_context():
+        db.session.add(Termin(typ='wartung', titel='Snubber', referenz='',
+                              start=date(2026, 9, 16), ende=date(2026, 9, 17)))
+        db.session.commit()
+    with app.test_client() as c:
+        d = c.get('/board/api/status').get_json()
+        assert len(d['kalibrierungen']) == 1
+        assert d['kalibrierungen'][0]['typ'] == 'wartung'
+        assert d['news'] == []
+    _clean_termine()
+
+
 def test_active_termine_usb_priority(monkeypatch, tmp_path):
     _clean_termine()
     with app.app_context():
