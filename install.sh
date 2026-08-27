@@ -270,9 +270,9 @@ EOF
 #!/bin/bash
 set -u
 
-# Feste Monitor-Zuordnung: HDMI-A-1 = primär (LHTPi), HDMI-A-2 rechts daneben (Terminboard)
-xrandr --output HDMI-A-1 --primary --auto --pos 0x0 \
-       --output HDMI-A-2 --auto --right-of HDMI-A-1 >/dev/null 2>&1 || true
+# Feste Monitor-Zuordnung: HDMI-1 = primär (LHTPi), HDMI-2 rechts daneben (Terminboard)
+xrandr --output HDMI-1 --primary --mode 1920x1080 --pos 0x0 \
+       --output HDMI-2 --mode 1920x1080 --right-of HDMI-1 >/dev/null 2>&1 || true
 
 LOG="/home/pi/lhtpi-kiosk.log"
 APP_URL="http://localhost:8000/present/kiosk"
@@ -396,8 +396,10 @@ CHROMIUM="/usr/bin/chromium-browser"
 [ -x "$CHROMIUM" ] || CHROMIUM="/usr/bin/chromium"
 
 exec "$CHROMIUM" \
-    --kiosk \
     --app="$APP_URL" \
+    --class=lhtpi-kiosk \
+    --window-position=0,0 \
+    --window-size=1920,1080 \
     --noerrdialogs \
     --disable-infobars \
     --disable-session-crashed-bubble \
@@ -409,7 +411,6 @@ exec "$CHROMIUM" \
     --disable-translate \
     --overscroll-history-navigation=0 \
     --disable-pinch \
-    --start-fullscreen \
     --disable-context-menu \
     --password-store=basic \
     --touch-events=disabled \
@@ -495,11 +496,10 @@ EOF
     <move>0</move>
   </resistance>
   <applications>
-    <!-- Terminboard-Kiosk fest auf den zweiten Monitor (HDMI-A-2). Openbox
-         ignoriert Chromiums --window-position, daher hier erzwingen. -->
-    <application name="Terminboard*">
-      <monitor>2</monitor>
-    </application>
+    <application class="lhtpi-kiosk"><monitor>1</monitor><decor>no</decor><maximized>yes</maximized></application>
+    <application class="terminboard-kiosk"><monitor>2</monitor><decor>no</decor><maximized>yes</maximized></application>
+    <application name="LHTPi*"><monitor>1</monitor><decor>no</decor><maximized>yes</maximized></application>
+    <application name="Terminboard*"><monitor>2</monitor><decor>no</decor><maximized>yes</maximized></application>
   </applications>
 </openbox_config>
 EOF
@@ -746,17 +746,17 @@ EOF
 #!/bin/bash
 set -u
 
-# Feste Monitor-Zuordnung: HDMI-A-1 = primär (LHTPi), HDMI-A-2 rechts daneben (Terminboard)
-xrandr --output HDMI-A-1 --primary --auto --pos 0x0 \
-       --output HDMI-A-2 --auto --right-of HDMI-A-1 >/dev/null 2>&1 || true
+# Feste Monitor-Zuordnung: HDMI-1 = primär (LHTPi), HDMI-2 rechts daneben (Terminboard)
+xrandr --output HDMI-1 --primary --mode 1920x1080 --pos 0x0 \
+       --output HDMI-2 --mode 1920x1080 --right-of HDMI-1 >/dev/null 2>&1 || true
 
 LOG="/home/pi/terminboard-kiosk.log"
 APP_URL="http://localhost:8001/board/kiosk"
 READY_URL="http://localhost:8001/login"
 # Position + Größe des zweiten Monitors dynamisch aus der xrandr-Geometrie ermitteln.
-SCREEN1_W=$(xrandr --current 2>/dev/null | awk '$1=="HDMI-A-1" && $2=="connected"{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+/){split($i,a,"[x+]"); print a[1]; exit}}')
-SCREEN2_W=$(xrandr --current 2>/dev/null | awk '$1=="HDMI-A-2" && $2=="connected"{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+/){split($i,a,"[x+]"); print a[1]; exit}}')
-SCREEN2_H=$(xrandr --current 2>/dev/null | awk '$1=="HDMI-A-2" && $2=="connected"{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+/){split($i,a,"[x+]"); print a[2]; exit}}')
+SCREEN1_W=$(xrandr --current 2>/dev/null | awk '$1=="HDMI-1" && $2=="connected"{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+/){split($i,a,"[x+]"); print a[1]; exit}}')
+SCREEN2_W=$(xrandr --current 2>/dev/null | awk '$1=="HDMI-2" && $2=="connected"{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+/){split($i,a,"[x+]"); print a[1]; exit}}')
+SCREEN2_H=$(xrandr --current 2>/dev/null | awk '$1=="HDMI-2" && $2=="connected"{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+/){split($i,a,"[x+]"); print a[2]; exit}}')
 SCREEN2_X="${SCREEN1_W:-1920}"
 SCREEN2_Y="0"
 SCREEN2_W="${SCREEN2_W:-1920}"
@@ -788,8 +788,8 @@ CHROMIUM="/usr/bin/chromium-browser"
 [ -x "$CHROMIUM" ] || CHROMIUM="/usr/bin/chromium"
 
 exec "$CHROMIUM" \
-    --kiosk \
     --app="$APP_URL" \
+    --class=terminboard-kiosk \
     --user-data-dir="$PROFILE" \
     --window-position="${SCREEN2_X},${SCREEN2_Y}" \
     --window-size="${SCREEN2_W},${SCREEN2_H}" \
