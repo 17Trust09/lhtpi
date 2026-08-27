@@ -118,6 +118,7 @@
     </form>
     <p class="muted">
       Bild kommt vom USB-Stick (Ordner <code>azubi/</code>).
+      {% if azubi.usb %}⚙️ Einstellungen vom Stick (<code>azubi.txt</code>).{% else %}⚙️ Einstellungen aus dem Dashboard.{% endif %}
       {% if azubi.start %}Zeigt ab <strong>{{ azubi.start }}</strong> für {{ azubi.weeks }} Woche(n).{% else %}Ohne Startdatum dauerhaft aktiv.{% endif %}
     </p>
   </section>

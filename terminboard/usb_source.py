@@ -51,6 +51,8 @@ SETTING_AZUBI_WEEKS = 'azubi_weeks'     # Anzeigedauer in Wochen (Default 2)
 # Azubi-Info-Flyer: Bilder liegen im Ordner 'azubi' auf dem Stick (z. B. /mnt/lhtpi-usb/azubi/).
 AZUBI_DIR_NAME = 'azubi'
 AZUBI_IMAGE_EXTS = {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'}
+# Optionale Einstellungs-Datei im Stick-Root (Startdatum + Anzeigedauer). Hat Vorrang vor dem Dashboard.
+AZUBI_SETTINGS_FILENAME = 'azubi.txt'
 
 
 # ── Reine Helfer (ohne DB, gut testbar) ───────────────────────────────
@@ -141,6 +143,29 @@ def parse_termin_csv(text):
             'text': text,
         })
     return rows
+
+
+def parse_azubi_settings(text):
+    """Parst den Inhalt von ``azubi.txt`` in ``{'start': ..., 'weeks': ...}``.
+
+    Format: eine Einstellung pro Zeile als ``key=wert``; ``#``-Zeilen sind Kommentare.
+    * ``start`` – Startdatum ``TT.MM.JJJJ`` oder ``JJJJ-MM-TT`` (fehlt/leer → ``None`` = dauerhaft)
+    * ``weeks`` – Anzeigedauer in Wochen (fehlt/leer → ``None`` = Default 2)
+    """
+    result = {'start': None, 'weeks': None}
+    for line in (x.strip() for x in text.splitlines()):
+        if not line or line.startswith('#'):
+            continue
+        if '=' not in line:
+            continue
+        key, _, value = line.partition('=')
+        key = key.strip().lower()
+        value = value.strip()
+        if key in ('start', 'startdatum', 'von'):
+            result['start'] = value
+        elif key in ('weeks', 'wochen', 'dauer'):
+            result['weeks'] = value
+    return result
 
 
 def parse_termin_xlsx(file_path):
@@ -254,17 +279,37 @@ def get_manual_source():
 
 
 def get_azubi_start():
-    """Startdatum des Azubi-Flyers (``date`` oder ``None``)."""
+    """Startdatum des Azubi-Flyers (``date`` oder ``None``).
+
+    Liegt eine ``azubi.txt`` auf dem Stick vor, bestimmt sie die Einstellung;
+    sonst gilt die DB-Einstellung aus dem Dashboard.
+    """
+    usb = read_azubi_settings()
+    if usb:
+        return parse_date(usb.get('start'))
     return parse_date(get_setting(SETTING_AZUBI_START, ''))
 
 
-def get_azubi_weeks():
-    """Anzeigedauer des Azubi-Flyers in Wochen (Default 2)."""
+def _parse_weeks(raw):
     try:
-        weeks = int(get_setting(SETTING_AZUBI_WEEKS, '2'))
+        weeks = int(raw)
     except (TypeError, ValueError):
-        weeks = 2
-    return weeks if weeks >= 0 else 2
+        return None
+    return weeks if weeks >= 0 else None
+
+
+def get_azubi_weeks():
+    """Anzeigedauer des Azubi-Flyers in Wochen (Default 2).
+
+    Liegt eine ``azubi.txt`` auf dem Stick vor, bestimmt sie die Einstellung;
+    sonst gilt die DB-Einstellung aus dem Dashboard.
+    """
+    usb = read_azubi_settings()
+    if usb:
+        w = _parse_weeks(usb.get('weeks'))
+        return 2 if w is None else w
+    w = _parse_weeks(get_setting(SETTING_AZUBI_WEEKS, '2'))
+    return 2 if w is None else w
 
 
 def azubi_is_active(today=None):
@@ -387,3 +432,31 @@ def find_azubi_images():
         if os.path.isfile(os.path.join(d, f))
         and os.path.splitext(f)[1].lower() in AZUBI_IMAGE_EXTS
     )
+
+
+def find_azubi_settings_file():
+    """Liefert den Pfad zur ``azubi.txt`` im Stick-Root (oder ``None``)."""
+    for cand in _iter_mount_candidates():
+        if not _is_valid_dir(cand):
+            continue
+        p = os.path.join(cand, AZUBI_SETTINGS_FILENAME)
+        if os.path.isfile(p):
+            return p
+    return None
+
+
+def read_azubi_settings():
+    """Liest die Azubi-Settings vom Stick (``azubi.txt``).
+
+    Fehlt die Datei (oder ist sie nicht lesbar), wird ``{}`` geliefert —
+    dann gelten die DB-Einstellungen aus dem Dashboard.
+    """
+    p = find_azubi_settings_file()
+    if not p:
+        return {}
+    try:
+        with open(p, encoding='utf-8', errors='ignore') as fh:
+            return parse_azubi_settings(fh.read())
+    except OSError:
+        return {}
+

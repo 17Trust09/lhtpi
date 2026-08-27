@@ -350,6 +350,39 @@ def test_azubi_image_urls_respects_window(monkeypatch):
         assert routes.azubi_image_urls() == []
 
 
+def test_parse_azubi_settings():
+    r = usb_source.parse_azubi_settings('# Kommentar\nstart=01.09.2026\nweeks=3\n')
+    assert r['start'] == '01.09.2026'
+    assert r['weeks'] == '3'
+
+
+def test_parse_azubi_settings_alias_and_empty():
+    r = usb_source.parse_azubi_settings('Startdatum=01.09.2026\nDauer=1\n')
+    assert r['start'] == '01.09.2026'
+    assert r['weeks'] == '1'
+    assert usb_source.parse_azubi_settings('') == {'start': None, 'weeks': None}
+
+
+def test_azubi_settings_usb_priority(monkeypatch, tmp_path):
+    f = tmp_path / 'azubi.txt'
+    f.write_text('start=2026-09-01\nweeks=5\n', encoding='utf-8')
+    monkeypatch.setattr(usb_source, 'find_azubi_settings_file', lambda: str(f))
+    with app.app_context():
+        usb_source.set_setting(usb_source.SETTING_AZUBI_START, '2026-08-01')
+        usb_source.set_setting(usb_source.SETTING_AZUBI_WEEKS, '2')
+        assert usb_source.get_azubi_start() == date(2026, 9, 1)
+        assert usb_source.get_azubi_weeks() == 5
+
+
+def test_azubi_settings_db_fallback(monkeypatch):
+    monkeypatch.setattr(usb_source, 'find_azubi_settings_file', lambda: None)
+    with app.app_context():
+        usb_source.set_setting(usb_source.SETTING_AZUBI_START, '2026-08-01')
+        usb_source.set_setting(usb_source.SETTING_AZUBI_WEEKS, '3')
+        assert usb_source.get_azubi_start() == date(2026, 8, 1)
+        assert usb_source.get_azubi_weeks() == 3
+
+
 def test_active_termine_usb_priority(monkeypatch, tmp_path):
     _clean_termine()
     with app.app_context():

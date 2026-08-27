@@ -11,7 +11,8 @@ from usb_source import (find_usb_termin_dir, usb_termine, parse_date,
                         SETTING_MODE, SETTING_MANUAL_SOURCE, ALLOWED_TYPES,
                         find_azubi_dir, find_azubi_images, AZUBI_IMAGE_EXTS,
                         get_azubi_start, get_azubi_weeks, azubi_is_active,
-                        SETTING_AZUBI_START, SETTING_AZUBI_WEEKS)
+                        SETTING_AZUBI_START, SETTING_AZUBI_WEEKS,
+                        find_azubi_settings_file)
 
 
 def is_ajax():
@@ -141,6 +142,7 @@ def dashboard():
     azubi = {
         'start': azubi_start.isoformat() if azubi_start else '',
         'weeks': get_azubi_weeks(),
+        'usb': find_azubi_settings_file() is not None,
     }
     return render_template('dashboard.html', termine=termine, status=status, azubi=azubi)
 
