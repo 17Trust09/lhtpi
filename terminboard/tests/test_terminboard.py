@@ -354,6 +354,24 @@ def test_settings_azubi_upload(monkeypatch, tmp_path):
     assert (tmp_path / 'azubi.png').exists()
 
 
+def test_board_azubi_uploaded_serves_image(monkeypatch, tmp_path):
+    monkeypatch.setattr(routes, 'AZUBI_UPLOAD_DIR', str(tmp_path))
+    (tmp_path / 'azubi.png').write_bytes(b'PNGDATA')
+    with app.test_client() as c:
+        r = c.get('/board/azubi/uploaded/azubi.png')
+        assert r.status_code == 200
+        assert r.data == b'PNGDATA'
+
+
+def test_azubi_image_urls_prefers_uploaded(monkeypatch, tmp_path):
+    monkeypatch.setattr(routes, 'AZUBI_UPLOAD_DIR', str(tmp_path))
+    (tmp_path / 'azubi.png').write_bytes(b'x')
+    monkeypatch.setattr(routes, 'find_azubi_images', lambda: ['usb.png'])
+    with app.test_request_context():
+        urls = routes.azubi_image_urls()
+    assert urls == ['/board/azubi/uploaded/azubi.png']
+
+
 def test_active_termine_usb_priority(monkeypatch, tmp_path):
     _clean_termine()
     with app.app_context():
