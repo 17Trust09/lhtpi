@@ -4,12 +4,14 @@ from flask import (render_template, request, redirect, url_for,
                    jsonify, flash, send_from_directory)
 from flask_login import login_user, logout_user, login_required, current_user
 
-from app import app
+from app import app, AZUBI_UPLOAD_DIR
 from models import db, User, Termin
 from usb_source import (find_usb_termin_dir, usb_termine, parse_date,
                         get_mode, get_manual_source, set_setting,
                         SETTING_MODE, SETTING_MANUAL_SOURCE, ALLOWED_TYPES,
-                        find_azubi_dir, find_azubi_images, AZUBI_IMAGE_EXTS)
+                        find_azubi_dir, find_azubi_images, AZUBI_IMAGE_EXTS,
+                        get_azubi_start, get_azubi_weeks, azubi_is_active,
+                        SETTING_AZUBI_START, SETTING_AZUBI_WEEKS)
 
 
 def is_ajax():
@@ -99,6 +101,29 @@ def active_termine():
     }
 
 
+def get_azubi_uploaded_images():
+    """Sortierte Bild-Dateinamen im Upload-Ordner (oder ``[]``)."""
+    if not os.path.isdir(AZUBI_UPLOAD_DIR):
+        return []
+    try:
+        entries = os.listdir(AZUBI_UPLOAD_DIR)
+    except OSError:
+        return []
+    return sorted(f for f in entries
+                  if os.path.isfile(os.path.join(AZUBI_UPLOAD_DIR, f))
+                  and os.path.splitext(f)[1].lower() in AZUBI_IMAGE_EXTS)
+
+
+def azubi_image_urls():
+    """Anzuzeigende Azubi-Bild-URLs (Upload vor USB, nur im Zeitfenster)."""
+    if not azubi_is_active():
+        return []
+    uploaded = get_azubi_uploaded_images()
+    if uploaded:
+        return [url_for('board_azubi_uploaded', filename=f) for f in uploaded]
+    return [url_for('board_azubi_image', filename=f) for f in find_azubi_images()]
+
+
 # ── Login ─────────────────────────────────────────────────────────────
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -128,7 +153,14 @@ def dashboard():
                for t in Termin.query.order_by(Termin.start).all()]
     termine.sort(key=_sort_key)
     status = active_termine()
-    return render_template('dashboard.html', termine=termine, status=status)
+    azubi_start = get_azubi_start()
+    azubi_imgs = get_azubi_uploaded_images()
+    azubi = {
+        'start': azubi_start.isoformat() if azubi_start else '',
+        'weeks': get_azubi_weeks(),
+        'image': azubi_imgs[0] if azubi_imgs else None,
+    }
+    return render_template('dashboard.html', termine=termine, status=status, azubi=azubi)
 
 
 @app.route('/termine')
@@ -221,6 +253,46 @@ def settings_source():
     return jsonify({'mode': get_mode(), 'manual_source': get_manual_source()})
 
 
+@app.route('/settings/azubi', methods=['GET', 'POST'])
+@login_required
+def settings_azubi():
+    if request.method == 'POST':
+        start = (request.form.get('azubi_start') or '').strip()
+        weeks = (request.form.get('azubi_weeks') or '2').strip()
+        if start and parse_date(start) is None:
+            return ajax_or_redirect('', 'Ungültiges Startdatum (TT.MM.JJJJ oder JJJJ-MM-TT)')
+        try:
+            w = int(weeks)
+            if w < 0 or w > 104:
+                raise ValueError
+        except ValueError:
+            return ajax_or_redirect('', 'Ungültige Wochenanzahl (0–104)')
+        set_setting(SETTING_AZUBI_START, start)
+        set_setting(SETTING_AZUBI_WEEKS, str(w))
+
+        file = request.files.get('azubi_image')
+        if file and file.filename:
+            ext = os.path.splitext(file.filename)[1].lower()
+            if ext not in AZUBI_IMAGE_EXTS:
+                return ajax_or_redirect('', 'Nur Bild-Dateien erlaubt (png, jpg, jpeg, gif, webp, bmp)')
+            os.makedirs(AZUBI_UPLOAD_DIR, exist_ok=True)
+            for old in get_azubi_uploaded_images():
+                try:
+                    os.remove(os.path.join(AZUBI_UPLOAD_DIR, old))
+                except OSError:
+                    pass
+            file.save(os.path.join(AZUBI_UPLOAD_DIR, 'azubi' + ext))
+        return ajax_or_redirect('Azubi-Einstellungen gespeichert')
+
+    start = get_azubi_start()
+    imgs = get_azubi_uploaded_images()
+    return jsonify({
+        'start': start.isoformat() if start else '',
+        'weeks': get_azubi_weeks(),
+        'image': imgs[0] if imgs else None,
+    })
+
+
 # ── Kiosk (öffentlich) ───────────────────────────────────────────────
 
 @app.route('/board/kiosk')
@@ -232,8 +304,7 @@ def board_kiosk():
 def board_api_status():
     """Öffentliche API für den Kiosk (ohne Login)."""
     data = active_termine()
-    data['azubi'] = [url_for('board_azubi_image', filename=f)
-                     for f in find_azubi_images()]
+    data['azubi'] = azubi_image_urls()
     return jsonify(data)
 
 
@@ -246,3 +317,11 @@ def board_azubi_image(filename):
     if os.path.splitext(filename)[1].lower() not in AZUBI_IMAGE_EXTS:
         return ('', 404)
     return send_from_directory(d, filename)
+
+
+@app.route('/board/azubi/uploaded/<path:filename>')
+def board_azubi_uploaded(filename):
+    """Liefert ein hochgeladenes Azubi-Bild (nur Bild-Extensions)."""
+    if os.path.splitext(filename)[1].lower() not in AZUBI_IMAGE_EXTS:
+        return ('', 404)
+    return send_from_directory(AZUBI_UPLOAD_DIR, filename)

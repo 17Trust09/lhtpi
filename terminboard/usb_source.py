@@ -24,7 +24,7 @@ Startdatum, ohne Titel oder mit zu wenigen Spalten werden übersprungen.
 """
 import csv
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from models import db, Setting
 
@@ -45,6 +45,8 @@ HEADER_TYPE_KEYS = ('art', 'typ', 'type')
 # Einstellungs-Keys
 SETTING_MODE = 'player_mode'            # 'auto' | 'manual'
 SETTING_MANUAL_SOURCE = 'manual_source'  # 'web' | 'usb'
+SETTING_AZUBI_START = 'azubi_start'     # Startdatum 'JJJJ-MM-TT' (leer = dauerhaft aktiv)
+SETTING_AZUBI_WEEKS = 'azubi_weeks'     # Anzeigedauer in Wochen (Default 2)
 
 # Azubi-Info-Flyer: Bilder liegen im Ordner 'azubi' auf dem Stick (z. B. /mnt/lhtpi-usb/azubi/).
 AZUBI_DIR_NAME = 'azubi'
@@ -249,6 +251,34 @@ def get_mode():
 
 def get_manual_source():
     return get_setting(SETTING_MANUAL_SOURCE, 'web')
+
+
+def get_azubi_start():
+    """Startdatum des Azubi-Flyers (``date`` oder ``None``)."""
+    return parse_date(get_setting(SETTING_AZUBI_START, ''))
+
+
+def get_azubi_weeks():
+    """Anzeigedauer des Azubi-Flyers in Wochen (Default 2)."""
+    try:
+        weeks = int(get_setting(SETTING_AZUBI_WEEKS, '2'))
+    except (TypeError, ValueError):
+        weeks = 2
+    return weeks if weeks >= 0 else 2
+
+
+def azubi_is_active(today=None):
+    """True, wenn der Azubi-Flyer aktuell angezeigt werden darf.
+
+    Ohne Startdatum ist er dauerhaft aktiv. Mit Startdatum gilt:
+    Startdatum <= heute <= Startdatum + Wochen.
+    """
+    today = today or date.today()
+    start = get_azubi_start()
+    if start is None:
+        return True
+    end = start + timedelta(weeks=get_azubi_weeks())
+    return start <= today <= end
 
 
 # ── USB-Erkennung ─────────────────────────────────────────────────────

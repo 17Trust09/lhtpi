@@ -1,5 +1,6 @@
 import os
 import sys
+import io
 import tempfile
 from datetime import date
 
@@ -288,6 +289,69 @@ def test_find_azubi_images(monkeypatch, tmp_path):
 def test_find_azubi_images_none(monkeypatch):
     monkeypatch.setattr(usb_source, 'find_azubi_dir', lambda: None)
     assert usb_source.find_azubi_images() == []
+
+
+# ── Azubi-Einstellungen (Start + Dauer) ──────────────────────────────
+
+
+def test_azubi_is_active_no_start():
+    with app.app_context():
+        usb_source.set_setting(usb_source.SETTING_AZUBI_START, '')
+        assert usb_source.azubi_is_active(date(2026, 1, 1)) is True
+
+
+def test_azubi_is_active_within_window():
+    with app.app_context():
+        usb_source.set_setting(usb_source.SETTING_AZUBI_START, '2026-08-01')
+        usb_source.set_setting(usb_source.SETTING_AZUBI_WEEKS, '2')
+        assert usb_source.azubi_is_active(date(2026, 8, 10)) is True
+
+
+def test_azubi_is_active_expired():
+    with app.app_context():
+        usb_source.set_setting(usb_source.SETTING_AZUBI_START, '2026-08-01')
+        usb_source.set_setting(usb_source.SETTING_AZUBI_WEEKS, '2')
+        assert usb_source.azubi_is_active(date(2026, 8, 20)) is False
+
+
+def test_azubi_is_active_before_start():
+    with app.app_context():
+        usb_source.set_setting(usb_source.SETTING_AZUBI_START, '2026-08-01')
+        usb_source.set_setting(usb_source.SETTING_AZUBI_WEEKS, '2')
+        assert usb_source.azubi_is_active(date(2026, 7, 20)) is False
+
+
+def test_get_azubi_weeks_default_and_invalid():
+    with app.app_context():
+        usb_source.set_setting(usb_source.SETTING_AZUBI_WEEKS, '')
+        assert usb_source.get_azubi_weeks() == 2
+        usb_source.set_setting(usb_source.SETTING_AZUBI_WEEKS, 'abc')
+        assert usb_source.get_azubi_weeks() == 2
+        usb_source.set_setting(usb_source.SETTING_AZUBI_WEEKS, '3')
+        assert usb_source.get_azubi_weeks() == 3
+
+
+def test_settings_azubi_save():
+    with app.test_client() as c:
+        c.post('/login', data={'username': 'admin', 'password': 'admin'})
+        r = c.post('/settings/azubi', data={'azubi_start': '2026-09-01', 'azubi_weeks': '3'})
+        assert r.status_code in (200, 302)
+    with app.app_context():
+        assert usb_source.get_azubi_start() == date(2026, 9, 1)
+        assert usb_source.get_azubi_weeks() == 3
+
+
+def test_settings_azubi_upload(monkeypatch, tmp_path):
+    monkeypatch.setattr(routes, 'AZUBI_UPLOAD_DIR', str(tmp_path))
+    with app.test_client() as c:
+        c.post('/login', data={'username': 'admin', 'password': 'admin'})
+        r = c.post('/settings/azubi', data={
+            'azubi_start': '',
+            'azubi_weeks': '2',
+            'azubi_image': (io.BytesIO(b'fake-png'), 'flyer.png'),
+        }, content_type='multipart/form-data')
+        assert r.status_code in (200, 302)
+    assert (tmp_path / 'azubi.png').exists()
 
 
 def test_active_termine_usb_priority(monkeypatch, tmp_path):
