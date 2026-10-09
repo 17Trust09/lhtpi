@@ -27,7 +27,18 @@
   #hint{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
     color:#8a93a3;font-family:Inter,Arial,sans-serif;font-size:2rem;text-align:center;
     line-height:1.5}
-  #wartung{position:fixed;left:.8rem;bottom:.6rem;z-index:20}
+  {% if cfg.wartung_knopf %}
+  /* Wartungsbetrieb: unten bleibt eine Leiste frei - dort sitzt der Knopf.
+     Ueber einem bedienbaren Tool-Rahmen (pointer-events:auto) wuerde der
+     Rahmen den Knopf sonst verdecken. */
+  #stage{bottom:3.2rem}
+  #wartung{position:fixed;left:0;right:0;bottom:0;height:3.2rem;z-index:2147483647;
+    display:flex;align-items:center;gap:.9rem;padding:0 .9rem;
+    background:#05081f;border-top:1px solid rgba(255,255,255,.12);
+    font:600 .9rem Inter,Arial,sans-serif}
+  #wartung::after{content:"Wartungsbetrieb \2013 Tools bedienbar";
+    color:rgba(255,255,255,.45);letter-spacing:.02em}
+  {% endif %}
   #wartung a{display:inline-block;padding:.45rem .95rem;border-radius:999px;
     background:rgba(5,22,77,.85);color:#fff;text-decoration:none;
     font:600 .95rem Inter,Arial,sans-serif;border:1px solid rgba(255,255,255,.28)}
@@ -42,7 +53,7 @@
 <div id="stage"></div>
 <div id="hint" hidden></div>
 <div id="badge" hidden></div>
-{% if cfg.wartung_knopf %}<div id="wartung" hidden><a href="{{ url_for('display') }}">⚙ Anzeigen</a></div>
+{% if cfg.wartung_knopf %}<div id="wartung"><a href="{{ url_for('display') }}">⚙ Anzeigen</a></div>
 <iframe id="einst" src="{{ url_for('display') }}" title="Anzeigen-Einstellungen"></iframe>
 <script>
 /* „Anzeigen" oeffnet die Einstellungen IM Kiosk-Fenster. Ein echter
@@ -63,6 +74,7 @@
   function zu() {
     window.__lhtpiWartungOffen = false;
     einst.classList.remove('on');
+    knopf.hidden = false;                 /* Knopf wieder einblenden */
     var fs = document.querySelectorAll('iframe.frame');
     for (var i = 0; i < fs.length; i++) fs[i].src = fs[i].src;   /* neu laden */
   }

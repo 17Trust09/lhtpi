@@ -522,6 +522,12 @@ ok('id="wartung"' in seite, 'Anzeige-Seite hat den Wartungs-Knopf')
 ok('⚙ Anzeigen' in seite and '/display' in seite,
    'er führt zur Anzeigen-Seite (Verwaltung)')
 ok('mousemove' in seite, 'er erscheint bei Mausbewegung')
+ok('<div id="wartung" hidden>' not in seite,
+   'der Knopf wird sichtbar ausgeliefert (auch ohne Javascript)')
+ok(seite.count('knopf.hidden = false') >= 2,
+   'der Knopf kommt nach dem Schliessen der Verwaltung wieder')
+ok('#stage{bottom:3.2rem}' in seite,
+   'im Wartungsbetrieb bleibt unten eine Leiste frei (Rahmen verdeckt ihn nicht)')
 ok('im Wartungsbetrieb dauerhaft sichtbar' in seite,
    'im Wartungsbetrieb bleibt er dauerhaft sichtbar '
    '(ueber bedienbaren Tools gibt es keine Mausbewegung mehr)')
