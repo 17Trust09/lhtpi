@@ -159,10 +159,10 @@
         </label>
       </div>
       <div class="note">Installierte Tools auf diesem Gerät:
-        {% for t in o.installed %}<a class="verwalten" href="{{ o.admin_urls.get(t, '#') }}"><b>{{ o.labels.get(t, t) }}</b></a>{% if not loop.last %} · {% endif %}{% else %}<b>keine</b>{% endfor %}
-        <div class="note">Ein Klick öffnet die Verwaltung des Tools (Inhalte wie
-          Abteilung, Ersthelfer, Notruf einstellen). Zurück geht es dort über
-          den Reiter „Anzeige".</div></div>
+        {% for t in o.installed %}<a class="verwalten" target="_blank" href="{{ o.admin_urls.get(t, '#') }}"><b>{{ o.labels.get(t, t) }}</b></a>{% if not loop.last %} · {% endif %}{% else %}<b>keine</b>{% endfor %}
+        <div class="note">Ein Klick öffnet die Verwaltung des Tools in einem
+          eigenen Fenster (Inhalte wie Abteilung, Ersthelfer, Notruf einstellen).
+          Schließen mit Alt+F4 – die Anzeige läuft hinterher weiter.</div></div>
       {% set missing = o.known|selectattr('installed', 'equalto', false)|map(attribute='label')|list %}
       {% if missing %}
         <div class="tools-missing">Nicht installiert (im Installationsprogramm aktivieren):

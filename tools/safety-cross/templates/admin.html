@@ -1,5 +1,15 @@
 {% extends "base.html" %}
+
+{# Die Verwaltung ist eine normale Seite und muss scrollen koennen - auch wenn
+   sie im Kiosk-Rahmen der Anzeige steckt. Die Anzeige selbst braucht kein
+   Scrollen und bleibt unveraendert. #}
 {% block content %}
+<style>
+  /* Die Verwaltung ist eine normale Seite und muss scrollen koennen - auch
+     wenn sie im Kiosk-Rahmen der Anzeige steckt. Die Anzeige selbst braucht
+     kein Scrollen und bleibt unveraendert. */
+  html,body{height:auto !important;min-height:100%;overflow-y:auto !important}
+</style>
 <div class="admin-wrap">
   <div class="admin-head">
     <div class="admin-title">
