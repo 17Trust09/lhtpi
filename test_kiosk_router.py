@@ -488,6 +488,19 @@ ok('Einrichtung abschließen' not in seite2,
    'nach dem Abschluss verschwindet der Abschluss-Knopf')
 os.remove(marker)
 
+print('\n9d) Verwaltung der Tools aus der Anzeigen-Seite')
+
+with app.app_context():
+    router.save_screen(1, name='Bildschirm 1', hdmi='HDMI-1', enabled=True, entries=[
+        {'tool': 'safetycross', 'enabled': True, 'dwell': 30, 'sort': 0}])
+seite = client.get('/display').get_data(as_text=True)
+ok('localhost:8002/admin' in seite,
+   'Safety Cross ist aus der Anzeigen-Seite zu verwalten verlinkt')
+ok('localhost:8001/termine' in seite and 'localhost:8000/' in seite,
+   'Termine und Folien ebenso')
+ok('Reiter' in seite or 'Anzeige' in seite,
+   'mit Hinweis, wie man zurückkommt')
+
 print('OK – %d Prüfungen bestanden' % len(checks))
 for passed, msg in checks:
     print('  ✓', msg)

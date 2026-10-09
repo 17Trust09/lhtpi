@@ -367,6 +367,8 @@ def display_overview():
         'cursor_idle': cursor_idle_seconds(),
         'reload_minutes': iframe_reload_minutes(),
         'installed': tools.installed_tools(),
+        'labels': {t: tools.label(t) for t in tools.tool_ids()},
+        'admin_urls': {t: tools.admin_url(t) for t in tools.tool_ids()},
         'known': [{'id': t, 'label': tools.label(t), 'dwell': tools.default_dwell(t),
                    'installed': tools.is_installed(t)} for t in tools.tool_ids()],
     }

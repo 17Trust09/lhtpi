@@ -14,6 +14,7 @@ TOOLS = {
         'label': 'Folien / Playlist',
         'short': 'Folien',
         'url': 'http://localhost:8000/present/kiosk',
+        'admin': 'http://localhost:8000/',
         'dwell': 60,
         'port': 8000,
     },
@@ -21,6 +22,7 @@ TOOLS = {
         'label': 'Termine / Kalibrierungen',
         'short': 'Termine',
         'url': 'http://localhost:8001/board/kiosk',
+        'admin': 'http://localhost:8001/termine',
         'dwell': 30,
         'port': 8001,
     },
@@ -28,6 +30,7 @@ TOOLS = {
         'label': 'Safety Cross',
         'short': 'Safety Cross',
         'url': 'http://localhost:8002/',
+        'admin': 'http://localhost:8002/admin',
         'dwell': 30,
         'port': 8002,
     },
@@ -100,6 +103,11 @@ def default_dwell(tool):
 
 def default_url(tool):
     return TOOLS.get(tool, {}).get('url', '')
+
+
+def admin_url(tool):
+    """Verwaltungs-Seite des Tools (zum Einstellen der Inhalte)."""
+    return TOOLS.get(tool, {}).get('admin', '')
 
 
 def port_of(url_or_tool):
