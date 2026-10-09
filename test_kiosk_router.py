@@ -536,6 +536,8 @@ ok('.frame.on{pointer-events:auto}' not in seite_bedienbar,
    'eingebettete Tools bleiben reine Anzeige (Knopf bleibt erreichbar)')
 ok('#einst{pointer-events:auto}' in seite_bedienbar,
    'die Verwaltung im eigenen Rahmen nimmt Eingaben an')
+ok("z.id = '_kz'" in seite_bedienbar,
+   'Mauszeiger wird beim Ausblenden neu gezeichnet (sonst bliebe er bis zum Klick)')
 ok("setAttribute('scrolling', cfg.wartung_knopf ? 'auto' : 'no')" in seite_bedienbar,
    'im Wartungsbetrieb darf der Rahmen scrollen (Verwaltung bedienbar)')
 ok('id="einst"' in seite_bedienbar,

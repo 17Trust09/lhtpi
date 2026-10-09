@@ -91,6 +91,19 @@
     s.id = '_kh';
     s.textContent = '*,html,body{cursor:none!important}';
     document.head.appendChild(s);
+    /* Chromium zeichnet den Mauszeiger erst beim naechsten Mausereignis neu.
+       Ein ganz kurz eingeblendeter, durchsichtiger Streifen unter dem Zeiger
+       erzwingt die Neuberechnung - sonst bliebe der Zeiger sichtbar, bis
+       jemand klickt. */
+    var z = document.createElement('div');
+    z.id = '_kz';
+    z.style.cssText = 'position:fixed;inset:0;z-index:2147483647;'
+                    + 'cursor:none;background:transparent';
+    document.body.appendChild(z);
+    setTimeout(function () {
+      var k = document.getElementById('_kz');
+      if (k) k.remove();
+    }, 60);
   }
   function show() {
     var s = document.getElementById('_kh');
