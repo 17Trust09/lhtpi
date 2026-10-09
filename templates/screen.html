@@ -46,8 +46,14 @@
   var einst = document.getElementById('einst');
   if (!knopf || !einst) return;
   var link = knopf.querySelector('a');
-  function auf() { einst.classList.add('on'); knopf.hidden = true; }
+  function auf() {
+    /* Der eigene Klick der Anzeige darf das Einstellungsfenster nicht oeffnen. */
+    if (window.__lhtpiEigenerKlick && window.__lhtpiEigenerKlick()) return;
+    einst.classList.add('on'); knopf.hidden = true;
+    window.__lhtpiWartungOffen = true;
+  }
   function zu() {
+    window.__lhtpiWartungOffen = false;
     einst.classList.remove('on');
     var fs = document.querySelectorAll('iframe.frame');
     for (var i = 0; i < fs.length; i++) fs[i].src = fs[i].src;   /* neu laden */
@@ -84,28 +90,29 @@
 
 /* ── Mauszeiger: nach Inaktivität aus, bei Bewegung wieder da ─────────────── */
 (function () {
-  var MS = {{ (cfg.cursor_idle or 3) * 1000 }}, timer;
+  var MS = {{ (cfg.cursor_idle or 3) * 1000 }}, timer, eigenKlick = 0;
+  /* Chromium zeichnet den Mauszeiger erst beim naechsten Mausereignis neu.
+     Steht die Maus still, bleibt der Zeiger trotz Ausblenden sichtbar - bis
+     jemand klickt. Deshalb loest die Anzeige nach der Ruhezeit selbst einen
+     Klick am X-Server aus (POST /zeiger/klick). Der eigene Klick wird
+     verworfen: er soll weder den Zeiger wieder einblenden noch die Wartung
+     oeffnen. */
+  function eigenerKlick() { return Date.now() - eigenKlick < 800; }
+  window.__lhtpiEigenerKlick = eigenerKlick;
   function hide() {
-    if (document.getElementById('_kh')) return;
-    var s = document.createElement('style');
-    s.id = '_kh';
-    s.textContent = '*,html,body{cursor:none!important}';
-    document.head.appendChild(s);
-    /* Chromium zeichnet den Mauszeiger erst beim naechsten Mausereignis neu.
-       Ein ganz kurz eingeblendeter, durchsichtiger Streifen unter dem Zeiger
-       erzwingt die Neuberechnung - sonst bliebe der Zeiger sichtbar, bis
-       jemand klickt. */
-    var z = document.createElement('div');
-    z.id = '_kz';
-    z.style.cssText = 'position:fixed;inset:0;z-index:2147483647;'
-                    + 'cursor:none;background:transparent';
-    document.body.appendChild(z);
-    setTimeout(function () {
-      var k = document.getElementById('_kz');
-      if (k) k.remove();
-    }, 60);
+    /* Im Einstellungsfenster bleibt der Zeiger sichtbar. */
+    if (window.__lhtpiWartungOffen) { timer = setTimeout(hide, MS); return; }
+    if (!document.getElementById('_kh')) {
+      var s = document.createElement('style');
+      s.id = '_kh';
+      s.textContent = '*,html,body{cursor:none!important}';
+      document.head.appendChild(s);
+    }
+    eigenKlick = Date.now();
+    try { fetch('/zeiger/klick', { method: 'POST' }); } catch (e) {}
   }
   function show() {
+    if (eigenerKlick()) return;
     var s = document.getElementById('_kh');
     if (s) s.remove();
     clearTimeout(timer);

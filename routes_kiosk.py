@@ -144,3 +144,19 @@ def display_save():
 
     flash('Anzeige-Einstellungen gespeichert')
     return redirect(url_for('display'))
+
+
+# ── Mauszeiger ──────────────────────────────────────────────────────────────
+
+@app.route('/zeiger/klick', methods=['POST'])
+def zeiger_klick():
+    """Anzeige meldet: der Zeiger soll jetzt verschwinden.
+
+    Die Kiosk-Seite blendet den Zeiger nach der Ruhezeit per CSS aus und loest
+    danach diesen Aufruf aus - nur so zeichnet Chromium den Zeiger auch
+    tatsaechlich aus (siehe kiosk_router.zeiger_klick). Nur vom Geraet selbst.
+    """
+    if not _ist_lokal():
+        return ('', 403)
+    router.zeiger_klick()
+    return ('', 204)

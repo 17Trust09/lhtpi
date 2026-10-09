@@ -536,8 +536,12 @@ ok('.frame.on{pointer-events:auto}' not in seite_bedienbar,
    'eingebettete Tools bleiben reine Anzeige (Knopf bleibt erreichbar)')
 ok('#einst{pointer-events:auto}' in seite_bedienbar,
    'die Verwaltung im eigenen Rahmen nimmt Eingaben an')
-ok("z.id = '_kz'" in seite_bedienbar,
-   'Mauszeiger wird beim Ausblenden neu gezeichnet (sonst bliebe er bis zum Klick)')
+ok("fetch('/zeiger/klick'" in seite_bedienbar,
+   'die Anzeige loest beim Ausblenden selbst einen Klick aus (sonst bliebe der Zeiger bis zum Klick sichtbar)')
+ok('window.__lhtpiEigenerKlick' in seite_bedienbar,
+   'der eigene Klick wird verworfen (oeffnet keine Wartung, blendet nicht wieder ein)')
+ok('window.__lhtpiWartungOffen' in seite_bedienbar,
+   'im Einstellungsfenster bleibt der Zeiger sichtbar')
 ok("setAttribute('scrolling', cfg.wartung_knopf ? 'auto' : 'no')" in seite_bedienbar,
    'im Wartungsbetrieb darf der Rahmen scrollen (Verwaltung bedienbar)')
 ok('id="einst"' in seite_bedienbar,
@@ -614,6 +618,29 @@ with tempfile.TemporaryDirectory() as tmp:
     ok(daten['profile']['exit_type'] == 'Normal',
        'Profil gilt als sauber beendet (kein "Crashed")')
     ok(daten['eigenes'] == 'bleibt', 'übrige Einstellungen bleiben erhalten')
+
+# ── Mauszeiger: Klick am X-Server ausloesen ────────────────────────────────
+with tempfile.TemporaryDirectory() as _d:
+    _marke = os.path.join(_d, 'gerufen')
+    _helfer = os.path.join(_d, 'helfer.py')
+    with open(_helfer, 'w', encoding='utf-8') as _f:
+        _f.write('open(%r, "w", encoding="utf-8").write("1")\n' % _marke)
+    ok(router.zeiger_klick(python=sys.executable, helfer=_helfer, umgebung={}),
+       'zeiger_klick() ruft den Helfer am X-Server auf')
+    ok(os.path.exists(_marke), 'der Helfer wurde wirklich gestartet')
+    ok(os.path.exists(_marke) and os.path.getsize(_marke) == 1,
+       'der Helfer lief genau einmal')
+    ok(router.zeiger_klick(python=sys.executable,
+                           helfer=os.path.join(_d, 'gibtsnicht.py'),
+                           umgebung={}) is False,
+       'ohne Helfer passiert nichts (kein Fehler)')
+    ok(router.zeiger_klick(python='/gibtsnicht/python', helfer=_helfer,
+                           umgebung={}) is False,
+       'ohne Python passiert nichts (kein Fehler)')
+    ok(router.zeiger_klick(python=sys.executable, helfer=_helfer, umgebung={})
+       and os.environ.get('DISPLAY') is None,
+       'der Helfer bekommt DISPLAY/XAUTHORITY gesetzt, ohne die Umgebung zu aendern')
+
 
 print('OK – %d Prüfungen bestanden' % len(checks))
 for passed, msg in checks:

@@ -10,6 +10,8 @@ Nicht installierte (und damit nicht lizenzierte) Tools werden nie ausgeliefert.
 import glob
 import json
 import shutil
+import subprocess
+import sys
 import os
 from models import db, KioskScreen, KioskScreenTool
 from usb_source import get_setting, set_setting
@@ -441,3 +443,44 @@ def display_overview():
         'known': [{'id': t, 'label': tools.label(t), 'dwell': tools.default_dwell(t),
                    'installed': tools.is_installed(t)} for t in tools.tool_ids()],
     }
+
+
+# ── Mauszeiger: Klick am X-Server ausloesen ─────────────────────────────────
+
+ZEIGER_HELFER = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             'tools', 'kiosk-cursor-x11.py')
+
+
+def zeiger_python():
+    """Python mit python-xlib - install.sh legt es in einem eigenen venv an."""
+    for kandidat in (os.environ.get('LHTPI_ZEIGER_PYTHON'),
+                     '/home/pi/lhtpi-cursor/venv/bin/python',
+                     sys.executable):
+        if kandidat and os.path.exists(kandidat):
+            return kandidat
+    return None
+
+
+def zeiger_klick(python=None, helfer=None, umgebung=None, timeout=5):
+    """Loest einen Klick am X-Server aus, damit Chromium neu zeichnet.
+
+    Chromium zeichnet den Mauszeiger erst beim naechsten Mausereignis neu - das
+    per CSS gesetzte Ausblenden wird sonst nicht gezeichnet und der Zeiger
+    bleibt sichtbar, bis jemand klickt. Liefert True, wenn der Aufruf lief.
+    """
+    python = python or zeiger_python()
+    helfer = helfer or ZEIGER_HELFER
+    if not python or not os.path.exists(helfer):
+        return False
+    umgebung = dict(umgebung if umgebung is not None else os.environ)
+    umgebung.setdefault('DISPLAY', os.environ.get('LHTPI_DISPLAY', ':0'))
+    umgebung.setdefault('XAUTHORITY',
+                        os.environ.get('LHTPI_XAUTHORITY', '/home/pi/.Xauthority'))
+    try:
+        ergebnis = subprocess.run([python, helfer], env=umgebung,
+                                  timeout=timeout, check=False,
+                                  stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL)
+    except Exception:
+        return False
+    return ergebnis.returncode == 0

@@ -812,9 +812,11 @@ PROFIL_EOF
     fi
     chown "${PI_USER}:${PI_GROUP}" "${profil}" 2>/dev/null || true
 
-    # Zeiger-Wache: blendet den Mauszeiger am X-Server aus, wenn er ruht.
-    # Ueber CSS allein geht das nicht - Chromium zeichnet den Zeiger erst beim
-    # naechsten Mausereignis neu, er bliebe also bis zum Klick sichtbar.
+    # Zeiger-Helfer: loest am X-Server einen Klick aus, damit Chromium den
+    # Mauszeiger neu zeichnet (die Anzeige ruft ihn ueber POST /zeiger/klick
+    # auf, siehe tools/kiosk-cursor-x11.py). Ueber CSS allein geht das nicht:
+    # Chromium zeichnet den Zeiger erst beim naechsten Mausereignis neu, er
+    # bliebe also bis zum Klick sichtbar.
     # Bewusst nicht unclutter: das blendet den Zeiger dauerhaft aus.
     local zeiger_dir="${PI_HOME}/lhtpi-cursor"
     if [ ! -x "${zeiger_dir}/venv/bin/python" ]; then
@@ -823,19 +825,18 @@ PROFIL_EOF
     fi
     if [ -x "${zeiger_dir}/venv/bin/python" ] \
        && "${zeiger_dir}/venv/bin/python" -c 'import Xlib' >/dev/null 2>&1; then
-        ok "Zeiger-Wache bereit (Zeiger verschwindet bei Ruhe)"
+        ok "Zeiger-Helfer bereit (tools/kiosk-cursor-x11.py)"
     else
-        echo "  ! Zeiger-Wache nicht eingerichtet - der Zeiger bleibt sichtbar"
+        echo "  ! Zeiger-Helfer nicht eingerichtet - der Zeiger bleibt sichtbar"
     fi
     chown -R "${PI_USER}:${PI_GROUP}" "${zeiger_dir}" 2>/dev/null || true
 
     local xinitrc="${PI_HOME}/.xinitrc"
     if ! grep -q 'openbox-session' "${xinitrc}" 2>/dev/null \
-       || ! grep -q 'kiosk-cursor-x11' "${xinitrc}" 2>/dev/null; then
-        printf '# LHTPi-Kiosk: X-Sitzung ohne Desktop (kein Panel, keine Anmeldung)\n# Mauszeiger ausblenden, wenn er ruht (CSS allein greift in Chromium nicht)\nif [ -x "%s" ]; then\n    setsid "%s" "%s/tools/kiosk-cursor-x11.py" --ruhe 4 >/dev/null 2>&1 &\nfi\nexec openbox-session\n' \
-            "${zeiger_dir}/venv/bin/python" "${zeiger_dir}/venv/bin/python" "${PROJECT_DIR}" \
+       || grep -q 'kiosk-cursor-x11' "${xinitrc}" 2>/dev/null; then
+        printf '# LHTPi-Kiosk: X-Sitzung ohne Desktop (kein Panel, keine Anmeldung)\nexec openbox-session\n' \
             > "${xinitrc}"
-        ok "X-Sitzung eingerichtet (openbox, ohne Anmeldung, Zeiger-Wache)"
+        ok "X-Sitzung eingerichtet (openbox, ohne Anmeldung)"
     else
         ok "X-Sitzung eingerichtet (war schon vorhanden)"
     fi
