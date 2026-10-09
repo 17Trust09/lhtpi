@@ -15,9 +15,12 @@
  */
 (function () {
   var q = new URLSearchParams(location.search).get('cursor_idle');
-  var MS = (parseInt(q || document.documentElement.dataset.cursorIdle || '3', 10) || 3) * 1000;
+  var n = parseInt(q || document.documentElement.dataset.cursorIdle || '3', 10);
+  /* 0 = Zeiger nie ausblenden (Wartungsbetrieb der Anzeige) */
+  var MS = (isNaN(n) ? 3 : n) * 1000;
   var timer;
   function hide() {
+    if (!MS) return;
     if (document.getElementById('_kh')) return;
     var s = document.createElement('style');
     s.id = '_kh';
@@ -28,10 +31,10 @@
     var s = document.getElementById('_kh');
     if (s) s.remove();
     clearTimeout(timer);
-    timer = setTimeout(hide, MS);
+    if (MS) timer = setTimeout(hide, MS);
   }
   ['mousemove', 'mousedown', 'wheel', 'keydown', 'touchstart'].forEach(function (e) {
     document.addEventListener(e, show, true);
   });
-  timer = setTimeout(hide, MS);
+  if (MS) timer = setTimeout(hide, MS);
 })();

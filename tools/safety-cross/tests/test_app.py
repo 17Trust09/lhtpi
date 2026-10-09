@@ -128,5 +128,10 @@ def test_logout_protects_admin():
     client.post("/login", data={"password": "admin"})
     assert client.get("/admin").status_code == 200
     client.get("/logout")
-    # Nach dem Logout ist der Admin-Bereich wieder geschützt (Redirect zum Login)
-    assert client.get("/admin").status_code == 302
+    # Aus dem Netzwerk bleibt der Admin-Bereich geschützt (Redirect zum Login)
+    assert client.get("/admin", environ_base={"REMOTE_ADDR": "192.168.178.50"}
+                      ).status_code == 302
+    # Vom Geraet selbst (Kiosk) gilt der Zugriff als angemeldet - dort gibt es
+    # keine Tastatur fuer eine Anmeldung.
+    assert client.get("/admin", environ_base={"REMOTE_ADDR": "127.0.0.1"}
+                      ).status_code == 200

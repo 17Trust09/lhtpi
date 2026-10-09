@@ -101,8 +101,17 @@ ok([t['tool'] for t in cfg['tools']] == ['slideshow', 'safetycross'],
    'Reihenfolge nach Sortierwert')
 ok([t['dwell'] for t in cfg['tools']] == [300, 120],
    'Anzeigedauern wie gewünscht: 5 min und 2 min')
-ok(all('cursor_idle=5' in t['url'] for t in cfg['tools']),
+ok(bool(cfg['tools']) and all('cursor_idle=' in t['url'] for t in cfg['tools']),
    'Cursor-Zeit wird an die eingebetteten Tools mitgegeben')
+with app.app_context():
+    router.set_wartung_knopf(0)
+    _url_ohne = router.tool_url('safetycross')
+    router.set_wartung_knopf(1)
+    _url_mit = router.tool_url('safetycross')
+ok('cursor_idle=5' in _url_ohne,
+   'ohne Wartung bekommen die Tools die eingestellte Cursor-Zeit (5 s)')
+ok('cursor_idle=0' in _url_mit,
+   'im Wartungsbetrieb bleibt der Zeiger in den Tools sichtbar (cursor_idle=0)')
 ok(cfg['cursor_idle'] == 5, 'Cursor-Idle gespeichert')
 ok(cfg['reload_minutes'] == 15, 'Reload-Zeit gespeichert')
 
@@ -513,7 +522,10 @@ ok('id="wartung"' in seite, 'Anzeige-Seite hat den Wartungs-Knopf')
 ok('⚙ Anzeigen' in seite and '/display' in seite,
    'er führt zur Anzeigen-Seite (Verwaltung)')
 ok('mousemove' in seite, 'er erscheint bei Mausbewegung')
-ok('5000' in seite, 'und verschwindet nach einigen Sekunden von selbst')
+ok('im Wartungsbetrieb dauerhaft sichtbar' in seite,
+   'im Wartungsbetrieb bleibt er dauerhaft sichtbar '
+   '(ueber bedienbaren Tools gibt es keine Mausbewegung mehr)')
+ok('knopf.hidden = false' in seite, 'und wird beim Laden eingeblendet')
 ok('"wartung_knopf": true' in seite.replace('True', 'true'),
    'der Router liefert die Einstellung mit')
 
@@ -533,10 +545,16 @@ ok('Bedienung' in mit_login, 'der Schalter erklärt beide Wirkungen')
 
 # Tools bedienbar: Reiter "Admin" im Safety Cross anklickbar
 seite_bedienbar = anon.get('/screen/1').get_data(as_text=True)
-ok('.frame.on{pointer-events:auto}' not in seite_bedienbar,
-   'eingebettete Tools bleiben reine Anzeige (Knopf bleibt erreichbar)')
+ok('pointer-events:none}' in seite_bedienbar,
+   'Grundregel bleibt: ohne Wartung sind die eingebetteten Tools reine Anzeige'
+   ' (sonst waere der Wartungs-Knopf nicht erreichbar)')
 ok('#einst{pointer-events:auto}' in seite_bedienbar,
    'die Verwaltung im eigenen Rahmen nimmt Eingaben an')
+ok('.frame.on{pointer-events:auto}' in seite_bedienbar,
+   'im Wartungsbetrieb nehmen die Tools Klicks an (z. B. Reiter "Admin")')
+ok('isNaN(n) ? 3 : n' in open(os.path.join(BASE, 'tools', 'kiosk-cursor.js'),
+                              encoding='utf-8').read(),
+   'die Tools kennen cursor_idle=0 als "Zeiger nicht ausblenden"')
 ok("fetch('/zeiger/klick'" in seite_bedienbar,
    'die Anzeige loest beim Ausblenden selbst einen Klick aus (sonst bliebe der Zeiger bis zum Klick sichtbar)')
 ok('window.__lhtpiEigenerKlick' in seite_bedienbar,
