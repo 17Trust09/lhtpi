@@ -111,6 +111,9 @@ def belegung_speichern():
                                                      router.cursor_idle_seconds()))
     router.set_iframe_reload_minutes(request.form.get('reload_minutes',
                                                        router.iframe_reload_minutes()))
+    # Nur ändern, wenn das Feld dabei ist (ältere Seiten senden es nicht)
+    if request.form.get('wartung_knopf') is not None:
+        router.set_wartung_knopf(request.form.get('wartung_knopf') == '1')
 
 
 @app.route('/display/save', methods=['POST'])

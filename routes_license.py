@@ -86,5 +86,7 @@ def setup_abschluss():
 
     import kiosk_router as router
     router.set_screen_count(router.screen_count())   # Dateien für die Anzeige
+    if request.form.get('wartung_knopf') is not None:
+        router.set_wartung_knopf(request.form.get('wartung_knopf') == '1')
     flash('Einrichtung abgeschlossen – die Anzeige startet jetzt automatisch.')
     return redirect(url_for('display'))

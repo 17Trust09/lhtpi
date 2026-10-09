@@ -14,6 +14,10 @@
   #hint{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
     color:#8a93a3;font-family:Inter,Arial,sans-serif;font-size:2rem;text-align:center;
     line-height:1.5}
+  #wartung{position:fixed;left:.8rem;bottom:.6rem;z-index:20}
+  #wartung a{display:inline-block;padding:.45rem .95rem;border-radius:999px;
+    background:rgba(5,22,77,.85);color:#fff;text-decoration:none;
+    font:600 .95rem Inter,Arial,sans-serif;border:1px solid rgba(255,255,255,.28)}
   #badge{position:fixed;right:.8rem;bottom:.6rem;z-index:10;padding:.2rem .6rem;
     border-radius:999px;background:rgba(255,255,255,.07);color:rgba(255,255,255,.45);
     font:600 .8rem Inter,Arial,sans-serif;letter-spacing:.03em}
@@ -23,9 +27,26 @@
 <div id="stage"></div>
 <div id="hint" hidden></div>
 <div id="badge" hidden></div>
+{% if cfg.wartung_knopf %}<div id="wartung" hidden><a href="{{ url_for('display') }}">⚙ Anzeigen</a></div>{% endif %}
 
 <script id="cfg" type="application/json">{{ cfg|tojson }}</script>
 <script>
+/* ── Wartungs-Knopf: erscheint bei Mausbewegung, verschwindet von selbst ─── */
+(function () {
+  var knopf = document.getElementById('wartung');
+  var cfgW = JSON.parse(document.getElementById('cfg').textContent);
+  if (!knopf || !cfgW.wartung_knopf) return;
+  var timer;
+  function zeigen() {
+    knopf.hidden = false;
+    clearTimeout(timer);
+    timer = setTimeout(function () { knopf.hidden = true; }, 5000);
+  }
+  ['mousemove', 'mousedown', 'wheel', 'touchstart'].forEach(function (e) {
+    document.addEventListener(e, zeigen, true);
+  });
+})();
+
 /* ── Mauszeiger: nach Inaktivität aus, bei Bewegung wieder da ─────────────── */
 (function () {
   var MS = {{ (cfg.cursor_idle or 3) * 1000 }}, timer;

@@ -16,6 +16,7 @@ SETTING_SCREEN_COUNT = 'kiosk_screen_count'
 SETTING_CURSOR_IDLE = 'kiosk_cursor_idle_seconds'
 SETTING_IFRAME_RELOAD = 'kiosk_iframe_reload_minutes'
 SETTING_LAYOUT_TOUCHED = 'kiosk_layout_touched'   # Admin hat die Belegung gespeichert
+SETTING_WARTUNG_KNOPF = 'kiosk_wartung_knopf'    # Wartungs-Knopf in der Ecke
 
 DEFAULT_SCREEN_COUNT = 1
 DEFAULT_CURSOR_IDLE = 3          # Sekunden ohne Mausbewegung -> Cursor aus
@@ -47,6 +48,15 @@ def cursor_idle_seconds():
 
 def set_cursor_idle_seconds(value):
     set_setting(SETTING_CURSOR_IDLE, str(_as_int(value, DEFAULT_CURSOR_IDLE, 1, 120)))
+
+
+def wartung_knopf():
+    """Darf am Bildschirm ein Wartungs-Knopf erscheinen (Mausbewegung)?"""
+    return str(get_setting(SETTING_WARTUNG_KNOPF, '1')).strip() != '0'
+
+
+def set_wartung_knopf(value):
+    set_setting(SETTING_WARTUNG_KNOPF, '1' if value else '0')
 
 
 def iframe_reload_minutes():
@@ -314,6 +324,7 @@ def screen_config(idx, with_probe=True):
         'all_tools': entries,       # inkl. toter Tools (Diagnose im Admin)
         'cursor_idle': cursor_idle_seconds(),
         'reload_minutes': iframe_reload_minutes(),
+        'wartung_knopf': wartung_knopf(),
     }
 
 
@@ -366,6 +377,7 @@ def display_overview():
         'max_screens': MAX_SCREENS,
         'cursor_idle': cursor_idle_seconds(),
         'reload_minutes': iframe_reload_minutes(),
+        'wartung_knopf': wartung_knopf(),
         'installed': tools.installed_tools(),
         'labels': {t: tools.label(t) for t in tools.tool_ids()},
         'admin_urls': {t: tools.admin_url(t) for t in tools.tool_ids()},

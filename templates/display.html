@@ -141,6 +141,16 @@
           <input type="number" name="cursor_idle" min="1" max="120" value="{{ o.cursor_idle }}">
           <small>Bewegung zeigt ihn sofort wieder</small>
         </label>
+        <label class="field">Wartungs-Knopf am Bildschirm
+          <select name="wartung_knopf">
+            <option value="1" {% if o.wartung_knopf %}selected{% endif %}>an – erscheint bei Mausbewegung</option>
+            <option value="0" {% if not o.wartung_knopf %}selected{% endif %}>aus – Anzeige bleibt unbedienbar</option>
+          </select>
+          <span class="hint">Öffnet in der Ecke „Anzeigen" – auch bei Folien und Terminen.</span>
+        </label>
+      </div>
+
+      <div class="row">
         <label class="field">Tools neu laden nach (min)
           <input type="number" name="reload_minutes" min="1" max="240" value="{{ o.reload_minutes }}">
           <small>beim Wechsel auf ein älteres Tool</small>
@@ -231,6 +241,9 @@
 
     <div class="actions">
       <button type="submit" class="btn save">Speichern</button>
+      {% if eingerichtet %}
+      <a class="btn ghost" href="{{ url_for('screen', idx=1) }}">Zurück zur Anzeige</a>
+      {% endif %}
       {% if not eingerichtet %}
       <button type="submit" class="btn start"
               formaction="{{ url_for('setup_abschluss') }}">Einrichtung abschließen

@@ -501,6 +501,35 @@ ok('localhost:8001/termine' in seite and 'localhost:8000/' in seite,
 ok('Reiter' in seite or 'Anzeige' in seite,
    'mit Hinweis, wie man zurückkommt')
 
+print('\n9e) Wartungs-Knopf in der Ecke (auch bei Folien und Terminen)')
+
+with app.app_context():
+    router.save_screen(1, name='Bildschirm 1', hdmi='HDMI-1', enabled=True, entries=[
+        {'tool': 'slideshow', 'enabled': True, 'dwell': 60, 'sort': 0}])
+seite = anon.get('/screen/1').get_data(as_text=True)
+ok('id="wartung"' in seite, 'Anzeige-Seite hat den Wartungs-Knopf')
+ok('⚙ Anzeigen' in seite and '/display' in seite,
+   'er führt zur Anzeigen-Seite (Verwaltung)')
+ok('mousemove' in seite, 'er erscheint bei Mausbewegung')
+ok('5000' in seite, 'und verschwindet nach einigen Sekunden von selbst')
+ok('"wartung_knopf": true' in seite.replace('True', 'true'),
+   'der Router liefert die Einstellung mit')
+
+# Ausschalten wirkt sofort
+with app.app_context():
+    router.set_wartung_knopf(False)
+seite_aus = anon.get('/screen/1').get_data(as_text=True)
+ok('id="wartung"' not in seite_aus,
+   'ausgeschaltet erscheint kein Wartungs-Knopf am Bildschirm')
+with app.app_context():
+    router.set_wartung_knopf(True)
+
+# Schalter auf der Anzeigen-Seite
+mit_login = client.get('/display').get_data(as_text=True)
+ok('name="wartung_knopf"' in mit_login, 'Anzeigen-Seite hat den Schalter')
+ok('Zurück zur Anzeige' in mit_login or not router.ist_eingerichtet(),
+   'und einen Weg zurück zur laufenden Anzeige')
+
 print('OK – %d Prüfungen bestanden' % len(checks))
 for passed, msg in checks:
     print('  ✓', msg)
