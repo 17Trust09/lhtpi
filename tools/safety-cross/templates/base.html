@@ -39,6 +39,16 @@
   ['mousemove', 'mousedown', 'wheel', 'keydown', 'touchstart'].forEach(function (e) {
     document.addEventListener(e, show, true);
   });
+  /* Der Kiosk-Rahmen erfaehrt nichts von Bewegungen im Tool, wenn der Rahmen
+     Eingaben annimmt (Wartungsbetrieb). Deshalb melden wir sie ihm - darauf
+     erscheint der Wartungs-Knopf. */
+  try {
+    if (window.parent && window.parent !== window) {
+      document.addEventListener('mousemove', function () {
+        window.parent.postMessage({ lhtpi: 'maus' }, '*');
+      }, true);
+    }
+  } catch (e) {}
   if (MS) timer = setTimeout(hide, MS);
 })();
 </script>

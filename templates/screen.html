@@ -28,16 +28,14 @@
     color:#8a93a3;font-family:Inter,Arial,sans-serif;font-size:2rem;text-align:center;
     line-height:1.5}
   {% if cfg.wartung_knopf %}
-  /* Wartungsbetrieb: unten bleibt eine Leiste frei - dort sitzt der Knopf.
-     Ueber einem bedienbaren Tool-Rahmen (pointer-events:auto) wuerde der
-     Rahmen den Knopf sonst verdecken. */
-  #stage{bottom:3.2rem}
-  #wartung{position:fixed;left:0;right:0;bottom:0;height:3.2rem;z-index:2147483647;
-    display:flex;align-items:center;gap:.9rem;padding:0 .9rem;
-    background:#05081f;border-top:1px solid rgba(255,255,255,.12);
-    font:600 .9rem Inter,Arial,sans-serif}
-  #wartung::after{content:"Wartungsbetrieb – Tools bedienbar";
-    color:rgba(255,255,255,.45);letter-spacing:.02em}
+  /* Wartungsbetrieb: die eingebetteten Tools nehmen Eingaben an. Nur so sind
+     ihre eigenen Seiten bedienbar - z. B. der Reiter "Admin" im Safety Cross.
+     Der Knopf schwebt darueber und erscheint beim Laden und bei Mausbewegung
+     im Tool (das Tool meldet sie per postMessage). Kein Balken, die Anzeige
+     bleibt im Vollbild. */
+  .frame.on{pointer-events:auto}
+  #wartung{position:fixed;left:.8rem;bottom:.6rem;z-index:2147483647;
+    transform:translateZ(0);will-change:transform}
   {% endif %}
   #wartung a{display:inline-block;padding:.45rem .95rem;border-radius:999px;
     background:rgba(5,22,77,.85);color:#fff;text-decoration:none;
@@ -95,7 +93,20 @@
   var knopf = document.getElementById('wartung');
   var cfgW = JSON.parse(document.getElementById('cfg').textContent);
   if (!knopf || !cfgW.wartung_knopf) return;
-  knopf.hidden = false;
+  var timer = null;
+  function zeigen() {
+    knopf.hidden = false;
+    clearTimeout(timer);
+    timer = setTimeout(function () { knopf.hidden = true; }, 6000);
+  }
+  /* Das Tool meldet jede Mausbewegung: ueber einem bedienbaren Rahmen bekommt
+     diese Seite selbst keine Bewegung mehr mit. Der Knopf kommt dann zurueck.
+     (Kein Origin-Vergleich - die Tools laufen auf eigenen Ports.) */
+  window.addEventListener('message', function (e) {
+    if (e.data && e.data.lhtpi === 'maus') zeigen();
+  });
+  knopf.hidden = false;                    /* beim Laden kurz sichtbar */
+  timer = setTimeout(function () { knopf.hidden = true; }, 20000);
 })();
 
 /* ── Mauszeiger: nach Inaktivität aus, bei Bewegung wieder da ─────────────── */

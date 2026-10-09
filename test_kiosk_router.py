@@ -524,10 +524,15 @@ ok('⚙ Anzeigen' in seite and '/display' in seite,
 ok('mousemove' in seite, 'er erscheint bei Mausbewegung')
 ok('<div id="wartung" hidden>' not in seite,
    'der Knopf wird sichtbar ausgeliefert (auch ohne Javascript)')
-ok(seite.count('knopf.hidden = false') >= 2,
+ok(seite.count('knopf.hidden = false') >= 3,
    'der Knopf kommt nach dem Schliessen der Verwaltung wieder')
-ok('#stage{bottom:3.2rem}' in seite,
-   'im Wartungsbetrieb bleibt unten eine Leiste frei (Rahmen verdeckt ihn nicht)')
+ok('bottom:3.2rem' not in seite,
+   'kein Wartungsbalken - die Anzeige bleibt im Vollbild')
+ok("e.data.lhtpi === 'maus'" in seite,
+   'der Knopf kommt bei Mausbewegung im Tool zurueck (postMessage)')
+ok('postMessage' in open(os.path.join(BASE, 'tools', 'kiosk-cursor.js'),
+                          encoding='utf-8').read(),
+   'die Tools melden ihre Mausbewegung an die Anzeige')
 ok('im Wartungsbetrieb dauerhaft sichtbar' in seite,
    'im Wartungsbetrieb bleibt er dauerhaft sichtbar '
    '(ueber bedienbaren Tools gibt es keine Mausbewegung mehr)')
