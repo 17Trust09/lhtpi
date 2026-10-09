@@ -427,7 +427,7 @@ fi
 SUDOERS_DATEI=/etc/sudoers.d/020_lhtpi-kiosk
 SUDO_TMP=$(mktemp)
 cat >"${SUDO_TMP}" <<SUDOEOF
-${PI_USER} ALL=(root) NOPASSWD: /sbin/reboot, /sbin/poweroff, /usr/sbin/reboot, /usr/sbin/poweroff
+${PI_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /sbin/reboot, /sbin/poweroff
 SUDOEOF
 if visudo -c -f "${SUDO_TMP}" >/dev/null 2>&1; then
     install -m 0440 -o root -g root "${SUDO_TMP}" "${SUDOERS_DATEI}"

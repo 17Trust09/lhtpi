@@ -339,28 +339,45 @@ SYSTEM_DRYRUN = False       # Tests koennen das auf True setzen
 
 
 def systembefehl(ziel):
-    """Neustart oder Herunterfahren ausloesen (laeuft im Hintergrund).
+    """Neustart oder Herunterfahren ausloesen.
 
     ``ziel`` ist ``reboot`` oder ``poweroff``. Wird nur vom Geraet selbst
-    aufgerufen. Passwortloses sudo ist auf genau diese Befehle beschraenkt
-    (/etc/sudoers.d/020_lhtpi-kiosk, legt install.sh an); klappt das nicht,
-    wird ersatzweise systemctl versucht. Die Antwort geht vorher raus, der
-    Befehl laeuft eine Sekunde spaeter.
+    aufgerufen. Ueber sudo sind genau diese beiden Aufrufe freigegeben
+    (/etc/sudoers.d/020_lhtpi-kiosk, legt install.sh an).
+
+    Achtung: ``/sbin/reboot`` ist ein Symlink auf ``systemctl``. sudo prueft
+    den aufgeloesten Pfad, ein Eintrag nur auf ``/sbin/reboot`` greift also
+    nicht - der erste Versuch geht deshalb ueber ``systemctl`` mit
+    Unterbefehl. Der Rueckgabewert sagt, ob es geklappt hat; die Anzeige zeigt
+    das Ergebnis an.
     """
     if ziel not in ('reboot', 'poweroff'):
         return False
     if SYSTEM_DRYRUN:
         return True
-    befehl = ('sleep 1; '
-              'sudo -n /sbin/{z} >>/tmp/lhtpi-system.log 2>&1 || '
-              '/usr/bin/systemctl {z} >>/tmp/lhtpi-system.log 2>&1').format(z=ziel)
+    sudo = shutil.which('sudo') or '/usr/bin/sudo'
+    systemctl = shutil.which('systemctl') or '/usr/bin/systemctl'
+    versuche = ([sudo, '-n', systemctl, ziel],
+                [sudo, '-n', '/sbin/' + ziel])
+    fehlerliste = []
+    for befehl in versuche:
+        try:
+            lauf = subprocess.run(befehl, stdin=subprocess.DEVNULL,
+                                  stdout=subprocess.PIPE,
+                                  stderr=subprocess.STDOUT, timeout=20)
+        except (OSError, subprocess.SubprocessError) as fehler:
+            fehlerliste.append('%s: %s' % (' '.join(befehl), fehler))
+            continue
+        if lauf.returncode == 0:
+            return True
+        fehlerliste.append('%s: %s' % (' '.join(befehl),
+                                       lauf.stdout.decode('utf-8', 'replace').strip()))
     try:
-        subprocess.Popen(['/bin/sh', '-c', befehl], stdin=subprocess.DEVNULL,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                         start_new_session=True)
-    except (OSError, subprocess.SubprocessError):
-        return False
-    return True
+        with open('/tmp/lhtpi-system.log', 'a') as datei:
+            datei.write('\n'.join(fehlerliste) + '\n')
+    except OSError:
+        pass
+    return False
 
 
 def tool_url(tool, cursor_idle=None):

@@ -105,7 +105,23 @@
         }
         b.textContent = 'läuft …';                 /* zweiter Druck: ausführen */
         b.disabled = true;
-        try { fetch(b.dataset.ziel, { method: 'POST' }); } catch (err) {}
+        /* Rückmeldung anzeigen - sonst steht hier ewig "läuft …" */
+        var zuruecksetzen = function () {
+          b.dataset.bereit = '';
+          b.disabled = false;
+          b.textContent = b.dataset.ruhe;
+        };
+        b.dataset.bereit = '';
+        fetch(b.dataset.ziel, { method: 'POST' }).then(function (r) {
+          if (r.ok) { b.textContent = 'gleich …'; return; }
+          b.textContent = 'ging nicht';
+          clearTimeout(zurueck);
+          zurueck = setTimeout(zuruecksetzen, 5000);
+        }).catch(function () {
+          b.textContent = 'ging nicht';
+          clearTimeout(zurueck);
+          zurueck = setTimeout(zuruecksetzen, 5000);
+        });
       });
     })(sysknoepfe[si]);
   }
