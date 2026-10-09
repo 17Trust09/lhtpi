@@ -521,6 +521,16 @@ seite = anon.get('/screen/1').get_data(as_text=True)
 ok('id="wartung"' in seite, 'Anzeige-Seite hat den Wartungs-Knopf')
 ok('⚙ Anzeigen' in seite and '/display' in seite,
    'er führt zur Anzeigen-Seite (Verwaltung)')
+ok('/system/neustart' in [r.rule for r in app.url_map.iter_rules()],
+   'Route fuer Neustart vorhanden')
+ok('/system/herunterfahren' in [r.rule for r in app.url_map.iter_rules()],
+   'Route fuer Herunterfahren vorhanden')
+ok(anon.post('/system/neustart',
+             environ_base={'REMOTE_ADDR': '192.168.178.50'}).status_code == 403,
+   'Neustart nur vom Geraet (Netzwerk bekommt 403)')
+ok(anon.post('/system/herunterfahren',
+             environ_base={'REMOTE_ADDR': '192.168.178.50'}).status_code == 403,
+   'Herunterfahren nur vom Geraet (Netzwerk bekommt 403)')
 ok('mousemove' in seite, 'er erscheint bei Mausbewegung')
 ok('<div id="wartung" hidden>' not in seite,
    'der Knopf wird sichtbar ausgeliefert (auch ohne Javascript)')
@@ -556,6 +566,10 @@ ok('Bedienung' in mit_login, 'der Schalter erklärt beide Wirkungen')
 
 # Tools bedienbar: Reiter "Admin" im Safety Cross anklickbar
 seite_bedienbar = anon.get('/screen/1').get_data(as_text=True)
+ok('data-ziel="/system/neustart"' in seite_bedienbar,
+   'Neustart-Knopf an der Anzeige')
+ok('data-ziel="/system/herunterfahren"' in seite_bedienbar,
+   'Herunterfahren-Knopf an der Anzeige')
 ok('pointer-events:none}' in seite_bedienbar,
    'Grundregel bleibt: ohne Wartung sind die eingebetteten Tools reine Anzeige'
    ' (sonst waere der Wartungs-Knopf nicht erreichbar)')

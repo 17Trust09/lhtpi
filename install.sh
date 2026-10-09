@@ -422,6 +422,21 @@ if [ ! -f "${INSTALLED}" ]; then
     exit 0
 fi
 
+# Gerät: Neustart und Herunterfahren vom Bildschirm erlauben.
+# Nur genau diese zwei Befehle, ohne Passwort - alles andere bleibt gesperrt.
+SUDOERS_DATEI=/etc/sudoers.d/020_lhtpi-kiosk
+SUDO_TMP=$(mktemp)
+cat >"${SUDO_TMP}" <<SUDOEOF
+${PI_USER} ALL=(root) NOPASSWD: /sbin/reboot, /sbin/poweroff, /usr/sbin/reboot, /usr/sbin/poweroff
+SUDOEOF
+if visudo -c -f "${SUDO_TMP}" >/dev/null 2>&1; then
+    install -m 0440 -o root -g root "${SUDO_TMP}" "${SUDOERS_DATEI}"
+    log "  Neustart/Herunterfahren freigegeben (${SUDOERS_DATEI})"
+else
+    log "  WARNUNG: sudoers-Datei nicht gesetzt (Prüfung fehlgeschlagen)"
+fi
+rm -f "${SUDO_TMP}"
+
 systemctl stop lhtpi-setup.service 2>/dev/null || true
 systemctl start kiosk-screen1.service 2>/dev/null || true
 if [ "$n" -ge 2 ]; then

@@ -160,3 +160,26 @@ def zeiger_klick():
         return ('', 403)
     router.zeiger_klick()
     return ('', 204)
+
+
+# ── Gerät: Neustart und Herunterfahren ──────────────────────────────────────
+
+def _systembefehl(ziel):
+    """Nur vom Gerät selbst - dann Befehl auslösen."""
+    if not _ist_lokal():
+        return ('', 403)
+    if not router.systembefehl(ziel):
+        return ('', 500)
+    return ('', 204)
+
+
+@app.route('/system/neustart', methods=['POST'])
+def system_neustart():
+    """Gerät neu starten (Knopf an der Anzeige)."""
+    return _systembefehl('reboot')
+
+
+@app.route('/system/herunterfahren', methods=['POST'])
+def system_herunterfahren():
+    """Gerät herunterfahren (Knopf an der Anzeige)."""
+    return _systembefehl('poweroff')

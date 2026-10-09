@@ -333,6 +333,36 @@ def save_screen(idx, name=None, hdmi=None, entries=None, enabled=True):
 
 # ── Konfiguration für die Anzeige ────────────────────────────────────────────
 
+# ── Gerät: Neustart / Herunterfahren ────────────────────────────────────────
+
+SYSTEM_DRYRUN = False       # Tests koennen das auf True setzen
+
+
+def systembefehl(ziel):
+    """Neustart oder Herunterfahren ausloesen (laeuft im Hintergrund).
+
+    ``ziel`` ist ``reboot`` oder ``poweroff``. Wird nur vom Geraet selbst
+    aufgerufen. Passwortloses sudo ist auf genau diese Befehle beschraenkt
+    (/etc/sudoers.d/020_lhtpi-kiosk, legt install.sh an); klappt das nicht,
+    wird ersatzweise systemctl versucht. Die Antwort geht vorher raus, der
+    Befehl laeuft eine Sekunde spaeter.
+    """
+    if ziel not in ('reboot', 'poweroff'):
+        return False
+    if SYSTEM_DRYRUN:
+        return True
+    befehl = ('sleep 1; '
+              'sudo -n /sbin/{z} >>/tmp/lhtpi-system.log 2>&1 || '
+              '/usr/bin/systemctl {z} >>/tmp/lhtpi-system.log 2>&1').format(z=ziel)
+    try:
+        subprocess.Popen(['/bin/sh', '-c', befehl], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return True
+
+
 def tool_url(tool, cursor_idle=None):
     """Tool-URL, wie sie die Anzeige einbettet (Cursor-Idle wird mitgegeben)."""
     url = tools.default_url(tool)

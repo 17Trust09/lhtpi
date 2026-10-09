@@ -35,11 +35,14 @@
      bleibt im Vollbild. */
   .frame.on{pointer-events:auto}
   #wartung{position:fixed;left:.8rem;bottom:.6rem;z-index:2147483647;
-    transform:translateZ(0);will-change:transform}
+    transform:translateZ(0);will-change:transform;display:flex;gap:.5rem}
   {% endif %}
-  #wartung a{display:inline-block;padding:.45rem .95rem;border-radius:999px;
-    background:rgba(5,22,77,.85);color:#fff;text-decoration:none;
-    font:600 .95rem Inter,Arial,sans-serif;border:1px solid rgba(255,255,255,.28)}
+  #wartung a,#wartung button{display:inline-block;padding:.45rem .95rem;
+    border-radius:999px;background:rgba(5,22,77,.85);color:#fff;
+    text-decoration:none;font:600 .95rem Inter,Arial,sans-serif;
+    border:1px solid rgba(255,255,255,.28)}
+  #wartung button{appearance:none;-webkit-appearance:none}
+  #wartung button[data-ziel]{background:rgba(74,20,26,.92)}
   #badge{position:fixed;right:.8rem;bottom:.6rem;z-index:10;padding:.2rem .6rem;
     border-radius:999px;background:rgba(255,255,255,.07);color:rgba(255,255,255,.45);
     font:600 .8rem Inter,Arial,sans-serif;letter-spacing:.03em}
@@ -51,7 +54,10 @@
 <div id="stage"></div>
 <div id="hint" hidden></div>
 <div id="badge" hidden></div>
-{% if cfg.wartung_knopf %}<div id="wartung"><a href="{{ url_for('display') }}">⚙ Anzeigen</a></div>
+{% if cfg.wartung_knopf %}<div id="wartung"><a href="{{ url_for('display') }}">⚙ Anzeigen</a>
+<button type="button" data-ziel="/system/neustart" data-ruhe="⟳ Neustart" data-frage="Wirklich neu starten?">⟳ Neustart</button>
+<button type="button" data-ziel="/system/herunterfahren" data-ruhe="⏻ Herunterfahren" data-frage="Wirklich herunterfahren?">⏻ Herunterfahren</button>
+</div>
 <iframe id="einst" src="{{ url_for('display') }}" title="Anzeigen-Einstellungen"></iframe>
 <script>
 /* „Anzeigen" oeffnet die Einstellungen IM Kiosk-Fenster. Ein echter
@@ -77,6 +83,31 @@
     for (var i = 0; i < fs.length; i++) fs[i].src = fs[i].src;   /* neu laden */
   }
   if (link) link.addEventListener('click', function (e) { e.preventDefault(); auf(); });
+  /* Neustart / Herunterfahren: erst nachfragen, dann ausfuehren. */
+  var sysknoepfe = knopf.querySelectorAll('button[data-ziel]');
+  for (var si = 0; si < sysknoepfe.length; si++) {
+    (function (b) {
+      var zurueck = null;
+      b.addEventListener('click', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (window.__lhtpiZeigenKnopf) window.__lhtpiZeigenKnopf();
+        if (b.dataset.bereit !== '1') {            /* erster Druck: fragen */
+          b.dataset.bereit = '1';
+          b.textContent = b.dataset.frage;
+          clearTimeout(zurueck);
+          zurueck = setTimeout(function () {
+            b.dataset.bereit = '';
+            b.textContent = b.dataset.ruhe;
+          }, 8000);
+          return;
+        }
+        b.textContent = 'läuft …';                 /* zweiter Druck: ausführen */
+        b.disabled = true;
+        try { fetch(b.dataset.ziel, { method: 'POST' }); } catch (err) {}
+      });
+    })(sysknoepfe[si]);
+  }
   window.addEventListener('message', function (e) {
     if (e.origin !== location.origin || !e.data) return;
     if (e.data.lhtpi === 'zurueck') zu();
@@ -105,6 +136,7 @@
   window.addEventListener('message', function (e) {
     if (e.data && e.data.lhtpi === 'maus') zeigen();
   });
+  window.__lhtpiZeigenKnopf = zeigen;      /* fuer die Systemknoepfe */
   knopf.hidden = false;                    /* beim Laden kurz sichtbar */
   timer = setTimeout(function () { knopf.hidden = true; }, 12000);
 })();
