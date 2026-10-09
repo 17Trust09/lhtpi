@@ -1,3 +1,6 @@
+import os
+_inst = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              'install.sh'), encoding='utf-8').read()
 """Prüft den Bundle-Installer (install.sh) ohne Raspberry Pi.
 
 Aufruf:  ./venv/bin/python test_install_bundle.py
@@ -493,6 +496,12 @@ ok(kiosk_skript.index('Current Session') < kiosk_skript.index('exec "$CHROMIUM"'
 ok('--hide-crash-restore-bubble' in kiosk_skript,
    'Restore-Hinweis ist zusätzlich abgeschaltet')
 
+ok('kiosk-cursor-x11.py' in _inst, 'install.sh richtet die Zeiger-Wache ein')
+ok('unclutter -idle' not in _inst and 'unclutter\\n' not in _inst,
+   'kein unclutter-Aufruf (das blendet den Zeiger dauerhaft aus)')
+ok(os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              'tools', 'kiosk-cursor-x11.py')),
+   'Helfer tools/kiosk-cursor-x11.py ist vorhanden')
 print('\n%s%d Prüfungen bestanden, %d fehlgeschlagen'
       % ('OK – ' if failed == 0 else 'FEHLER – ', passed, failed))
 sys.exit(1 if failed else 0)

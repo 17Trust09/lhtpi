@@ -812,11 +812,30 @@ PROFIL_EOF
     fi
     chown "${PI_USER}:${PI_GROUP}" "${profil}" 2>/dev/null || true
 
+    # Zeiger-Wache: blendet den Mauszeiger am X-Server aus, wenn er ruht.
+    # Ueber CSS allein geht das nicht - Chromium zeichnet den Zeiger erst beim
+    # naechsten Mausereignis neu, er bliebe also bis zum Klick sichtbar.
+    # Bewusst nicht unclutter: das blendet den Zeiger dauerhaft aus.
+    local zeiger_dir="${PI_HOME}/lhtpi-cursor"
+    if [ ! -x "${zeiger_dir}/venv/bin/python" ]; then
+        python3 -m venv "${zeiger_dir}/venv" >/dev/null 2>&1 || true
+        "${zeiger_dir}/venv/bin/pip" install -q python-xlib >/dev/null 2>&1 || true
+    fi
+    if [ -x "${zeiger_dir}/venv/bin/python" ] \
+       && "${zeiger_dir}/venv/bin/python" -c 'import Xlib' >/dev/null 2>&1; then
+        ok "Zeiger-Wache bereit (Zeiger verschwindet bei Ruhe)"
+    else
+        echo "  ! Zeiger-Wache nicht eingerichtet - der Zeiger bleibt sichtbar"
+    fi
+    chown -R "${PI_USER}:${PI_GROUP}" "${zeiger_dir}" 2>/dev/null || true
+
     local xinitrc="${PI_HOME}/.xinitrc"
-    if ! grep -q 'openbox-session' "${xinitrc}" 2>/dev/null; then
-        printf '# LHTPi-Kiosk: X-Sitzung ohne Desktop (kein Panel, keine Anmeldung)\nexec openbox-session\n' \
+    if ! grep -q 'openbox-session' "${xinitrc}" 2>/dev/null \
+       || ! grep -q 'kiosk-cursor-x11' "${xinitrc}" 2>/dev/null; then
+        printf '# LHTPi-Kiosk: X-Sitzung ohne Desktop (kein Panel, keine Anmeldung)\n# Mauszeiger ausblenden, wenn er ruht (CSS allein greift in Chromium nicht)\nif [ -x "%s" ]; then\n    setsid "%s" "%s/tools/kiosk-cursor-x11.py" --ruhe 3 >/dev/null 2>&1 &\nfi\nexec openbox-session\n' \
+            "${zeiger_dir}/venv/bin/python" "${zeiger_dir}/venv/bin/python" "${PROJECT_DIR}" \
             > "${xinitrc}"
-        ok "X-Sitzung eingerichtet (openbox, ohne Anmeldung)"
+        ok "X-Sitzung eingerichtet (openbox, ohne Anmeldung, Zeiger-Wache)"
     else
         ok "X-Sitzung eingerichtet (war schon vorhanden)"
     fi
