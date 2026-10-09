@@ -73,6 +73,17 @@ def setup_abschluss():
         flash('Einrichtung konnte nicht abgeschlossen werden (kein Schreibrecht).')
         return redirect(url_for('display'))
 
+    # Auswahl aus der Anzeigen-Seite zuerst übernehmen: die Anzeige soll mit
+    # genau dieser Belegung starten, nicht mit dem alten Stand.
+    if request.method == 'POST' and request.form.get('screen_1_present') is not None:
+        try:
+            from routes_kiosk import belegung_speichern
+            belegung_speichern()
+        except Exception as fehler:                      # noqa: BLE001
+            import traceback
+            print('Belegung konnte nicht übernommen werden: %s' % fehler)
+            traceback.print_exc()
+
     import kiosk_router as router
     router.set_screen_count(router.screen_count())   # Dateien für die Anzeige
     flash('Einrichtung abgeschlossen – die Anzeige startet jetzt automatisch.')

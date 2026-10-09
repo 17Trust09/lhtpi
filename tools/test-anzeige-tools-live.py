@@ -11,6 +11,7 @@ ihre Anzeige-Adressen ab und prüft:
 
 Aufruf:  ./venv/bin/python tools/test-anzeige-tools-live.py
 """
+import atexit
 import json
 import os
 import re
@@ -67,6 +68,21 @@ def warte(url, prozesse, sekunden=25):
         time.sleep(0.5)
     return None, 'nicht erreichbar'
 
+
+def _aufraeumen():
+    """Auch bei Fehlern alle Testdienste beenden (keine Zombies am Port)."""
+    for dienst in globals().get('dienste', []):
+        try:
+            dienst.terminate()
+            dienst.wait(timeout=10)
+        except Exception:                                  # noqa: BLE001
+            try:
+                dienst.kill()
+            except Exception:                              # noqa: BLE001
+                pass
+
+
+atexit.register(_aufraeumen)
 
 shutil.rmtree(ORDNER, ignore_errors=True)
 os.makedirs(ORDNER, exist_ok=True)
@@ -143,7 +159,12 @@ def speichere(tools_liste):
         'http://127.0.0.1:%d/display/save' % ROUTER_PORT,
         data=urllib.parse.urlencode(daten).encode(),
         headers={'Content-Type': 'application/x-www-form-urlencoded'})
-    urllib.request.urlopen(anfrage, timeout=10).read()
+    try:
+        urllib.request.urlopen(anfrage, timeout=10).read()
+    except urllib.error.HTTPError as e:
+        print('     (Speichern fehlgeschlagen: HTTP %s)\n%s'
+              % (e.code, e.read().decode('utf-8', 'replace')[:700]))
+        raise
 
 
 def router_seite(idx=1):
@@ -185,13 +206,6 @@ pruefe('/present/kiosk' in [t['url'] for t in cfg.get('tools', [])][0],
        'mit gewählten Folien zeigt die Anzeige auf die Folien-App')
 pruefe([t['tool'] for t in cfg.get('tools', [])] == ['slideshow'],
        'und auf nichts anderes')
-
-for p in dienste:
-    p.terminate()
-    try:
-        p.wait(timeout=10)
-    except subprocess.TimeoutExpired:
-        p.kill()
 
 print('\n%s' % ('ALLES GRÜN' if not fehler else 'FEHLER: ' + '; '.join(fehler)))
 sys.exit(1 if fehler else 0)

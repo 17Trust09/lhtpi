@@ -399,22 +399,48 @@ render_anzeige_steuerung() {
 # die Bildschirm-Anzahl spaeter geaendert wird.
 set -u
 
-n="$(cat /etc/lhtpi/screens 2>/dev/null || echo 1)"
+# Pfade und Wartezeiten sind überschreibbar (Tests, Werkstatt).
+INSTALLED="${LHTPI_INSTALLED:-/etc/lhtpi/installed}"
+
+n="$(cat "${LHTPI_SCREENS:-/etc/lhtpi/screens}" 2>/dev/null || echo 1)"
 case "$n" in
     2) n=2 ;;
     *) n=1 ;;
 esac
 
-systemctl stop lhtpi-setup.service 2>/dev/null || true
-
-if [ -f /etc/lhtpi/installed ]; then
-    systemctl start kiosk-screen1.service 2>/dev/null || true
-    if [ "$n" -ge 2 ]; then
-        systemctl start kiosk-screen2.service 2>/dev/null || true
-    else
-        systemctl stop kiosk-screen2.service 2>/dev/null || true
-    fi
+# Ohne abgeschlossene Einrichtung bleibt die Anzeigen-Seite stehen. Sonst
+# wäre der Bildschirm schwarz, weil kein Kiosk-Fenster übernimmt (Speichern
+# allein darf die Seite nicht wegnehmen).
+if [ ! -f "${INSTALLED}" ]; then
+    exit 0
 fi
+
+systemctl stop lhtpi-setup.service 2>/dev/null || true
+systemctl start kiosk-screen1.service 2>/dev/null || true
+if [ "$n" -ge 2 ]; then
+    systemctl start kiosk-screen2.service 2>/dev/null || true
+else
+    systemctl stop kiosk-screen2.service 2>/dev/null || true
+fi
+
+# Selbstheilung: kommt das Kiosk-Fenster nicht hoch, kommt die Anzeigen-Seite
+# zurück - der Schirm bleibt nie schwarz.
+for i in $(seq 1 "${LHTPI_STEUER_WARTE:-20}"); do
+    zustand="$(systemctl is-active kiosk-screen1.service 2>/dev/null || true)"
+    case "$zustand" in
+        active|activating|reloading) exit 0 ;;
+    esac
+    sleep 1
+done
+echo "$(date '+%F %T') - Kiosk-Fenster kam nicht hoch, versuche es erneut" >> /home/pi/anzeige-steuerung.log
+systemctl restart kiosk-screen1.service 2>/dev/null || true
+sleep "${LHTPI_STEUER_WARTE2:-8}"
+zustand="$(systemctl is-active kiosk-screen1.service 2>/dev/null || true)"
+case "$zustand" in
+    active|activating|reloading) exit 0 ;;
+esac
+echo "$(date '+%F %T') - Kiosk startet nicht - Anzeigen-Seite zurueck" >> /home/pi/anzeige-steuerung.log
+systemctl start lhtpi-setup.service 2>/dev/null || true
 STEUER_EOF
 }
 

@@ -47,6 +47,7 @@
     text-decoration:none}
   .btn.save{background:var(--green)}
   .btn.ghost{background:#EEF1F6;color:var(--navy)}
+  .btn.start{background:var(--navy);color:#fff}
   .actions{position:sticky;bottom:0;background:linear-gradient(to top,var(--bg) 60%,transparent);
     padding:1rem 0;display:flex;gap:1rem;align-items:center}
   .flash{background:#E6F4EA;border:1px solid #B7E1C1;color:#14532d;padding:.7rem 1rem;
@@ -227,7 +228,19 @@
 
     <div class="actions">
       <button type="submit" class="btn save">Speichern</button>
-      <span class="note">Änderungen greifen sofort – die Anzeige lädt sich selbst neu.</span>
+      {% if not eingerichtet %}
+      <button type="submit" class="btn start"
+              formaction="{{ url_for('setup_abschluss') }}">Einrichtung abschließen
+        und Anzeige starten</button>
+      {% endif %}
+      <span class="note">
+        {% if eingerichtet %}
+        Änderungen greifen sofort – die Anzeige lädt sich selbst neu.
+        {% else %}
+        Erst „Einrichtung abschließen und Anzeige starten" – danach übernehmen
+        die Anzeige-Fenster den Bildschirm.
+        {% endif %}
+      </span>
     </div>
   </form>
 </main>

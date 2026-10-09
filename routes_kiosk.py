@@ -78,10 +78,12 @@ def anzeige_start():
     return redirect(url_for('display'))
 
 
-@app.route('/display/save', methods=['POST'])
-@login_required
-def display_save():
-    """Bildschirm-Anzahl, Tool-Belegung, Anzeigedauern und Cursor speichern."""
+def belegung_speichern():
+    """Bildschirm-Anzahl, Tool-Belegung, Anzeigedauern und Cursor übernehmen.
+
+    Eigene Funktion, weil auch "Einrichtung abschließen" die Auswahl zuerst
+    sichern muss — sonst startet die Anzeige mit dem alten Stand.
+    """
     router.set_screen_count(request.form.get('screen_count', router.screen_count()))
 
     for idx in range(1, router.MAX_SCREENS + 1):
@@ -109,6 +111,13 @@ def display_save():
                                                      router.cursor_idle_seconds()))
     router.set_iframe_reload_minutes(request.form.get('reload_minutes',
                                                        router.iframe_reload_minutes()))
+
+
+@app.route('/display/save', methods=['POST'])
+@login_required
+def display_save():
+    """Belegung speichern (Knopf "Speichern")."""
+    belegung_speichern()
 
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return jsonify({'ok': True})

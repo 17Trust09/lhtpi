@@ -402,6 +402,71 @@ fehlt = sorted(n for n in angelegt if n.endswith('.service') and n not in liste)
 ok(not fehlt, 'jede selbst angelegte Einheit steht auf der Behalten-Liste (%s)'
    % (fehlt or 'alle'))
 
+print('\n17) Steuerung: Bildschirm bleibt nie schwarz')
+
+# Stub-systemctl: schreibt nur mit, was aufgerufen wurde
+STUB = os.path.join(LZ, 'stub'); os.makedirs(STUB, exist_ok=True)
+with open(os.path.join(STUB, 'systemctl'), 'w') as f:
+    f.write('#!/bin/bash\necho "$@" >> "$SYSTEMCTL_LOG"\n'
+            '[ "$1" = "is-active" ] && echo "${SYSTEMCTL_ZUSTAND:-active}"\n')
+os.chmod(os.path.join(STUB, 'systemctl'), 0o755)
+
+steuer_pfad = os.path.join(LZ, 'steuern.sh')
+with open(steuer_pfad, 'w') as f:
+    f.write(schritt('render_anzeige_steuerung').stdout)
+os.chmod(steuer_pfad, 0o755)
+
+MARKER_DA = os.path.join(LZ, 'installed')
+
+
+def steuere(marker_da, zustand='active'):
+    log = os.path.join(LZ, 'systemctl.log')
+    if os.path.exists(log):
+        os.remove(log)
+    if marker_da:
+        open(MARKER_DA, 'w').close()
+    elif os.path.exists(MARKER_DA):
+        os.remove(MARKER_DA)
+    env = dict(os.environ, PATH=STUB + ':' + os.environ['PATH'],
+               SYSTEMCTL_LOG=log, SYSTEMCTL_ZUSTAND=zustand,
+               LHTPI_INSTALLED=MARKER_DA, LHTPI_SCREENS=os.path.join(LZ, 'screens'),
+               LHTPI_STEUER_WARTE='1', LHTPI_STEUER_WARTE2='1')
+    subprocess.run(['bash', steuer_pfad], env=env, capture_output=True, timeout=60)
+    try:
+        with open(log) as f:
+            return f.read()
+    except OSError:
+        return ''
+
+
+with open(os.path.join(LZ, 'screens'), 'w') as f:
+    f.write('1\n')
+
+rufe = steuere(marker_da=False)
+ok('lhtpi-setup.service' not in rufe,
+   'ohne Abschluss bleibt die Anzeigen-Seite stehen (kein Schwarz)')
+ok('kiosk-screen1.service' not in rufe, 'und es wird kein Kiosk gestartet')
+
+rufe = steuere(marker_da=True)
+ok('stop lhtpi-setup.service' in rufe,
+   'nach dem Abschluss wird die Anzeigen-Seite geschlossen')
+ok('start kiosk-screen1.service' in rufe, 'und das Kiosk-Fenster gestartet')
+ok('start lhtpi-setup.service' not in rufe,
+   'die Seite wird nicht doppelt gestartet, wenn der Kiosk läuft')
+
+rufe = steuere(marker_da=True, zustand='inactive')
+ok('start lhtpi-setup.service' in rufe,
+   'kommt der Kiosk nicht hoch, kommt die Anzeigen-Seite zurück (Selbstheilung)')
+
+zwei = steuere(marker_da=True)
+with open(os.path.join(LZ, 'screens'), 'w') as f:
+    f.write('2\n')
+zwei = steuere(marker_da=True)
+ok('start kiosk-screen2.service' in zwei,
+   'bei zwei Bildschirmen startet auch das zweite Fenster')
+with open(os.path.join(LZ, 'screens'), 'w') as f:
+    f.write('1\n')
+
 print('\n%s%d Prüfungen bestanden, %d fehlgeschlagen'
       % ('OK – ' if failed == 0 else 'FEHLER – ', passed, failed))
 sys.exit(1 if failed else 0)

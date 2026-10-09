@@ -458,6 +458,36 @@ ok('safetycross' in bericht and 'localhost:8002' in bericht,
 ok(diag.headers.get('Content-Type', '').startswith('text/plain'),
    'Bericht kommt als reiner Text (leicht weiterzugeben)')
 
+print('\n9c) Abschluss übernimmt die Auswahl (Knopf unten in der Leiste)')
+
+if os.path.exists(marker):
+    os.remove(marker)
+seite = client.get('/display').get_data(as_text=True)
+ok('formaction' in seite and '/setup/abschluss' in seite,
+   'Abschluss-Knopf steht unten in der Leiste (immer sichtbar)')
+ok('Einrichtung abschließen' in seite, 'und ist beschriftet')
+
+with app.app_context():
+    router.save_screen(1, name='Bildschirm 1', hdmi='HDMI-1', enabled=True, entries=[
+        {'tool': 'slideshow', 'enabled': True, 'dwell': 60, 'sort': 0}])
+antwort = client.post('/setup/abschluss', data={
+    'screen_count': '1', 'cursor_idle': '3', 'reload_minutes': '30',
+    'screen_1_present': '1', 'name_1': 'Bildschirm 1', 'hdmi_1': 'HDMI-1',
+    'screen_1_active': '1',
+    'tool_1_safetycross_present': '1', 'tool_1_safetycross_active': '1',
+    'tool_1_safetycross_dwell': '30',
+    'tool_1_slideshow_present': '1',   # ohne _active = abgewählt (Browser sendet nichts)
+})
+ok(antwort.status_code == 302, 'Abschluss läuft durch')
+cfg = client.get('/api/screen/1').get_json()
+ok([t['tool'] for t in cfg['tools']] == ['safetycross'],
+   'die Auswahl aus dem Abschluss-Formular ist gespeichert (Safety Cross)')
+ok(os.path.exists(marker), 'und das Merkmal ist gesetzt')
+seite2 = client.get('/display').get_data(as_text=True)
+ok('Einrichtung abschließen' not in seite2,
+   'nach dem Abschluss verschwindet der Abschluss-Knopf')
+os.remove(marker)
+
 print('OK – %d Prüfungen bestanden' % len(checks))
 for passed, msg in checks:
     print('  ✓', msg)
