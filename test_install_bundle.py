@@ -299,12 +299,13 @@ ok('lhtpi-lizenz-import' in text and 'lhtpi-lizenz-import.sh' in text,
    'Dienst holt eine später gelieferte Lizenz beim Start nach')
 ok('${LICENSE_STATUS}' in text, 'Abschluss-Ausgabe nennt den Lizenzstand')
 
-print('\n12) Knopf in der Safety-Cross-Admin-Seite')
+print('\n12) Safety-Cross-Admin verweist nicht auf die Anzeigen-Seite')
 sc_admin = os.path.join(BASE, 'tools/safety-cross/templates/admin.html')
 if os.path.exists(sc_admin):
     inhalt = open(sc_admin).read()
-    ok('Anzeigen-Einstellungen öffnen' in inhalt, 'SC-Admin hat einen Anzeigen-Knopf')
-    ok(':8000/display' in inhalt, 'Knopf zeigt auf die Anzeigen-Seite')
+    ok('Anzeigen-Einstellungen öffnen' not in inhalt,
+       'SC-Admin hat keinen Anzeigen-Knopf mehr (Tim: "Anzeigen Optionen raus")')
+    ok(':8000/display' not in inhalt, 'kein Verweis auf die Anzeigen-Seite')
 else:
     ok(False, 'SC-Admin-Vorlage gefunden')
 

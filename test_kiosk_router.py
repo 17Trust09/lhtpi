@@ -495,10 +495,11 @@ with app.app_context():
     router.save_screen(1, name='Bildschirm 1', hdmi='HDMI-1', enabled=True, entries=[
         {'tool': 'safetycross', 'enabled': True, 'dwell': 30, 'sort': 0}])
 seite = client.get('/display').get_data(as_text=True)
-ok('localhost:8002/admin' in seite,
-   'Safety Cross ist aus der Anzeigen-Seite zu verwalten verlinkt')
-ok('localhost:8001/termine' in seite and 'localhost:8000/' in seite,
-   'Termine und Folien ebenso')
+ok('localhost:8002/admin' not in seite and 'class="verwalten"' not in seite,
+   'die Anzeigen-Seite verlinkt keine Tool-Verwaltung mehr '
+   '(am Geraet nicht bedienbar - Tim: "kann nicht auf admin klicken")')
+ok('Verwaltung der Tools' in seite,
+   'stattdessen steht dort, dass die Verwaltung am PC laeuft')
 ok('Reiter' in seite or 'Anzeige' in seite,
    'mit Hinweis, wie man zurückkommt')
 

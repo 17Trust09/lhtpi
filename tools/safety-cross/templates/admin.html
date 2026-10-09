@@ -23,26 +23,6 @@
   </div>
 
   <div class="card">
-    <h3><span class="ico">🖥</span> Anzeige (Bildschirme &amp; Tools)</h3>
-    <p style="color:#93a3b3;margin:0 0 12px;line-height:1.5">
-      Hier wird eingestellt, welches Tool auf welchem Bildschirm läuft und wie lange
-      jedes angezeigt wird. Wenn das Gerät noch nicht eingerichtet ist, öffnet sich
-      diese Seite beim nächsten Start von selbst.
-    </p>
-    <a class="btn" id="anzeige-link" href="http://localhost:8000/display"
-       target="_blank" rel="noopener">Anzeigen-Einstellungen öffnen</a>
-  </div>
-
-  <script>
-    // Gleiches Gerät, nur anderer Port – der Name kommt aus der Adresszeile,
-    // damit der Knopf auch aus dem Netzwerk funktioniert.
-    (function () {
-      var a = document.getElementById('anzeige-link');
-      if (a) { a.href = location.protocol + '//' + location.hostname + ':8000/display'; }
-    })();
-  </script>
-
-  <div class="card">
     <h3><span class="ico">▦</span> Abteilung &amp; Meister</h3>
     <form method="post" action="{{ url_for('admin_abteilung') }}" class="field">
       <input type="text" name="abteilung" value="{{ abteilung }}" placeholder="z. B. Hydraulik Prüffeld">
