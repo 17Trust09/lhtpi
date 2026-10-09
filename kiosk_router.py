@@ -7,6 +7,7 @@ Regeln:
 
 Nicht installierte (und damit nicht lizenzierte) Tools werden nie ausgeliefert.
 """
+import os
 from models import db, KioskScreen, KioskScreenTool
 from usb_source import get_setting, set_setting
 import kiosk_tools as tools
@@ -59,12 +60,14 @@ def set_iframe_reload_minutes(value):
 
 
 def screen_count():
-    """Anzahl der Bildschirme: Einstellung aus dem Dashboard, sonst Installer-Wert.
+    """Anzahl der Bildschirme: Einstellung, sonst Installer-Wert, sonst Erkennung.
 
     Die Hardware-Lizenz ist die Obergrenze — mehr Bildschirme als lizenziert
     werden nie ausgeliefert.
     """
-    default = tools.configured_screen_count() or DEFAULT_SCREEN_COUNT
+    default = (tools.configured_screen_count()
+               or tools.detected_screen_count()
+               or DEFAULT_SCREEN_COUNT)
     n = _as_int(get_setting(SETTING_SCREEN_COUNT, default), default, 1, MAX_SCREENS)
     grenze = tools.licensed_screen_limit()
     if grenze is not None:
@@ -72,10 +75,46 @@ def screen_count():
     return max(1, n)
 
 
+def _schreibe_screen_dateien(count):
+    """Bildschirm-Anzahl für die Anzeige-Steuerung (systemd) hinterlegen.
+
+    ``screens`` enthält die Anzahl; die Datei ``screen2`` existiert nur bei zwei
+    Bildschirmen. Der zweite Kiosk prüft das beim Start, der Pfad-Wächter
+    reagiert auf Änderungen — so startet/stoppt die Anzeige ohne Neustart.
+    """
+    pfad = tools.SCREENS_FILE
+    ordner = os.path.dirname(pfad)
+    try:
+        if ordner:
+            os.makedirs(ordner, exist_ok=True)
+        with open(pfad, 'w') as f:
+            f.write('%d\n' % count)
+    except OSError:
+        pass  # ohne Schreibrecht gilt weiter die Einstellung in der Datenbank
+    marke = os.path.join(ordner or '.', 'screen2')
+    try:
+        if count >= 2:
+            open(marke, 'w').close()
+        elif os.path.exists(marke):
+            os.remove(marke)
+    except OSError:
+        pass
+
+
+def ist_eingerichtet():
+    """Hat die Ersteinrichtung auf diesem Gerät schon stattgefunden?"""
+    try:
+        import license_bundle
+    except ImportError:
+        return True
+    return os.path.exists(license_bundle.MARKER_FILE)
+
+
 def set_screen_count(count):
     """Anzahl der Bildschirme setzen (1 oder 2). Bildschirm > count wird deaktiviert."""
     count = _as_int(count, DEFAULT_SCREEN_COUNT, 1, MAX_SCREENS)
     set_setting(SETTING_SCREEN_COUNT, str(count))
+    _schreibe_screen_dateien(count)
     for idx in range(1, MAX_SCREENS + 1):
         screen = get_screen(idx)
         if screen is None:

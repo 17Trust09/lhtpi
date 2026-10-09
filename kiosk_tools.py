@@ -6,6 +6,7 @@ Default-Anzeigedauern; Anzeige-Router, Admin-Seite und Installer lesen hier.
 """
 import os
 import socket
+import subprocess
 from urllib.parse import urlparse
 
 TOOLS = {
@@ -56,6 +57,24 @@ def _apply_url_overrides():
 
 
 _apply_url_overrides()
+
+
+def detected_screen_count():
+    """Wie viele Bildschirme sind gerade angeschlossen? (1 oder 2)
+
+    Liest die angeschlossenen Ausgänge aus ``xrandr``. Ohne X (Rechner, Tests)
+    kommt 1 heraus; ``LHTPI_SCREEN_COUNT`` gibt den Wert fest vor.
+    """
+    vorgabe = (os.environ.get('LHTPI_SCREEN_COUNT') or '').strip()
+    if vorgabe.isdigit():
+        return max(1, min(int(vorgabe), 2))
+    try:
+        aus = subprocess.run(['xrandr', '--current'], capture_output=True,
+                             text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return 1
+    an = sum(1 for zeile in aus.splitlines() if ' connected' in zeile)
+    return max(1, min(an, 2)) if an else 1
 
 
 def tool_ids():

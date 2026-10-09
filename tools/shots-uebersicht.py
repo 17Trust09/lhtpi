@@ -16,6 +16,7 @@ TILES = [
     ('07-tool-terminboard.png', '7 · Tool Terminboard'),
     ('08-tool-safety-cross.png', '8 · Tool Safety Cross'),
     ('09-gesperrt.png', '9 · Lizenz fehlt/fremd → Sperrseite mit Geräte-ID'),
+    ('10-ersteinrichtung.png', '10 · Erster Start: Gerät fragt selbst nach der Einrichtung'),
 ]
 
 html = ["""<!DOCTYPE html><html lang="de"><head><meta charset="utf-8"><style>
@@ -23,7 +24,7 @@ body{margin:0;background:#0b0f14;font-family:system-ui,"Segoe UI",sans-serif;col
      padding:34px 34px 40px}
 h1{font-size:34px;margin:0 0 6px;font-weight:700}
 p.sub{color:#8ea0b0;font-size:19px;margin:0 0 26px}
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:26px 24px}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:26px 24px}
 .tile{background:#121821;border:1px solid #222c37;border-radius:14px;overflow:hidden}
 .tile img{display:block;width:100%;height:auto}
 .cap{padding:10px 14px 12px;font-size:17px;color:#b9c6d2;line-height:1.35}

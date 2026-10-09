@@ -45,7 +45,9 @@ def api_screen(idx):
 @app.route('/display')
 @login_required
 def display():
-    return render_template('display.html', o=router.display_overview())
+    return render_template('display.html', o=router.display_overview(),
+                           eingerichtet=router.ist_eingerichtet(),
+                           erkannte_schirme=tools.detected_screen_count())
 
 
 @app.route('/display/save', methods=['POST'])

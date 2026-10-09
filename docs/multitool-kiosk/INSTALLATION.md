@@ -1,7 +1,9 @@
 # Multitool-Kiosk — Installation
 
 Ein Raspberry Pi, bis zu **drei Tools**, ein oder zwei Bildschirme. Der Installer
-fragt, was gebraucht wird, und richtet den Rest ein.
+richtet alles ein; **welche Tools auf welchen Bildschirmen laufen, wird beim
+ersten Start auf dem Bildschirm gefragt** (Maus + Tastatur) — siehe
+[ERSTEINRICHTUNG.md](ERSTEINRICHTUNG.md).
 
 ## Tools
 
@@ -19,18 +21,26 @@ Tool welchen Bildschirm nutzt.
 
 ```bash
 cd /home/pi/lhtpi
-sudo bash install.sh                 # fragt: Tools (1,2,3) und Bildschirme (1/2)
-sudo bash install.sh --tools=1,3 --screens=2 --no-reboot    # ohne Fragen
+sudo bash install.sh                 # richtet alles ein; gefragt wird beim ersten Start
+sudo bash install.sh --tools=1,3 --screens=2 --no-reboot    # Image-Vorbereitung ohne Fragen
 ```
 
 Optionen:
 
 | Option | Bedeutung |
 |---|---|
-| `--tools=1,2,3` | gewünschte Tools (auch Namen: `slideshow,terminboard,safetycross`) |
-| `--screens=1\|2` | Anzahl der Bildschirme |
+| `--tools=1,2,3` | welche Tools installiert werden (Standard: alle; auch Namen: `slideshow,terminboard,safetycross`) |
+| `--screens=1\|2` | wie viele Bildschirme die Lizenz erlaubt (Standard: 2) |
 | `--no-reboot` | kein automatischer Neustart am Ende |
 | `--help` | Hilfe |
+
+Gewählt wird auf dem Gerät: Beim ersten Start erscheint die Anzeigen-Seite auf
+dem Bildschirm, dort werden Tools, Bildschirme und Anzeigedauern eingestellt.
+`--tools=` / `--screens=` sind nur für die Image-Vorbereitung gedacht.
+
+**Kein Access Point:** das Gerät richtet kein WLAN ein und verändert keine
+WLAN-Verbindungen (frühere Versionen machten `wlan0` zum AP `LHTPi` — das ist
+entfernt).
 
 Beispiele: `--tools=3` (nur Safety Cross, eine Abteilung), `--tools=1,2`
 (Folien + Termine), `--tools=1,2,3 --screens=2` (alles, zwei Bildschirme).

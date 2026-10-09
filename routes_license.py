@@ -11,7 +11,10 @@ Regeln
 * ``/lizenz`` bleibt immer erreichbar — dort steht die Geräte-ID, die man zum
   Erzeugen des Schlüssels braucht.
 """
-from flask import render_template, request
+import os
+
+from flask import render_template, request, redirect, url_for, flash
+from flask_login import login_required
 from app import app
 import license_bundle as lic
 
@@ -43,3 +46,27 @@ def lizenz_status():
                            key=lic.read_license(),
                            enforced=lic.enforced(),
                            datei=lic.LICENSE_FILE)
+
+
+@app.route('/setup/abschluss', methods=['POST'])
+@login_required
+def setup_abschluss():
+    """Ersteinrichtung abschließen.
+
+    Setzt das Merkmal: ab jetzt startet die Anzeige (systemd-Pfad-Wächter) und
+    die Lizenzprüfung ist aktiv.
+    """
+    pfad = lic.MARKER_FILE
+    try:
+        ordner = os.path.dirname(pfad)
+        if ordner:
+            os.makedirs(ordner, exist_ok=True)
+        open(pfad, 'w').close()
+    except OSError:
+        flash('Einrichtung konnte nicht abgeschlossen werden (kein Schreibrecht).')
+        return redirect(url_for('display'))
+
+    import kiosk_router as router
+    router.set_screen_count(router.screen_count())   # Dateien für die Anzeige
+    flash('Einrichtung abgeschlossen – die Anzeige startet jetzt automatisch.')
+    return redirect(url_for('display'))

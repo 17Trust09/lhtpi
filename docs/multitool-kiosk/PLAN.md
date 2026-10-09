@@ -284,3 +284,20 @@ cd lhtpi
 ./venv/bin/python test_usb_source.py       # Bestand (USB-Quelle)
 cd tools/safety-cross && ../../venv/bin/python -m pytest tests/ -q   # SC (braucht pytest)
 ```
+
+## 11. Ersteinrichtung und Netzwerk (09.10.2026)
+
+Entscheidungen von Tim: gefragt wird **beim ersten Booten auf dem Bildschirm**
+(Maus + Tastatur, das Gerät hat kein Netzwerk), **kein Access Point mehr**, und
+konfiguriert wird weiterhin auf der Anzeigen-Seite — erreichbar über einen
+Knopf in der **Safety-Cross-Admin-Seite**.
+
+| Schritt | Inhalt | Stand |
+|---|---|---|
+| S7 | Access Point entfernen (`install.sh`, kein `wlan0`-Eingriff) | ✅ erledigt |
+| S8 | Erststart-Modus: Anzeigen-Seite statt Kiosk, Merkmal `installed`, Pfad-Wächter für die Anzeigen | ✅ erledigt (`test_install_bundle.py`, `test_kiosk_router.py`) |
+| S9 | Knopf „Anzeigen-Einstellungen öffnen" in der Safety-Cross-Admin-Seite | ✅ erledigt |
+| S10 | Hardware-Test: Erststart, Maus + Tastatur, Bildschirm-Anzahl im Betrieb umstellen | offen (braucht Pi) |
+
+Details: [ERSTEINRICHTUNG.md](ERSTEINRICHTUNG.md)
+

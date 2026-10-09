@@ -135,6 +135,53 @@ r = subprocess.run(
     cwd=BASE, capture_output=True, text=True)
 ok(':8000' in r.stdout, 'ohne Override gilt die Standard-URL')
 
+print('\n9) Kein Access Point mehr')
+ok('con add type wifi' not in text and 'AP_SSID' not in text,
+   'kein WLAN-Access-Point wird mehr eingerichtet')
+ok('mode ap' not in text, 'kein AP-Modus im Installer')
+ok('wlan0: bleibt unangetastet' in text, 'WLAN bleibt unberührt')
+
+print('\n10) Ersteinrichtung auf dem Bildschirm')
+ok('lhtpi-setup.service' in text, 'Service für die Ersteinrichtung')
+ok('ConditionPathExists=!${MARKER_FILE}' in text,
+   'Ersteinrichtung läuft nur, solange nicht eingerichtet')
+ok('ConditionPathExists=${MARKER_FILE}' in text,
+   'Kiosk startet erst nach der Einrichtung')
+ok('SCREEN2_FILE' in text and 'screen2' in text,
+   'zweiter Bildschirm hat ein eigenes Merkmal')
+ok('lhtpi-anzeige.path' in text and 'PathChanged=${SCREENS_FILE}' in text,
+   'Pfad-Wächter reagiert auf Änderungen der Bildschirm-Anzahl')
+ok('localhost:${APP_PORT}/display' in text or '/display' in text,
+   'Ersteinrichtung zeigt die Anzeigen-Seite')
+ok('chmod 775' in text, 'Konfigurationsordner ist für die App schreibbar')
+setup_skript = sourced('render_setup_script')
+ok('http://localhost:8000/display' in setup_skript.stdout
+   and '__APP_URL__' not in setup_skript.stdout,
+   'Skript der Ersteinrichtung zeigt die Anzeigen-Seite (ohne Platzhalter)')
+ok('xrandr --auto' in setup_skript.stdout,
+   'Ersteinrichtung schaltet alle angeschlossenen Ausgänge ein')
+steuerung = sourced('render_anzeige_steuerung')
+ok('kiosk-screen2.service' in steuerung.stdout and '/etc/lhtpi/screens' in steuerung.stdout,
+   'Anzeige-Steuerung kennt Bildschirm 2 und die Anzahl-Datei')
+ok('__MAX__' not in steuerung.stdout, 'keine Platzhalter in der Anzeige-Steuerung')
+ok('configure_screens_file\n' not in text,
+   'Anzahl der Bildschirme wird nicht mehr beim Installieren festgeschrieben')
+
+print('\n11) Keine Rückfragen beim Installieren')
+r = sourced('select_components "" ""\necho "T=$TOOL_SLIDESHOW$TOOL_TERMIN$TOOL_SC"\n'
+            'echo "S=$SCREEN_COUNT"')
+ok('T=111' in r.stdout, 'ohne Angabe werden alle Tools installiert')
+ok('S=2' in r.stdout, 'Bildschirm-Anzahl kommt aus der Ersteinrichtung')
+
+print('\n12) Knopf in der Safety-Cross-Admin-Seite')
+sc_admin = os.path.join(BASE, 'tools/safety-cross/templates/admin.html')
+if os.path.exists(sc_admin):
+    inhalt = open(sc_admin).read()
+    ok('Anzeigen-Einstellungen öffnen' in inhalt, 'SC-Admin hat einen Anzeigen-Knopf')
+    ok(':8000/display' in inhalt, 'Knopf zeigt auf die Anzeigen-Seite')
+else:
+    ok(False, 'SC-Admin-Vorlage gefunden')
+
 print('\n9) Altlasten')
 ok('INSTALL_LHTPI' not in text and 'INSTALL_TERMIN' not in text,
    'keine alte Auswahl-Logik (INSTALL_LHTPI/INSTALL_TERMIN) mehr')

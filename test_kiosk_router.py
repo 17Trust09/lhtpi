@@ -22,6 +22,7 @@ os.environ['LHTPI_HWID'] = 'piserial:10000000testgeraet'
 os.environ['LHTPI_LICENSE_FILE'] = os.path.join(TMP, 'license.key')
 os.environ['LHTPI_INSTALLED_MARKER'] = os.path.join(TMP, 'installed')
 os.environ['LHTPI_LICENSE_ENFORCE'] = '0'
+os.environ['LHTPI_SCREENS_FILE'] = os.path.join(TMP, 'screens')
 
 from app import app                        # noqa: E402
 import kiosk_router as router              # noqa: E402
@@ -178,6 +179,10 @@ with app.app_context():
        'Bildschirm-Anzahl aus der Installation (2) wird übernommen')
     os.environ.pop('LHTPI_SCREEN_COUNT')
     ok(router.screen_count() == 1, 'ohne Installer-Angabe bleibt es bei 1')
+    # Die Datei entsteht durch Speichern in der Anzeigen-Seite – hier entfernen,
+    # damit der Fall "Gerät ohne Eintrag" geprüft wird.
+    if os.path.exists(tools_mod.SCREENS_FILE):
+        os.remove(tools_mod.SCREENS_FILE)
     ok(tools_mod.configured_screen_count() is None,
        'ohne Datei/Umgebungsvariable meldet der Installer-Wert nichts')
 
@@ -244,6 +249,39 @@ with app.app_context():
     cfg = client.get('/api/screen/1').get_json()
     ok(cfg['mode'] == 'empty' and cfg['tools'] == [],
        'bewusst leerer Bildschirm bleibt leer')
+
+# ── 13. Ersteinrichtung: Merkmal, Bildschirm-Dateien, Abschluss-Route ───────
+with app.app_context():
+    screens_datei = tools.SCREENS_FILE
+    marke2 = os.path.join(os.path.dirname(screens_datei), 'screen2')
+    marker = os.environ['LHTPI_INSTALLED_MARKER']
+
+    router.set_screen_count(2)
+    ok(os.path.exists(screens_datei) and open(screens_datei).read().strip() == '2',
+       'Bildschirm-Anzahl wird für die Anzeige hinterlegt (screens=2)')
+    ok(os.path.exists(marke2), 'zweiter Bildschirm wird markiert (screen2)')
+    router.set_screen_count(1)
+    ok(not os.path.exists(marke2), 'bei einem Bildschirm verschwindet die Marke')
+
+    ok(not router.ist_eingerichtet(), 'vor der Einrichtung: Gerät gilt als nicht eingerichtet')
+
+    anon = app.test_client()
+    antwort = anon.post('/setup/abschluss')
+    ok(antwort.status_code in (301, 302, 401, 403),
+       'Einrichtung abschließen verlangt Anmeldung (%d)' % antwort.status_code)
+    ok(not os.path.exists(marker), 'ohne Anmeldung wird nichts abgeschlossen')
+
+    # Sicher anmelden – frühere Abschnitte können die Sitzung verändert haben
+    client.post('/login', data={'username': 'admin', 'password': 'admin'})
+    antwort = client.post('/setup/abschluss')
+    ok(antwort.status_code == 302, 'Einrichtung abschließen leitet zurück')
+    ok(antwort.headers.get('Location', '').endswith('/display'),
+       'nach dem Abschluss landet man wieder in den Einstellungen')
+    ok(os.path.exists(marker), 'Merkmal gesetzt -> Anzeige startet automatisch')
+    ok(router.ist_eingerichtet(), 'App weiß: Gerät ist eingerichtet')
+    os.remove(marker)
+
+    ok(tools.detected_screen_count() >= 1, 'Bildschirm-Erkennung liefert mindestens 1')
 
 print('OK – %d Prüfungen bestanden' % len(checks))
 for passed, msg in checks:

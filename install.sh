@@ -11,9 +11,7 @@ PROJECT_DIR="/home/pi/lhtpi"
 PI_USER="pi"
 PI_GROUP="pi"
 APP_PORT="8000"
-AP_SSID="LHTPi"
-AP_PASS="LHTPi123"
-AP_ADDR="192.168.4.1/24"
+# Kein WLAN-Access-Point: die Anzeige läuft ohne Netzwerk (alles über localhost).
 KIOSK_URL="http://localhost:8000/present/kiosk"
 SERVICE_APP="lhtpi.service"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -37,6 +35,8 @@ SCREENS_FILE="/etc/lhtpi/screens"
 LICENSE_FILE="/etc/lhtpi/license.key"
 MARKER_FILE="/etc/lhtpi/installed"
 MAX_SCREENS="2"
+# Merkmal: Bildschirm 2 ist eingerichtet (steuert den zweiten Kiosk)
+SCREEN2_FILE="/etc/lhtpi/screen2"
 
 # ── Installations-Auswahl ─────────────────────────────────────────────
 # Die Verteiler-App (LHTPi, Port 8000) trägt Dashboard, Anzeige-Router und
@@ -78,39 +78,7 @@ ensure_pi_user() {
     fi
 }
 
-retry_nmcli() {
-    # Führt nmcli aus, wartet bei transienten Fehlern und wiederholt.
-    local cmd=("$@")
-    for i in 1 2 3; do
-        if "${cmd[@]}" 2>/dev/null; then
-            return 0
-        fi
-        warn "nmcli (Versuch $i/3) fehlgeschlagen: ${cmd[*]}"
-        sleep 2
-    done
-    # Letzter Versuch – Fehler wird ausgegeben, Skript läuft weiter
-    "${cmd[@]}" 2>&1 || warn "nmcli-Kommando endgültig fehlgeschlagen (nicht kritisch): ${cmd[*]}"
-    return 0
-}
 
-wait_for_ap() {
-    # Wartet maximal 30s, bis der Access Point aktiv ist.
-    log "Warte auf Access Point '${AP_SSID}'..."
-    for i in $(seq 1 15); do
-        if nmcli -t con show lhtpi-ap --active 2>/dev/null | grep -q lhtpi-ap; then
-            ok "Access Point '${AP_SSID}' ist aktiv"
-            return 0
-        fi
-        if iw dev wlan0 info 2>/dev/null | grep -q type.ap; then
-            ok "wlan0 ist im AP-Modus"
-            return 0
-        fi
-        sleep 2
-    done
-    warn "Access Point wurde nicht als aktiv erkannt. Das Dashboard ist trotzdem per LAN erreichbar."
-    warn "Nach dem Reboot sollte der AP automatisch starten."
-    return 0
-}
 
 # ── Installationsschritte ──────────────────────────────────────────────
 
@@ -172,78 +140,34 @@ backup_configs() {
 
 configure_network() {
     log "Konfiguriere Netzwerk"
-    log "  eth0: bleibt per DHCP (LAN-Zugriff)"
-    log "  wlan0: wird zum Access Point '${AP_SSID}'"
+    log "  eth0: per DHCP, falls ein Kabel steckt"
+    log "  wlan0: bleibt unangetastet - bewusst KEIN Access Point"
 
-    command -v nmcli >/dev/null 2>&1 || fail "nmcli fehlt. Raspberry Pi OS Desktop (Trixie) mit NetworkManager benötigt."
-
-    # 1. hostapd/dnsmasq stilllegen (falls aus alter Installation)
+    # Altlasten früherer Versionen stilllegen
     log "  Deaktiviere alte AP-Dienste (hostapd/dnsmasq)..."
     systemctl stop hostapd dnsmasq 2>/dev/null || true
     systemctl disable hostapd dnsmasq 2>/dev/null || true
     systemctl mask hostapd dnsmasq 2>/dev/null || true
 
-    # 2. systemd-networkd deaktivieren (Trixie nutzt NM)
-    log "  Deaktiviere systemd-networkd..."
-    systemctl stop systemd-networkd 2>/dev/null || true
-    systemctl disable systemd-networkd 2>/dev/null || true
+    # Alten Access Point der früheren Version entfernen
+    if command -v nmcli >/dev/null 2>&1 && nmcli -t con show lhtpi-ap &>/dev/null; then
+        log "  Entferne alten Access Point 'lhtpi-ap'"
+        nmcli con delete lhtpi-ap 2>/dev/null || true
+    fi
 
-    # 3. NetworkManager aktivieren + Powersave ausschalten
-    log "  Aktiviere NetworkManager und deaktiviere WiFi Powersave..."
-    systemctl enable NetworkManager
-    systemctl restart NetworkManager
-    sleep 2
-
-    mkdir -p /etc/NetworkManager/conf.d
-    cat > /etc/NetworkManager/conf.d/99-lhtpi-wifi-powersave.conf <<'EOF'
+    if command -v nmcli >/dev/null 2>&1; then
+        log "  NetworkManager: WiFi-Powersave aus"
+        mkdir -p /etc/NetworkManager/conf.d
+        cat > /etc/NetworkManager/conf.d/99-lhtpi-wifi-powersave.conf <<'EOF'
 [connection]
 wifi.powersave = 2
 EOF
-    systemctl reload NetworkManager 2>/dev/null || systemctl restart NetworkManager
-    sleep 1
-
-    # 4. Alte WLAN-Client-Verbindungen löschen
-    log "  Lösche alte WLAN-Client-Verbindungen..."
-    while IFS=: read -r name uuid type device; do
-        if [ "${type}" = "802-11-wireless" ]; then
-            log "    Lösche alte WLAN-Verbindung: ${name} (${uuid})"
-            nmcli con delete "${uuid}" 2>/dev/null || true
-        fi
-    done < <(nmcli -t -f NAME,UUID,TYPE,DEVICE con show 2>/dev/null || true)
-
-    # 5. AP-Verbindung anlegen (falls nicht vorhanden)
-    log "  Lege AP-Verbindung 'lhtpi-ap' an..."
-    if nmcli -t con show lhtpi-ap &>/dev/null; then
-        log "    Verbindung existiert bereits, überspringe create"
+        systemctl reload NetworkManager 2>/dev/null || true
     else
-        retry_nmcli nmcli con add type wifi ifname wlan0 mode ap con-name lhtpi-ap ssid "${AP_SSID}"
-        retry_nmcli nmcli con modify lhtpi-ap wifi.band bg
-        retry_nmcli nmcli con modify lhtpi-ap wifi.channel 6
-        retry_nmcli nmcli con modify lhtpi-ap 802-11-wireless-security.key-mgmt wpa-psk
-        retry_nmcli nmcli con modify lhtpi-ap 802-11-wireless-security.psk "${AP_PASS}"
-        retry_nmcli nmcli con modify lhtpi-ap ipv4.method shared
-        retry_nmcli nmcli con modify lhtpi-ap ipv4.addresses "${AP_ADDR}"
-        retry_nmcli nmcli con modify lhtpi-ap ipv6.method ignore
-        retry_nmcli nmcli con modify lhtpi-ap connection.autoconnect yes
+        warn "NetworkManager nicht vorhanden - Netzwerk bleibt, wie es ist (kein AP nötig)"
     fi
 
-    # 6. AP starten
-    log "  Starte Access Point..."
-    # Vor dem Up kurz warten, damit NM die Änderungen verarbeitet
-    sleep 2
-    nmcli con up lhtpi-ap 2>&1 || warn "AP konnte nicht sofort gestartet werden (startet nach Reboot)"
-
-    # 7. Warten und prüfen
-    wait_for_ap
-
-    # 8. eth0 wird NICHT angefasst – NM belässt DHCP.
-    #    Zusätzlich: Notfall-IP auf eth0 falls DHCP fehlschlägt (nur wenn keine IP vorhanden)
-    if ! ip addr show eth0 2>/dev/null | grep -q 'inet '; then
-        log "  eth0 hat keine IP – setze temporär 192.168.178.250/24 als Fallback"
-        ip addr add 192.168.178.250/24 dev eth0 2>/dev/null || true
-    fi
-
-    ok "Netzwerk konfiguriert: eth0=DHCP, wlan0=AP '${AP_SSID}'"
+    ok "Netzwerk: kein Access Point, keine WLAN-Verbindungen verändert"
 }
 
 # ── Gemeinsame Anzeige: EIN Chromium-Kiosk je Bildschirm ───────────────
@@ -356,6 +280,13 @@ configure_screen_kiosk() {
     script="$(kiosk_script_path "$idx")"
     service="$(kiosk_service_name "$idx")"
 
+    # Bildschirm 1 startet nach der Ersteinrichtung, Bildschirm 2 nur,
+    # wenn er bei der Einrichtung gewählt wurde.
+    local cond="ConditionPathExists=${MARKER_FILE}"
+    if [ "$idx" = "2" ]; then
+        cond="ConditionPathExists=${SCREEN2_FILE}"
+    fi
+
     log "Kiosk für Bildschirm ${idx}: ${ROUTER_BASE_URL}/${idx}"
     render_screen_kiosk_script "$idx" > "$script"
     chmod +x "$script"
@@ -366,6 +297,8 @@ configure_screen_kiosk() {
 Description=Kiosk Bildschirm ${idx} - Anzeige-Router
 After=graphical.target ${SERVICE_APP}
 Requires=${SERVICE_APP}
+# Startet erst, wenn die Einrichtung abgeschlossen ist
+${cond}
 
 [Service]
 Type=simple
@@ -394,6 +327,151 @@ configure_screens() {
         configure_screen_kiosk "$i"
         i=$((i + 1))
     done
+}
+
+# ── Ersteinrichtung: das Gerät fragt beim ersten Booten selbst ─────────────
+# Ohne ${MARKER_FILE} startet kein Kiosk, sondern die Anzeigen-Seite des
+# Dashboards auf dem Bildschirm - mit Maus und Tastatur einrichten, dann
+# "Einrichtung abschließen". Danach übernimmt die Anzeige automatisch.
+
+render_setup_script() {
+    sed -e "s|__LOG__|/home/${PI_USER}/setup.log|g" \
+        -e "s|__PI_USER__|${PI_USER}|g" \
+        -e "s|__APP_URL__|http://localhost:${APP_PORT}/display|g" \
+        -e "s|__PORT__|${APP_PORT}|g" <<'SETUP_EOF'
+#!/bin/bash
+set -u
+
+# Ersteinrichtung - Anzeigen-Seite auf dem ersten angeschlossenen Ausgang
+LOG="__LOG__"
+SETUP_URL="__APP_URL__"
+READY_URL="http://localhost:__PORT__/login"
+
+mkdir -p "$(dirname "$LOG")"
+touch "$LOG"
+echo "$(date '+%F %T') - Ersteinrichtung gestartet" >> "$LOG"
+
+# Alle angeschlossenen Ausgaenge einschalten, der erste wird primaer
+xrandr --auto >/dev/null 2>&1 || true
+
+for i in $(seq 1 30); do
+    if curl -fsS --connect-timeout 2 --max-time 5 "$READY_URL" >/dev/null 2>&1; then
+        echo "$(date '+%F %T') - App erreichbar" >> "$LOG"
+        break
+    fi
+    sleep 2
+done
+
+xset s off >/dev/null 2>&1 || true
+exec chromium \
+    --kiosk --noerrdialogs --disable-infobars --disable-session-crashed-bubble \
+    --no-first-run --disable-features=Translate,MediaRouter \
+    --user-data-dir=/home/__PI_USER__/.config/chromium-setup \
+    "$SETUP_URL" >> "$LOG" 2>&1
+SETUP_EOF
+}
+
+render_anzeige_steuerung() {
+    cat <<'STEUER_EOF'
+#!/bin/bash
+# Startet/stoppt die Anzeigen passend zu /etc/lhtpi/screens.
+# Wird vom Pfad-Waechter aufgerufen, sobald die Einrichtung speichert oder
+# die Bildschirm-Anzahl spaeter geaendert wird.
+set -u
+
+n="$(cat /etc/lhtpi/screens 2>/dev/null || echo 1)"
+case "$n" in
+    2) n=2 ;;
+    *) n=1 ;;
+esac
+
+systemctl stop lhtpi-setup.service 2>/dev/null || true
+
+if [ -f /etc/lhtpi/installed ]; then
+    systemctl start kiosk-screen1.service 2>/dev/null || true
+    if [ "$n" -ge 2 ]; then
+        systemctl start kiosk-screen2.service 2>/dev/null || true
+    else
+        systemctl stop kiosk-screen2.service 2>/dev/null || true
+    fi
+fi
+STEUER_EOF
+}
+
+configure_setup_mode() {
+    log "Ersteinrichtung vorbereiten (die Frage kommt beim ersten Booten)"
+
+    # Die App läuft als ${PI_USER} und muss Bildschirm-Anzahl und Merkmal
+    # schreiben dürfen (Zugriffsrechte, kein sudo nötig).
+    local cfg_dir
+    cfg_dir="$(dirname "${MARKER_FILE}")"
+    mkdir -p "${cfg_dir}"
+    chown "root:${PI_GROUP}" "${cfg_dir}"
+    chmod 775 "${cfg_dir}"
+    if [ -f "${TOOLS_FILE}" ]; then
+        chown "root:${PI_GROUP}" "${TOOLS_FILE}"
+        chmod 664 "${TOOLS_FILE}"
+    fi
+
+    local script="/home/${PI_USER}/start_setup.sh"
+    render_setup_script > "$script"
+    chmod +x "$script"
+    chown "${PI_USER}:${PI_GROUP}" "$script"
+
+    cat > /etc/systemd/system/lhtpi-setup.service <<EOF
+[Unit]
+Description=Ersteinrichtung - Anzeigen-Seite auf dem Bildschirm
+After=graphical.target ${SERVICE_APP}
+Requires=${SERVICE_APP}
+# Nur solange die Einrichtung nicht abgeschlossen ist
+ConditionPathExists=!${MARKER_FILE}
+
+[Service]
+Type=simple
+User=${PI_USER}
+Group=${PI_GROUP}
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/${PI_USER}/.Xauthority
+ExecStartPre=/bin/sleep 5
+ExecStart=${script}
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical.target
+EOF
+
+    local steuer="/usr/local/bin/lhtpi-anzeige-steuern.sh"
+    render_anzeige_steuerung > "$steuer"
+    chmod 755 "$steuer"
+
+    cat > /etc/systemd/system/lhtpi-anzeige.service <<EOF
+[Unit]
+Description=Anzeigen passend zur Einrichtung starten oder stoppen
+
+[Service]
+Type=oneshot
+ExecStart=${steuer}
+EOF
+
+    cat > /etc/systemd/system/lhtpi-anzeige.path <<EOF
+[Unit]
+Description=Wacht ueber Einrichtung und Bildschirm-Anzahl
+After=${SERVICE_APP}
+
+[Path]
+PathExists=${MARKER_FILE}
+PathChanged=${SCREENS_FILE}
+Unit=lhtpi-anzeige.service
+
+[Install]
+WantedBy=paths.target
+EOF
+
+    systemctl daemon-reload
+    systemctl enable lhtpi-setup.service >/dev/null 2>&1 || true
+    systemctl enable --now lhtpi-anzeige.path >/dev/null 2>&1 || true
+    ok "Ersteinrichtung bereit: beim ersten Booten erscheint die Anzeigen-Seite"
 }
 
 # Kiosk-Services früherer Versionen (ein Kiosk je Tool) entfernen
@@ -438,10 +516,9 @@ configure_license() {
     fi
     if "${PROJECT_DIR}/venv/bin/python" "${PROJECT_DIR}/license_bundle.py" \
             --install "--tools=${tools_arg}" "--screens=${SCREEN_COUNT}"; then
-        # Merkmal: ab jetzt ist die Lizenzprüfung auf diesem Gerät aktiv
-        touch "${MARKER_FILE}"
-        chmod 644 "${MARKER_FILE}"
-        ok "Lizenz hinterlegt (${LICENSE_FILE}) – Prüfung ist aktiv"
+        ok "Lizenz hinterlegt (${LICENSE_FILE})"
+        # Das Merkmal ${MARKER_FILE} setzt die Ersteinrichtung auf dem
+        # Bildschirm ("Einrichtung abschließen") - erst danach läuft die Anzeige.
     else
         warn "Lizenz konnte nicht erzeugt werden (läuft die App trotzdem?)"
     fi
@@ -726,7 +803,8 @@ print_summary() {
         echo "     Anzeige 2:     ${ROUTER_BASE_URL}/2"
     fi
     echo ""
-    echo "  📡 Access Point:  ${AP_SSID} / ${AP_PASS}"
+    echo "  🖥  Ersteinrichtung: erscheint beim ersten Booten auf dem Bildschirm"
+    echo "     (Maus und Tastatur: Tools und Bildschirme wählen, dann abschließen)"
     echo "  🌐 Dashboard:     http://192.168.4.1:${APP_PORT}  (bzw. http://<LAN-IP>:${APP_PORT})"
     echo "  🧭 Anzeigen:      http://<LAN-IP>:${APP_PORT}/display   ← hier einstellen:"
     echo "                     welches Tool welchen Bildschirm nutzt, Dauer je Tool,"
@@ -767,14 +845,10 @@ select_components() {
     local tools_arg="$1" screens_arg="${2:-}"
 
     if [ -z "$tools_arg" ]; then
-        echo ""
-        echo "  Welche Tools soll dieses Gerät zeigen?"
-        echo "    1) Folien / Playlist   (Slideshow)"
-        echo "    2) Terminboard         (Termine, Kalibrierungen)"
-        echo "    3) Safety Cross        (Arbeitssicherheit)"
-        echo "    Mehrere möglich, z. B. 1,2 oder 1,2,3"
-        printf "  Auswahl: "
-        read -r tools_arg
+        # Ohne Angabe wird alles installiert. Welche Tools die Anzeige nutzt,
+        # wird bei der Ersteinrichtung auf dem Bildschirm gefragt.
+        tools_arg="1,2,3"
+        log "Tools: alle installieren (Auswahl erfolgt bei der Ersteinrichtung)"
     fi
 
     TOOL_SLIDESHOW=0; TOOL_TERMIN=0; TOOL_SC=0
@@ -792,8 +866,9 @@ select_components() {
     fi
 
     if [ -z "$screens_arg" ]; then
-        printf "  Wie viele Bildschirme hat das Gerät? (1/2): "
-        read -r screens_arg
+        # Wie viele Bildschirme genutzt werden, wird bei der Ersteinrichtung
+        # gewählt (Vorschlag: was erkannt wird).
+        screens_arg="${MAX_SCREENS}"
     fi
     case "${screens_arg:-1}" in
         1|2) SCREEN_COUNT="$screens_arg" ;;
@@ -955,7 +1030,9 @@ Aufruf: sudo bash install.sh [Optionen]
 
   --tools=1,2,3     Tools: 1=Folien   2=Terminboard   3=Safety Cross
                     (auch Namen: slideshow,terminboard,safetycross)
-  --screens=1|2     Anzahl der Bildschirme (Standard: 1)
+  --screens=1|2     Bildschirme, die die Lizenz erlaubt (Standard: 2)
+                    Welche genutzt werden, wird bei der Ersteinrichtung
+                    auf dem Bildschirm gewählt.
   --no-reboot       nicht automatisch neu starten
   -h, --help        diese Hilfe
 
@@ -1018,8 +1095,8 @@ main() {
         configure_safetycross_app
     fi
     configure_tools_file
-    configure_screens_file
     configure_license
+    configure_setup_mode
     cleanup_old_kiosks
     configure_desktop
     configure_screens

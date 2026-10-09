@@ -53,6 +53,12 @@
   .note{color:var(--muted);font-size:.9rem;margin-top:.4rem}
   .tools-missing{margin-top:.8rem;color:var(--muted);font-size:.88rem}
   .tools-missing b{color:var(--text)}
+  .ersteinrichtung{background:#fff6e5;border:1px solid #e8c26a;border-radius:12px;
+    padding:16px 20px;margin:0 0 20px;color:#4a3a12;line-height:1.55}
+  .ersteinrichtung h3{margin:0 0 8px;font-size:1.1rem;color:#3d2f0c}
+  .ersteinrichtung .knopf{margin-top:14px;background:#1f6f3f;color:#fff;border:0;
+    border-radius:8px;padding:11px 20px;font-size:1rem;font-weight:600;cursor:pointer}
+  .ersteinrichtung .knopf:hover{background:#185a32}
 </style>
 </head>
 <body>
@@ -65,6 +71,20 @@
   {% with messages = get_flashed_messages() %}
     {% if messages %}<div class="flash">{{ messages[0] }}</div>{% endif %}
   {% endwith %}
+
+  {% if not eingerichtet %}
+  <div class="ersteinrichtung">
+    <h3>🖥 Erste Einrichtung</h3>
+    Dieses Gerät ist noch nicht eingerichtet. Stelle unten ein, <b>welche Tools</b>
+    auf <b>welchem Bildschirm</b> laufen und <b>wie lange</b> jedes angezeigt wird,
+    dann „Speichern" — und darunter <b>Einrichtung abschließen</b>.
+    Danach startet die Anzeige automatisch.
+    <div class="note">Erkannte Ausgänge: <b>{{ erkannte_schirme }}</b></div>
+    <form method="post" action="{{ url_for('setup_abschluss') }}">
+      <button class="knopf" type="submit">Einrichtung abschließen und Anzeige starten</button>
+    </form>
+  </div>
+  {% endif %}
 
   <form method="post" action="{{ url_for('display_save') }}">
     <div class="card">
