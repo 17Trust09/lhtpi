@@ -326,12 +326,13 @@ RestartSec=10
 StartLimitIntervalSec=120
 StartLimitBurst=3
 
-[Install]
-WantedBy=multi-user.target
 EOF
     systemctl daemon-reload
-    systemctl enable "${service}"
-    ok "Bildschirm ${idx} eingerichtet (${service})"
+    # NICHT beim Booten starten: die Anzeigen-Steuerung startet das Fenster,
+    # sobald die Einrichtung abgeschlossen ist - sonst lägen zwei Fenster
+    # übereinander (Einrichtungs-Seite und Kiosk).
+    systemctl disable "${service}" >/dev/null 2>&1 || true
+    ok "Bildschirm ${idx} eingerichtet (${service}, Start über die Anzeige)"
 }
 
 configure_screens() {
@@ -442,8 +443,8 @@ configure_setup_mode() {
 Description=Ersteinrichtung - Anzeigen-Seite auf dem Bildschirm
 After=${SERVICE_APP}
 Requires=${SERVICE_APP}
-# Nur solange die Einrichtung nicht abgeschlossen ist
-ConditionPathExists=!${MARKER_FILE}
+# Immer beim Booten: das Gerät landet auf der Anzeigen-Seite. Ist es schon
+# eingerichtet, startet die Anzeige von dort automatisch (Knopf oder Countdown).
 
 [Service]
 Type=simple
@@ -495,15 +496,38 @@ EOF
 
 # Kiosk-Services früherer Versionen (ein Kiosk je Tool) entfernen
 cleanup_old_kiosks() {
-    local unit
+    # Namen früherer Fassungen (ein Kiosk je Tool, teils mit dem Dashboard)
+    local behalten=" lhtpi.service lhtpi-setup.service lhtpi-anzeige.service kiosk-screen1.service kiosk-screen2.service "
+    local unit name datei
     for unit in lhtpi-kiosk.service terminboard-kiosk.service safety-cross-kiosk.service; do
-        if [ -f "/etc/systemd/system/${unit}" ]; then
+        if [ -f "${UNIT_DIR}/${unit}" ]; then
             systemctl disable --now "${unit}" >/dev/null 2>&1 || true
-            rm -f "/etc/systemd/system/${unit}"
+            rm -f "${UNIT_DIR}/${unit}"
             log "  alten Kiosk-Service entfernt: ${unit}"
         fi
     done
-    rm -f /home/pi/start_lhtpi_kiosk.sh /home/pi/start_terminboard_kiosk.sh
+
+    # Alles aus unserem Namensraum, das nicht zur aktuellen Fassung gehört.
+    # Fängt alte Kiosk-Einheiten ab, die z. B. das Dashboard auf dem Schirm
+    # öffneten - die Anzeige darf nur die Kiosk-Seiten zeigen.
+    for datei in "${UNIT_DIR}"/*.service; do
+        [ -f "${datei}" ] || continue
+        name="$(basename "${datei}")"
+        case "${name}" in
+            lhtpi*|kiosk*|*dashboard*|*anzeige*|*display*) ;;
+            *) continue ;;
+        esac
+        case "${behalten}" in
+            *" ${name} "*) continue ;;
+        esac
+        systemctl disable --now "${name}" >/dev/null 2>&1 || true
+        rm -f "${datei}"
+        log "  alte Einheit entfernt (nicht mehr Teil der Anzeige): ${name}"
+    done
+
+    # Startskripte früherer Fassungen (Einrichtung und Anzeige bleiben)
+    rm -f /home/pi/start_lhtpi_kiosk.sh /home/pi/start_terminboard_kiosk.sh \
+          /home/pi/start_dashboard.sh /home/pi/start_anzeige_kiosk.sh
     systemctl daemon-reload || true
 }
 

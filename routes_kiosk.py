@@ -43,13 +43,36 @@ def api_screen(idx):
 
 # ── Admin-Seite „Anzeigen" ───────────────────────────────────────────────────
 
+LOKALE_ADRESSEN = ('127.0.0.1', '::1')
+AUTOSTART_SEKUNDEN = 30       # eingerichtetes Gerät: Anzeige startet von selbst
+
+
+def _ist_lokal():
+    """Kommt der Aufruf vom Gerät selbst? (Kiosk-Bildschirm, ohne Login)"""
+    return request.remote_addr in LOKALE_ADRESSEN
+
+
 @app.route('/display')
 @login_required
 def display():
     return render_template('display.html', o=router.display_overview(),
                            eingerichtet=router.ist_eingerichtet(),
                            erkannte_schirme=tools.detected_screen_count(),
-                           lizenz_da=bool(lic.read_license()))
+                           lizenz_da=bool(lic.read_license()),
+                           lokal=_ist_lokal(),
+                           autostart_sekunden=AUTOSTART_SEKUNDEN)
+
+
+@app.route('/anzeige/start', methods=['POST'])
+def anzeige_start():
+    """Anzeige starten: die Kiosk-Fenster übernehmen den Bildschirm.
+
+    Schreibt die Bildschirm-Datei neu - der Pfad-Wächter startet daraufhin die
+    Kiosk-Fenster und beendet die Einrichtungs-Seite.
+    """
+    router.set_screen_count(router.screen_count())
+    flash('Anzeige gestartet – die Fenster öffnen sich in wenigen Sekunden.')
+    return redirect(url_for('display'))
 
 
 @app.route('/display/save', methods=['POST'])

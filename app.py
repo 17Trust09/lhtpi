@@ -26,6 +26,30 @@ def load_user(user_id):
     from models import User
     return User.query.get(int(user_id))
 
+
+# ── Zugang direkt am Gerät ───────────────────────────────────────────────────
+# Der Kiosk-Bildschirm hat keine Tastatur. Aufrufe vom Gerät selbst (localhost,
+# 127.0.0.1, ::1) gelten deshalb als angemeldet: die Anzeigen-Seite ist dort
+# ohne Login erreichbar. Aus dem LAN bleibt der Login erforderlich.
+# Abschaltbar über LHTPI_LOKAL_LOGIN=0.
+LOKAL_LOGIN = os.environ.get('LHTPI_LOKAL_LOGIN', '1') != '0'
+
+
+@app.before_request
+def zugang_am_geraet():
+    """Lokale Aufrufe ohne Anmeldung durchlassen (Anzeige am Bildschirm)."""
+    from flask import request
+    from flask_login import current_user, login_user
+    from models import User
+    if not LOKAL_LOGIN or current_user.is_authenticated:
+        return None
+    if request.remote_addr not in ('127.0.0.1', '::1'):
+        return None
+    user = User.query.filter_by(username='admin').first()
+    if user is not None:
+        login_user(user)
+    return None
+
 with app.app_context():
     db.create_all()
     # Default-Admin-Benutzer anlegen (falls nicht vorhanden)

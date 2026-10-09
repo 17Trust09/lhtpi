@@ -8,14 +8,15 @@
   :root{--navy:#05164D;--yellow:#FFAD00;--blue2:#1B4B8F;--bg:#F4F6FA;--card:#fff;
     --text:#1A1A1A;--muted:#5D6B7C;--border:#E4E8F0;--green:#1E8E3E;--red:#D93025}
   *{box-sizing:border-box}
+  /* hidden muss auch bei display:flex greifen (Dauer-Felder bei einem Tool) */
+  [hidden]{display:none !important}
   body{margin:0;background:var(--bg);color:var(--text);
     font-family:Inter,-apple-system,'Segoe UI',Roboto,Arial,sans-serif}
   .topbar{background:var(--navy);color:#fff;padding:1rem 2rem;display:flex;
     align-items:center;justify-content:space-between;gap:1rem}
   .topbar .brand{font-size:1.5rem;font-weight:900;letter-spacing:.02em}
   .topbar .brand span{color:var(--yellow)}
-  .topbar a{color:#fff;text-decoration:none;font-weight:700;opacity:.9}
-  .topbar a:hover{opacity:1}
+  .topbar .hinweis{font-size:.9rem;opacity:.85}
   main{max-width:1100px;margin:0 auto;padding:1.6rem 1.2rem 4rem}
   h2{font-size:1.15rem;margin:0 0 .8rem}
   .card{background:var(--card);border:1px solid var(--border);border-radius:16px;
@@ -59,12 +60,16 @@
   .ersteinrichtung .knopf{margin-top:14px;background:#1f6f3f;color:#fff;border:0;
     border-radius:8px;padding:11px 20px;font-size:1rem;font-weight:600;cursor:pointer}
   .ersteinrichtung .knopf:hover{background:#185a32}
+  .startkarte{background:#E9F7EF;border:1px solid #9dd7b2}
+  .startkarte .knopf{background:#1f6f3f;color:#fff;border:0;border-radius:8px;
+    padding:12px 24px;font-size:1.05rem;font-weight:700;cursor:pointer}
+  .startkarte .knopf:hover{background:#185a32}
 </style>
 </head>
 <body>
 <div class="topbar">
   <div class="brand">🎬 <span>LHTPi</span> · Anzeigen</div>
-  <div><a href="{{ url_for('dashboard') }}">← Zurück zum Dashboard</a></div>
+  <div class="hinweis">Nur diese Seite – das Gerät zeigt ausschließlich die Anzeige.</div>
 </div>
 
 <main>
@@ -76,8 +81,8 @@
   <div class="ersteinrichtung">
     <h3>🖥 Erste Einrichtung</h3>
     Dieses Gerät ist noch nicht eingerichtet. Stelle unten ein, <b>welche Tools</b>
-    auf <b>welchem Bildschirm</b> laufen und <b>wie lange</b> jedes angezeigt wird,
-    dann „Speichern" — und darunter <b>Einrichtung abschließen</b>.
+    auf <b>welchem Bildschirm</b> laufen, dann „Speichern" — und darunter
+    <b>Einrichtung abschließen</b>.
     Danach startet die Anzeige automatisch.
     <div class="note">Erkannte Ausgänge: <b>{{ erkannte_schirme }}</b></div>
     {% if o.count > erkannte_schirme %}
@@ -97,6 +102,25 @@
     <form method="post" action="{{ url_for('setup_abschluss') }}">
       <button class="knopf" type="submit">Einrichtung abschließen und Anzeige starten</button>
     </form>
+  </div>
+  {% else %}
+  <div class="card startkarte">
+    <header>
+      <h3>▶ Anzeige starten</h3>
+      <span class="note" id="startinfo" data-sekunden="{{ autostart_sekunden }}">
+        {% if lokal and autostart_sekunden %}startet von selbst in
+          <b id="restsekunden">{{ autostart_sekunden }}</b> s{% endif %}
+      </span>
+    </header>
+    <form method="post" action="{{ url_for('anzeige_start') }}" id="startform">
+      <button class="knopf" type="submit">Anzeige jetzt starten</button>
+      {% if lokal and autostart_sekunden %}
+      <button class="btn ghost" type="button" id="autostop"
+              style="margin-left:.6rem">Automatik anhalten</button>
+      {% endif %}
+    </form>
+    <div class="note">Danach übernehmen die Anzeige-Fenster den Bildschirm.
+      Zurück zu dieser Seite kommt man über einen Neustart des Geräts.</div>
   </div>
   {% endif %}
 
@@ -131,19 +155,17 @@
     </div>
 
     {% for s in o.screens %}
-    <div class="card">
+    {% set aktiv = s.rows|selectattr('enabled')|list|length %}
+    <div class="card" data-screen="{{ s.idx }}">
       <header>
         <h3>Bildschirm {{ s.idx }}</h3>
-        {% set active_rows = s.rows|selectattr('enabled')|list %}
-        {% if not s.enabled %}
-          <span class="pill aus">nicht aktiv</span>
-        {% elif active_rows|length > 1 %}
-          <span class="pill rotation">Rotation · {{ active_rows|length }} Tools</span>
-        {% elif active_rows|length == 1 %}
-          <span class="pill fest">fest · {{ active_rows[0].label }}</span>
-        {% else %}
-          <span class="pill leer">kein Tool aktiv</span>
-        {% endif %}
+        <span class="pill {% if not s.enabled %}aus{% elif aktiv > 1 %}rotation{% elif aktiv == 1 %}fest{% else %}leer{% endif %}"
+              data-pill>
+          {%- if not s.enabled %}nicht aktiv
+          {%- elif aktiv > 1 %}Rotation · {{ aktiv }} Tools
+          {%- elif aktiv == 1 %}fest · {{ (s.rows|selectattr('enabled')|list)[0].label }}
+          {%- else %}kein Tool aktiv{% endif -%}
+        </span>
       </header>
 
       <input type="hidden" name="screen_{{ s.idx }}_present" value="1">
@@ -158,27 +180,34 @@
           </select>
         </label>
         <label class="field">Bildschirm aktiv
-          <span><input type="checkbox" name="screen_{{ s.idx }}_active" value="1"
+          <span><input type="checkbox" name="screen_{{ s.idx }}_active" value="1" data-aktiv
             {% if s.enabled %}checked{% endif %}> ja</span>
         </label>
       </div>
 
       <h2 style="margin-top:1.2rem">Tools auf diesem Bildschirm</h2>
+      <div class="note" style="margin:-.4rem 0 .6rem">Ein Tool = fest.
+        Zwei oder mehr Tools wechseln sich ab (Rotation) – dann gilt die Anzeigedauer.</div>
       {% for r in s.rows %}
         {% if r.installed %}
         <div class="row">
           <input type="hidden" name="tool_{{ s.idx }}_{{ r.tool }}_present" value="1">
-          <input type="checkbox" name="tool_{{ s.idx }}_{{ r.tool }}_active" value="1"
+          <input type="checkbox" class="toolbox" data-label="{{ r.label }}"
+                 name="tool_{{ s.idx }}_{{ r.tool }}_active" value="1"
                  {% if r.enabled %}checked{% endif %}>
           <div class="name">{{ r.label }}
-            <div class="hint">{{ 'fest' if r.enabled and (s.rows|selectattr('enabled')|list|length) == 1 else 'Teil der Rotation' }}</div>
+            <div class="hint" data-hint>
+              {{- 'aus' if not r.enabled else ('fest' if aktiv == 1 else 'Teil der Rotation') -}}
+            </div>
           </div>
-          <label class="field" style="flex-direction:row;align-items:center;gap:.4rem">
+          <label class="field rot-feld" style="flex-direction:row;align-items:center;gap:.4rem"
+                 {% if not r.enabled or aktiv < 2 %}hidden{% endif %}>
             <span class="hint">Dauer</span>
             <input type="number" name="tool_{{ s.idx }}_{{ r.tool }}_dwell" min="1" max="3600"
                    value="{{ r.dwell }}"> s
           </label>
-          <label class="field" style="flex-direction:row;align-items:center;gap:.4rem">
+          <label class="field rot-feld" style="flex-direction:row;align-items:center;gap:.4rem"
+                 {% if not r.enabled or aktiv < 2 %}hidden{% endif %}>
             <span class="hint">Reihenfolge</span>
             <input type="number" name="tool_{{ s.idx }}_{{ r.tool }}_sort" min="0" max="99"
                    value="{{ r.sort }}">
@@ -190,8 +219,10 @@
         <div class="note">Keine Tools installiert – Installation mit Auswahl erneut ausführen.</div>
       {% endif %}
 
+      {% if not lokal %}
       <p><a class="btn ghost" href="{{ url_for('screen', idx=s.idx) }}" target="_blank"
             rel="noopener">Vorschau öffnen</a></p>
+      {% endif %}
     </div>
     {% endfor %}
 
@@ -201,5 +232,70 @@
     </div>
   </form>
 </main>
+
+<script>
+// Live-Anzeige: ein Tool = fest (ohne Dauer), zwei oder mehr = Rotation.
+document.querySelectorAll('.card[data-screen]').forEach(function (karte) {
+  var kasten = karte.querySelectorAll('input.toolbox');
+
+  function malen() {
+    var an = 0, letzter = '';
+    kasten.forEach(function (k) {
+      if (k.checked) { an++; letzter = k.dataset.label || ''; }
+    });
+    kasten.forEach(function (k) {
+      var zeile = k.closest('.row');
+      if (!zeile) return;
+      zeile.querySelectorAll('.rot-feld').forEach(function (f) {
+        f.hidden = !(k.checked && an > 1);
+      });
+      var hinweis = zeile.querySelector('[data-hint]');
+      if (hinweis) {
+        hinweis.textContent = !k.checked ? 'aus' : (an === 1 ? 'fest' : 'Teil der Rotation');
+      }
+    });
+    var pille = karte.querySelector('[data-pill]');
+    var aktiv = karte.querySelector('[data-aktiv]');
+    if (!pille) return;
+    if (aktiv && !aktiv.checked) {
+      pille.className = 'pill aus'; pille.textContent = 'nicht aktiv';
+    } else if (an > 1) {
+      pille.className = 'pill rotation'; pille.textContent = 'Rotation · ' + an + ' Tools';
+    } else if (an === 1) {
+      pille.className = 'pill fest'; pille.textContent = 'fest · ' + letzter;
+    } else {
+      pille.className = 'pill leer'; pille.textContent = 'kein Tool aktiv';
+    }
+  }
+
+  kasten.forEach(function (k) { k.addEventListener('change', malen); });
+  var aktiv = karte.querySelector('[data-aktiv]');
+  if (aktiv) aktiv.addEventListener('change', malen);
+  malen();
+});
+
+// Eingerichtetes Gerät: Anzeige startet von selbst (abbrechbar).
+(function () {
+  var karte = document.querySelector('.startkarte');
+  if (!karte) return;
+  var form = document.getElementById('startform');
+  var rest = document.getElementById('restsekunden');
+  if (!form || !rest) return;
+  var uebrig = parseInt(rest.textContent, 10) || 0;
+  var uhr = setInterval(function () {
+    uebrig -= 1;
+    if (uebrig <= 0) { clearInterval(uhr); form.submit(); return; }
+    rest.textContent = uebrig;
+  }, 1000);
+  var stopp = document.getElementById('autostop');
+  if (stopp) {
+    stopp.addEventListener('click', function () {
+      clearInterval(uhr);
+      var info = document.getElementById('startinfo');
+      if (info) info.textContent = 'Automatik angehalten – bitte „Anzeige jetzt starten" drücken.';
+    });
+  }
+})();
+</script>
 </body>
 </html>

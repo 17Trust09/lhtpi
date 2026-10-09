@@ -141,13 +141,72 @@ with app.app_context():
     ok(cfg['tools'][0]['dwell'] == 60, 'ungültige Dauer fällt auf Standard zurück')
     ok(cfg['mode'] == 'fixed', 'ungültige Eingaben erzeugen keine Rotation')
 
-# ── 8. Admin-Seite nur mit Login ─────────────────────────────────────────────
+# ── 8. Anzeigen-Seite: am Gerät ohne Login, aus dem LAN mit Login ───────────
+# Am Gerät selbst (localhost) ist man automatisch angemeldet - der Bildschirm
+# hat keine Tastatur. Von außen bleibt der Login Pflicht.
 anon = app.test_client()
-ok(anon.get('/display').status_code == 302, '/display verlangt Login')
+fremd = anon.get('/display', environ_base={'REMOTE_ADDR': '192.168.178.50'})
+ok(fremd.status_code == 302, 'aus dem LAN verlangt /display weiterhin Login')
+vorort = anon.get('/display')
+ok(vorort.status_code == 200,
+   'am Gerät (localhost) ist /display ohne Login erreichbar')
+seite = vorort.get_data(as_text=True)
+ok('Anzeigen' in seite, '/display lädt')
+ok('Dauer' in seite, 'Einstellfeld für die Anzeigedauer ist vorhanden')
+ok('url_for' not in seite, 'keine unaufgelösten Platzhalter')
+ok('/dashboard' not in seite and 'Dashboard' not in seite,
+   'kein Weg zum Dashboard (nur Anzeige)')
+ok('Einrichtung abschließen' in seite,
+   'solange nicht eingerichtet: Knopf „Einrichtung abschließen und Anzeige starten"')
+marker = os.environ['LHTPI_INSTALLED_MARKER']
+open(marker, 'w').close()
+seite = anon.get('/display').get_data(as_text=True)
+ok('/anzeige/start' in seite, 'eingerichtet: Knopf „Anzeige starten" ist vorhanden')
+ok('Einrichtung abschließen' not in seite,
+   'eingerichtet: Abschluss-Knopf verschwindet')
+os.remove(marker)
+ok('data-pill' in seite and 'rot-feld' in seite,
+   'Anzeige der Betriebsart und Dauer-Felder sind ausgezeichnet')
+ok('toolbox' in seite, 'Tool-Kästchen sind für die Live-Umschaltung markiert')
+
+# Ein Tool = fest, zwei Tools = Rotation (auch im HTML vorbelegt)
+with app.app_context():
+    router.save_screen(1, name='Bildschirm 1', hdmi='HDMI-1', enabled=True, entries=[
+        {'tool': 'slideshow', 'enabled': True, 'dwell': 300, 'sort': 0},
+    ])
+fest = client.get('/api/screen/1').get_json()
+ok(fest['mode'] == 'fixed', 'ein ausgewähltes Tool ist fest')
+seite_eins = anon.get('/display').get_data(as_text=True)
+ok('fest · Folien' in seite_eins, 'ein Tool wird als „fest" angezeigt')
+with app.app_context():
+    router.save_screen(1, name='Bildschirm 1', hdmi='HDMI-1', enabled=True, entries=[
+        {'tool': 'slideshow', 'enabled': True, 'dwell': 300, 'sort': 0},
+        {'tool': 'terminboard', 'enabled': True, 'dwell': 120, 'sort': 1},
+    ])
+zwei = client.get('/api/screen/1').get_json()
+ok(zwei['mode'] == 'rotate', 'zwei ausgewählte Tools rotieren')
+ok([t['dwell'] for t in zwei['tools']] == [300, 120],
+   'jedes Tool behält seine eigene Dauer')
+seite_zwei = anon.get('/display').get_data(as_text=True)
+ok('Rotation · 2 Tools' in seite_zwei, 'zwei Tools werden als Rotation angezeigt')
+
+# ── 8b. „Anzeige starten": Anzeige-Fenster übernehmen (Pfad-Wächter) ─────────
+with app.app_context():
+    router.save_screen(1, name='Bildschirm 1', hdmi='HDMI-1', enabled=True, entries=[
+        {'tool': 'slideshow', 'enabled': True, 'dwell': 300, 'sort': 0},
+    ])
+    router.set_screen_count(1)
+pfad = tools.SCREENS_FILE
+vorher = os.stat(pfad).st_mtime_ns
+antwort = anon.post('/anzeige/start')
+ok(antwort.status_code == 302, '„Anzeige starten" leitet zurück zur Anzeigen-Seite')
+ok(antwort.headers.get('Location', '').endswith('/display'), 'und zwar auf /display')
+ok(os.stat(pfad).st_mtime_ns > vorher,
+   'Bildschirm-Datei wird neu geschrieben -> Pfad-Wächter startet die Fenster')
+ok(open(pfad).read().strip() == '1', 'Bildschirm-Anzahl bleibt dabei erhalten')
+
 page = client.get('/display')
-ok(page.status_code == 200 and 'Anzeigen' in page.data.decode(), '/display lädt mit Login')
-ok('Anzeigedauer' in page.data.decode() or 'Dauer' in page.data.decode(),
-   'Einstellfeld für die Anzeigedauer ist vorhanden')
+ok(page.status_code == 200, '/display lädt auch mit Login weiter')
 
 # ── 9. Vorbelegung aus der Installations-Auswahl ─────────────────────────────
 #     Abteilung mit nur einem Tool: Bildschirm 1 zeigt das verfügbare Tool.
@@ -284,11 +343,18 @@ with app.app_context():
 
     ok(not router.ist_eingerichtet(), 'vor der Einrichtung: Gerät gilt als nicht eingerichtet')
 
+    # Am Gerät selbst (localhost) geht der Abschluss ohne Login - der
+    # Bildschirm hat keine Tastatur. Aus dem LAN bleibt er gesperrt.
     anon = app.test_client()
+    fremd = anon.post('/setup/abschluss',
+                      environ_base={'REMOTE_ADDR': '192.168.178.50'})
+    ok(fremd.status_code in (301, 302, 401, 403),
+       'aus dem LAN verlangt der Abschluss Anmeldung (%d)' % fremd.status_code)
+    ok(not os.path.exists(marker), 'aus dem LAN wird nichts abgeschlossen')
     antwort = anon.post('/setup/abschluss')
-    ok(antwort.status_code in (301, 302, 401, 403),
-       'Einrichtung abschließen verlangt Anmeldung (%d)' % antwort.status_code)
-    ok(not os.path.exists(marker), 'ohne Anmeldung wird nichts abgeschlossen')
+    ok(antwort.status_code == 302, 'am Gerät (localhost) geht der Abschluss ohne Login')
+    ok(os.path.exists(marker), 'Abschluss am Gerät setzt das Merkmal')
+    os.remove(marker)
 
     # Sicher anmelden – frühere Abschnitte können die Sitzung verändert haben
     client.post('/login', data={'username': 'admin', 'password': 'admin'})

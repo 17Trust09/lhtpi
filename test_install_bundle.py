@@ -143,10 +143,12 @@ ok('wlan0: bleibt unangetastet' in text, 'WLAN bleibt unberührt')
 
 print('\n10) Ersteinrichtung auf dem Bildschirm')
 ok('lhtpi-setup.service' in text, 'Service für die Ersteinrichtung')
-ok('ConditionPathExists=!${MARKER_FILE}' in text,
-   'Ersteinrichtung läuft nur, solange nicht eingerichtet')
+ok('ConditionPathExists=!${MARKER_FILE}' not in text,
+   'Anzeigen-Seite erscheint beim Booten immer (Einstiegspunkt am Gerät)')
 ok('ConditionPathExists=${MARKER_FILE}' in text,
-   'Kiosk startet erst nach der Einrichtung')
+   'Kiosk-Fenster starten erst nach der Einrichtung')
+ok('systemctl disable "${service}"' in text,
+   'Kiosk-Fenster starten nicht beim Booten (sonst zwei Fenster übereinander)')
 ok('SCREEN2_FILE' in text and 'screen2' in text,
    'zweiter Bildschirm hat ein eigenes Merkmal')
 ok('lhtpi-anzeige.path' in text and 'PathChanged=${SCREENS_FILE}' in text,
@@ -310,6 +312,59 @@ ok('SERVICE_KIOSK=' not in text and 'KIOSK_SCRIPT=' not in text,
 ok('start_lhtpi_kiosk.sh' in text, 'alte Kiosk-Skripte werden aufgeräumt')
 ok('main "$@"' in text and 'BASH_SOURCE' in text,
    'Aufruf-Guard vorhanden (Tests können install.sh sourcen)')
+
+print('\n14) Vom Knopf zum Kiosk-Fenster (Anzeige-Kette)')
+
+# Die Anzeigen-Steuerung beendet die Einrichtungs-Seite und startet die Fenster.
+r = schritt('render_anzeige_steuerung')
+steuer = r.stdout
+ok(r.returncode == 0, 'Anzeigen-Steuerung lässt sich erzeugen')
+ok('systemctl stop lhtpi-setup.service' in steuer,
+   'Anzeige starten beendet die Einrichtungs-Seite (kein Fenster übereinander)')
+ok('systemctl start kiosk-screen1.service' in steuer,
+   'Anzeige starten öffnet das Kiosk-Fenster für Bildschirm 1')
+ok('systemctl start kiosk-screen2.service' in steuer,
+   'bei zwei Bildschirmen auch das zweite Fenster')
+ok('/etc/lhtpi/installed' in steuer,
+   'Fenster starten erst nach abgeschlossener Einrichtung')
+
+# Die Boot-Seite ist die Anzeigen-Seite - nicht das Dashboard.
+r = schritt('render_setup_script')
+setup_skript = r.stdout
+ok('/display' in setup_skript, 'Boot landet auf der Anzeigen-Seite')
+ok('localhost:8000/"' not in setup_skript and "localhost:8000/'" not in setup_skript,
+   'nicht auf der Startseite (Dashboard)')
+
+print('\n15) Altlasten: kein alter Kiosk mit Dashboard')
+
+UD2 = os.path.join(LZ, 'units2')
+os.makedirs(UD2, exist_ok=True)
+alte = {
+    'lhtpi-kiosk.service': '[Service]\nExecStart=/home/pi/start_lhtpi_kiosk.sh\n',
+    'lhtpi-dashboard.service': '[Service]\nExecStart=/usr/bin/chromium-browser http://localhost:8000/\n',
+    'lhtpi-display.service': '[Service]\nExecStart=/home/pi/start_dashboard.sh\n',
+}
+for name, inhalt in alte.items():
+    open(os.path.join(UD2, name), 'w').write(inhalt)
+bleiben = {
+    'lhtpi.service': '[Service]\nExecStart=/home/pi/app.py\n',
+    'lhtpi-setup.service': '[Service]\nExecStart=/home/pi/start_setup.sh\n',
+    'lhtpi-anzeige.service': '[Service]\nExecStart=/usr/local/bin/lhtpi-anzeige-steuern.sh\n',
+    'kiosk-screen1.service': '[Service]\nExecStart=/home/pi/kiosk-screen1.sh\n',
+    'kiosk-screen2.service': '[Service]\nExecStart=/home/pi/kiosk-screen2.sh\n',
+    'sshd.service': '[Service]\nExecStart=/usr/sbin/sshd\n',
+}
+for name, inhalt in bleiben.items():
+    open(os.path.join(UD2, name), 'w').write(inhalt)
+r = schritt('cleanup_old_kiosks', env=dict(UMG, LHTPI_UNIT_DIR=UD2))
+ok(r.returncode == 0, 'Aufräumen bricht nicht ab')
+for name in alte:
+    ok(not os.path.exists(os.path.join(UD2, name)),
+       'alte Einheit entfernt: %s' % name)
+for name in bleiben:
+    ok(os.path.exists(os.path.join(UD2, name)),
+       'aktuelle/fremde Einheit bleibt: %s' % name)
+ok('alte Einheit entfernt' in r.stdout, 'Aufräumen wird im Protokoll gemeldet')
 
 print('\n%s%d Prüfungen bestanden, %d fehlgeschlagen'
       % ('OK – ' if failed == 0 else 'FEHLER – ', passed, failed))

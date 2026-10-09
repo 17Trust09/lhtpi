@@ -11,10 +11,16 @@ Verteiler-App.
 2. **Kein Access Point mehr.** Frühere Versionen machten `wlan0` zum AP `LHTPi`
    und löschten dazu vorhandene WLAN-Verbindungen. Das ist ersatzlos entfernt:
    der Installer fasst WLAN nicht mehr an.
-3. **Danach ein Ort zum Konfigurieren:** Der Knopf „Anzeigen-Einstellungen
-   öffnen" in der **Safety-Cross-Admin-Seite** (`http://<gerät>:8002/admin`)
-   führt auf die Anzeigen-Seite (`:8000/display`). Kein zweiter Umbau — die
-   Anzeigen-Seite bleibt die einzige Stelle, an der konfiguriert wird.
+3. **Ein Ort zum Konfigurieren:** die **Anzeigen-Seite** (`:8000/display`) —
+   sie erscheint bei jedem Start von selbst. Außerdem führt der Knopf
+   „Anzeigen-Einstellungen öffnen" in der **Safety-Cross-Admin-Seite**
+   (`http://<gerät>:8002/admin`) dorthin.
+4. **Kein Login am Gerät.** Der Kiosk-Bildschirm hat keine Tastatur: Aufrufe
+   über `localhost` gelten als angemeldet (`LHTPI_LOKAL_LOGIN=0` schaltet das
+   ab). Aus dem LAN bleibt der Login (admin) Pflicht.
+5. **Nur die Anzeige.** Die Anzeigen-Seite hat keinen Link zum Dashboard oder zu
+   anderen Seiten; das Gerät landet ausschließlich auf der Anzeigen-Seite und
+   danach in den Kiosk-Fenstern.
 
 ## Ablauf beim ersten Booten
 
@@ -24,19 +30,27 @@ Verteiler-App.
    Die **Lizenz** legt er nur ab, wenn sie mitgeliefert wird (`--license=…` oder
    `lizenz.key` auf der Boot-Partition) — erzeugen kann er sie nicht, der private
    Signaturschlüssel bleibt beim Hersteller. Siehe [LIZENZ.md](LIZENZ.md).
-2. Beim ersten Booten startet **kein Kiosk**. Stattdessen öffnet
-   `lhtpi-setup.service` auf dem ersten angeschlossenen Ausgang die
-   **Anzeigen-Seite** (`http://localhost:8000/display`) im Vollbild.
+2. Beim Booten startet **kein Kiosk**. Es öffnet `lhtpi-setup.service` auf dem
+   ersten angeschlossenen Ausgang die **Anzeigen-Seite**
+   (`http://localhost:8000/display`) im Vollbild — ohne Anmeldung.
    Angeschlossene Ausgänge werden per `xrandr --auto` eingeschaltet.
+   Ist das Gerät schon eingerichtet, läuft dort ein Countdown (30 s) mit dem
+   Knopf **„Anzeige jetzt starten"** — die Anzeige startet also von selbst, auch
+   nach einem Stromausfall, und man kann sie jederzeit früher starten.
 3. Auf der Seite steht oben der Hinweis **„Erste Einrichtung"** mit der Anzahl
    erkannter Ausgänge. Man wählt: Anzahl Bildschirme, welches Tool auf welchem
    Bildschirm, Anzeigedauer je Tool, Mauszeiger-Ausblendung — dann
    **„Speichern"**.
+
+   Zur Belegung: **ein Tool auf einem Bildschirm = fest** (keine Dauer nötig,
+   das Feld verschwindet), **zwei oder mehr = Rotation** und dann gilt die
+   Anzeigedauer je Tool. Die Seite rechnet das live mit, ohne Neuladen.
 4. Darunter **„Einrichtung abschließen und Anzeige starten"** → setzt
    `/etc/lhtpi/installed`.
 5. Ein Pfad-Wächter (`lhtpi-anzeige.path`) reagiert sofort: die
    Ersteinrichtungs-Seite wird beendet, die Anzeige(n) starten — **kein
-   Neustart nötig**.
+   Neustart nötig**. Derselbe Weg greift beim Knopf **„Anzeige jetzt starten"**
+   auf der Anzeigen-Seite (Einrichtungs-Fenster zu, Kiosk-Fenster auf).
 
    Fehlt die Lizenz noch, verweigert die Seite den Abschluss mit einem Hinweis
    (sonst würde sich das Gerät mit dem Merkmal sofort selbst sperren). Dann
@@ -59,24 +73,38 @@ damit die App schreiben darf — kein `sudo` in der App nötig):
 
 systemd-Einheiten:
 
-* `lhtpi-setup.service` — `ConditionPathExists=!installed`: zeigt die
-  Anzeigen-Seite, solange nicht eingerichtet ist.
-* `kiosk-screen1.service` — `ConditionPathExists=installed`.
-* `kiosk-screen2.service` — `ConditionPathExists=screen2`.
+* `lhtpi-setup.service` — startet bei jedem Booten: zeigt die Anzeigen-Seite
+  (Einstiegspunkt am Gerät, ohne Login).
+* `kiosk-screen1.service` — `ConditionPathExists=installed`; wird **nicht**
+  beim Booten gestartet, sondern von der Anzeigen-Steuerung (sonst lägen
+  Einrichtungs-Fenster und Kiosk übereinander).
+* `kiosk-screen2.service` — `ConditionPathExists=screen2`, gleicher Start.
 * `lhtpi-anzeige.path` + `lhtpi-anzeige.service` — reagieren auf `installed`
   und jede Änderung an `screens` und starten/stoppen die Anzeigen passend
   (`/usr/local/bin/lhtpi-anzeige-steuern.sh`).
 
 Damit gilt: Bildschirm-Anzahl ändern wirkt **sofort**, auch später im Betrieb.
+Der Installer räumt außerdem alte Kiosk-Einheiten früherer Fassungen weg
+(inklusive solcher, die noch das Dashboard zeigten).
 
-## Einrichtung wiederholen (z. B. Gerät umstellen)
+## Wieder zur Anzeigen-Seite (per SSH)
+
+Die Seite erscheint bei jedem Neustart von selbst. Ohne Neustart des Geräts:
+
+```bash
+sudo systemctl stop kiosk-screen1.service kiosk-screen2.service
+sudo systemctl start lhtpi-setup.service
+```
+
+## Einrichtung von vorn (z. B. Gerät umstellen)
 
 ```bash
 sudo rm -f /etc/lhtpi/installed /etc/lhtpi/screen2
-sudo reboot
+sudo systemctl restart lhtpi-setup.service
 ```
 
-Danach erscheint wieder die Anzeigen-Seite auf dem Bildschirm.
+Danach erscheint wieder die Anzeigen-Seite mit dem Hinweis „Erste Einrichtung"
+(oder einmal neu starten).
 
 ## Ohne Netzwerk
 
@@ -95,5 +123,6 @@ wäre Fernzugriff — bewusst nicht vorgesehen.
 * Lizenzen sind **gerätegebunden und signiert**: eine Kopie der SD-Karte auf
   einem anderen Pi ist ungültig. Erzeugt wird sie beim Hersteller, siehe
   [LIZENZ.md](LIZENZ.md).
-* Der echte Test auf dem Pi steht noch aus (S6): Installer, Erststart, Maus +
-  Tastatur, Umschalten der Bildschirm-Anzahl im Betrieb.
+* Von den Kiosk-Fenstern kommt man nur per SSH oder Neustart zurück auf die
+  Anzeigen-Seite — gewollt, damit am Gerät niemand aus der Anzeige heraus
+  navigieren kann.
