@@ -481,6 +481,18 @@ for treffer in re.finditer(r'StartLimit(?:IntervalSec|Burst)', text):
                            text.find('\n', treffer.start())].strip())
 ok(not falsch, 'Startgrenzen stehen in [Unit] (%s)' % (falsch or 'alle richtig'))
 
+print('\n19) Kiosk-Fenster: keine fremden Tabs aus alter Sitzung')
+
+kiosk_skript = schritt('render_screen_kiosk_script 1').stdout
+ok('Alte Sitzung verwerfen' in kiosk_skript,
+   'Kiosk-Skript verwirft die alte Chromium-Sitzung')
+ok('Current Session' in kiosk_skript and 'Last Tabs' in kiosk_skript,
+   'und zwar die Sitzungsdateien selbst')
+ok(kiosk_skript.index('Current Session') < kiosk_skript.index('exec "$CHROMIUM"'),
+   'das passiert vor dem Start von Chromium')
+ok('--hide-crash-restore-bubble' in kiosk_skript,
+   'Restore-Hinweis ist zusätzlich abgeschaltet')
+
 print('\n%s%d Prüfungen bestanden, %d fehlgeschlagen'
       % ('OK – ' if failed == 0 else 'FEHLER – ', passed, failed))
 sys.exit(1 if failed else 0)

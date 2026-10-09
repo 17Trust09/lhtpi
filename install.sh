@@ -259,6 +259,13 @@ xset s noblank >/dev/null 2>&1 || true
 CHROMIUM="/usr/bin/chromium-browser"
 [ -x "$CHROMIUM" ] || CHROMIUM="/usr/bin/chromium"
 
+# Alte Sitzung verwerfen. Sonst stellt Chromium nach einem Neustart zusätzlich
+# frühere Tabs wieder her (z. B. die Anzeigen-Seite) - die legen sich dann über
+# die Anzeige. Die Anzeige braucht nur ihr eigenes Fenster.
+rm -f "$PROFILE/Default/Current Session" "$PROFILE/Default/Current Tabs" \
+      "$PROFILE/Default/Last Session" "$PROFILE/Default/Last Tabs" 2>/dev/null || true
+rm -rf "$PROFILE/Default/Sessions" 2>/dev/null || true
+
 exec "$CHROMIUM" \
     --app="$APP_URL" \
     --class=kiosk-screen__IDX__ \
@@ -268,6 +275,7 @@ exec "$CHROMIUM" \
     --noerrdialogs \
     --disable-infobars \
     --disable-session-crashed-bubble \
+    --hide-crash-restore-bubble \
     --disable-features=Translate,TranslateUI \
     --no-first-run \
     --check-for-update-interval=31536000 \
