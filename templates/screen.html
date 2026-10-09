@@ -11,6 +11,9 @@
   .frame{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000;
     opacity:0;transition:opacity .7s ease;pointer-events:none}
   .frame.on{opacity:1}
+  /* Wartung erlaubt: das sichtbare Tool lässt sich bedienen (z. B. Reiter
+     "Admin" im Safety Cross). Aus: die Anzeige nimmt keine Klicks an. */
+  {% if cfg.wartung_knopf %}.frame.on{pointer-events:auto}{% endif %}
   #hint{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
     color:#8a93a3;font-family:Inter,Arial,sans-serif;font-size:2rem;text-align:center;
     line-height:1.5}

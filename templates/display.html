@@ -143,10 +143,12 @@
         </label>
         <label class="field">Wartungs-Knopf am Bildschirm
           <select name="wartung_knopf">
-            <option value="1" {% if o.wartung_knopf %}selected{% endif %}>an – erscheint bei Mausbewegung</option>
-            <option value="0" {% if not o.wartung_knopf %}selected{% endif %}>aus – Anzeige bleibt unbedienbar</option>
+            <option value="1" {% if o.wartung_knopf %}selected{% endif %}>an – Knopf und Bedienung</option>
+            <option value="0" {% if not o.wartung_knopf %}selected{% endif %}>aus – nur Anzeige</option>
           </select>
-          <span class="hint">Öffnet in der Ecke „Anzeigen" – auch bei Folien und Terminen.</span>
+          <span class="hint">An: Bei Mausbewegung erscheint unten links „⚙ Anzeigen"
+            (zurück zur Verwaltung), und die Reiter der Tools (z. B. „Admin" im
+            Safety Cross) sind anklickbar. Aus: die Anzeige bleibt unbedienbar.</span>
         </label>
       </div>
 
