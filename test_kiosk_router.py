@@ -543,6 +543,46 @@ with app.app_context():
 ok('Zurück zur Anzeige' in mit_login or not router.ist_eingerichtet(),
    'und einen Weg zurück zur laufenden Anzeige')
 
+print('\n9f) Kein Selbststart mehr, wenn das Gerät eingerichtet ist')
+
+# Abschluss herstellen (schreibt die Kenn-Datei)
+client.post('/setup/abschluss', data={
+    'screen_count': '1', 'cursor_idle': '3', 'reload_minutes': '30',
+    'screen_1_present': '1', 'name_1': 'Bildschirm 1', 'hdmi_1': 'HDMI-1',
+    'screen_1_active': '1', 'tool_1_safetycross_present': '1',
+    'tool_1_safetycross_active': '1', 'tool_1_safetycross_dwell': '30'})
+with app.app_context():
+    ok(router.ist_eingerichtet(), 'Gerät gilt jetzt als eingerichtet')
+seite = client.get('/display').get_data(as_text=True)
+ok('data-sekunden="0"' in seite,
+   'eingerichtet: kein Selbststart (Seite bleibt stehen)')
+ok('startet von selbst' not in seite or 'data-sekunden="0"' in seite,
+   'und kein Countdown-Text mehr')
+ok('Zurück zur Anzeige' in seite, 'der Rückweg zur Anzeige ist da')
+
+print('\n9g) Chromium-Sitzung wird beim Schreiben verworfen')
+
+import pathlib
+import tempfile
+with tempfile.TemporaryDirectory() as tmp:
+    profil = pathlib.Path(tmp, '.config', 'chromium-screen1', 'Default')
+    profil.mkdir(parents=True)
+    for n in ('Current Session', 'Last Session', 'Preferences'):
+        (profil / n).write_text('x')
+    (profil / 'Sessions').mkdir()
+    alt_home = os.environ.get('HOME')
+    os.environ['HOME'] = tmp
+    try:
+        with app.app_context():
+            router.sitzungen_verwerfen()
+    finally:
+        if alt_home:
+            os.environ['HOME'] = alt_home
+    ok(not (profil / 'Current Session').exists(),
+       'alte Sitzung wird verworfen (keine Browserleiste mehr)')
+    ok(not (profil / 'Last Session').exists(), 'und die letzte ebenfalls')
+    ok((profil / 'Preferences').exists(), 'Einstellungen des Profils bleiben')
+
 print('OK – %d Prüfungen bestanden' % len(checks))
 for passed, msg in checks:
     print('  ✓', msg)

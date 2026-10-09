@@ -7,6 +7,8 @@ Regeln:
 
 Nicht installierte (und damit nicht lizenzierte) Tools werden nie ausgeliefert.
 """
+import glob
+import shutil
 import os
 from models import db, KioskScreen, KioskScreenTool
 from usb_source import get_setting, set_setting
@@ -94,6 +96,8 @@ def _schreibe_screen_dateien(count):
     Bildschirmen. Der zweite Kiosk prüft das beim Start, der Pfad-Wächter
     reagiert auf Änderungen — so startet/stoppt die Anzeige ohne Neustart.
     """
+    # Alte Sitzung wegwerfen, damit kein fremder Tab über der Anzeige landet
+    sitzungen_verwerfen()
     pfad = tools.SCREENS_FILE
     ordner = os.path.dirname(pfad)
     try:
@@ -120,6 +124,27 @@ def ist_eingerichtet():
     except ImportError:
         return True
     return os.path.exists(license_bundle.MARKER_FILE)
+
+
+def sitzungen_verwerfen():
+    """Alte Chromium-Sitzung der Kiosk-Fenster verwerfen.
+
+    Chromium stellt nach einem Abbruch die zuletzt offene Seite wieder her -
+    als normales Fenster mit Browserleiste. Das legt sich dann über die Anzeige
+    (typisch: die Anzeigen-Seite). Darum die Sitzungsdateien vor jedem Neustart
+    der Fenster wegwerfen. Inhalte der Tools bleiben unberührt.
+    """
+    basis = os.path.join(os.path.expanduser('~'), '.config')
+    for muster in ('chromium-screen*', 'chromium-setup'):
+        for profil in glob.glob(os.path.join(basis, muster)):
+            for name in ('Current Session', 'Current Tabs',
+                         'Last Session', 'Last Tabs'):
+                try:
+                    os.remove(os.path.join(profil, 'Default', name))
+                except OSError:
+                    pass
+            shutil.rmtree(os.path.join(profil, 'Default', 'Sessions'),
+                          ignore_errors=True)
 
 
 def set_screen_count(count):

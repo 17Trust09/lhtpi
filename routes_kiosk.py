@@ -58,12 +58,17 @@ def _ist_lokal():
 @app.route('/display')
 @login_required
 def display():
-    return render_template('display.html', o=router.display_overview(),
-                           eingerichtet=router.ist_eingerichtet(),
-                           erkannte_schirme=tools.detected_screen_count(),
-                           lizenz_da=bool(lic.read_license()),
-                           lokal=_ist_lokal(),
-                           autostart_sekunden=AUTOSTART_SEKUNDEN)
+    eingerichtet = router.ist_eingerichtet()
+    return render_template(
+        'display.html', o=router.display_overview(),
+        eingerichtet=eingerichtet,
+        erkannte_schirme=tools.detected_screen_count(),
+        lizenz_da=bool(lic.read_license()),
+        lokal=_ist_lokal(),
+        # Von selbst starten nur bei der Ersteinrichtung. Ist das Gerät fertig,
+        # bleibt die Seite stehen, bis Tim 'Anzeige jetzt starten' drückt -
+        # sonst nimmt ihm der Selbststart nach 30 s die Seite unter den Füßen weg.
+        autostart_sekunden=0 if eingerichtet else AUTOSTART_SEKUNDEN)
 
 
 @app.route('/anzeige/start', methods=['POST'])
