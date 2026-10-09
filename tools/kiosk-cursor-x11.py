@@ -33,20 +33,23 @@ def verbinde(display_name: str | None):
     from Xlib.ext import xfixes
 
     d = display.Display(display_name)
-    root = d.screen().root
-    erweiterung = d.query_extension('XFIXES')
-    if erweiterung is None:
+    info = d.query_extension('XFIXES')
+    if info is None:
         raise RuntimeError('XFIXES fehlt am X-Server')
-    opcode = erweiterung.major_opcode
+    # Erst damit haengt python-xlib die Aufrufe an die Fensterobjekte.
+    xfixes.init(d, info)
+    root = d.screen().root
 
     def verstecken(fenster):
-        xfixes.HideCursor(display=d, opcode=opcode, window=fenster)
+        fenster.hide_cursor()
         d.sync()
 
     def zeigen(fenster):
-        xfixes.ShowCursor(display=d, opcode=opcode, window=fenster)
+        fenster.show_cursor()
         d.sync()
 
+    if not hasattr(root, 'hide_cursor'):
+        raise RuntimeError('python-xlib kennt hide_cursor nicht (XFixes-Erweiterung)')
     return d, root, verstecken, zeigen
 
 
