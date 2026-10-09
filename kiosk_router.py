@@ -170,12 +170,24 @@ def save_screen(idx, name=None, hdmi=None, entries=None, enabled=True):
 
 # ── Konfiguration für die Anzeige ────────────────────────────────────────────
 
+def tool_url(tool, cursor_idle=None):
+    """Tool-URL, wie sie die Anzeige einbettet (Cursor-Idle wird mitgegeben)."""
+    url = tools.default_url(tool)
+    if not url:
+        return url
+    if cursor_idle is None:
+        cursor_idle = cursor_idle_seconds()
+    sep = '&' if '?' in url else '?'
+    return '%s%scursor_idle=%d' % (url, sep, int(cursor_idle))
+
+
 def screen_config(idx, with_probe=True):
     """Alles, was die Router-Seite für einen Bildschirm braucht."""
     screen = get_screen(idx)
     if screen is None or not screen.enabled:
         return None
 
+    idle = cursor_idle_seconds()
     entries = []
     for st in sorted(screen.tools, key=lambda x: (x.sort, x.id or 0)):
         if not st.enabled or not tools.is_known(st.tool) or not tools.is_installed(st.tool):
@@ -185,7 +197,7 @@ def screen_config(idx, with_probe=True):
             'tool': st.tool,
             'label': tools.label(st.tool),
             'short': tools.short(st.tool),
-            'url': url,
+            'url': tool_url(st.tool, idle),
             'dwell': int(st.dwell_seconds or tools.default_dwell(st.tool)),
             'alive': tools.probe(url) if with_probe else True,
         })

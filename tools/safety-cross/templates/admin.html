@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-wrap">
+  <div class="admin-head">
+    <div class="admin-title">
+      <h1>Administration</h1>
+      <p>Abteilung, Meister, Ersthelfer, Notruf &amp; Unfälle verwalten.</p>
+    </div>
+    <div class="admin-actions">
+      <span class="logout-timer" id="logout-timer">Logout in 60 s</span>
+      <a class="btn ghost" href="{{ url_for('logout') }}">Abmelden</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3><span class="ico">▦</span> Abteilung &amp; Meister</h3>
+    <form method="post" action="{{ url_for('admin_abteilung') }}" class="field">
+      <input type="text" name="abteilung" value="{{ abteilung }}" placeholder="z. B. Hydraulik Prüffeld">
+      <button class="btn" type="submit">Übernehmen</button>
+    </form>
+    <form method="post" action="{{ url_for('admin_meister') }}" class="field" style="margin-top:10px">
+      <input type="text" name="meister" value="{{ meister }}" placeholder="Meister der Abteilung">
+      <button class="btn" type="submit">Übernehmen</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3><span class="ico">✚</span> Ersthelfer</h3>
+    <form method="post" action="{{ url_for('admin_ersthelfer_add') }}" class="field">
+      <input type="text" name="name" placeholder="Name des Ersthelfers">
+      <button class="btn yellow" type="submit">Hinzufügen</button>
+    </form>
+    <div class="chips">
+      {% for e in ersthelfer %}
+      <span class="chip">{{ e.name }}
+        <form method="post" action="{{ url_for('admin_ersthelfer_remove') }}" style="display:inline">
+          <input type="hidden" name="id" value="{{ e.id }}">
+          <button type="submit" title="Entfernen">×</button>
+        </form>
+      </span>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card">
+    <h3><span class="ico">☎</span> Notruf &amp; wichtige Nummern</h3>
+    <p class="hint" style="margin:0 0 12px">Nummer oder Ort eintragen — z. B. „Feuerwehr → 112" oder „Defibrillator → Halle 2, EG".</p>
+    <form method="post" action="{{ url_for('admin_notruf_add') }}" class="field">
+      <input type="text" name="label" placeholder="Bezeichnung (z. B. Feuerwehr)" style="flex:0 0 200px;min-width:160px">
+      <input type="text" name="value" placeholder="Nummer / Ort (z. B. 112)">
+      <button class="btn yellow" type="submit">Hinzufügen</button>
+    </form>
+    <div class="chips">
+      {% for n in notruf %}
+      <span class="chip">{{ n.label }}: {{ n.value }}
+        <form method="post" action="{{ url_for('admin_notruf_remove') }}" style="display:inline">
+          <input type="hidden" name="id" value="{{ n.id }}">
+          <button type="submit" title="Entfernen">×</button>
+        </form>
+      </span>
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card">
+    <h3><span class="ico">▶</span> Tage unfallfrei / Zählung</h3>
+    <p class="hint" style="margin:0 0 12px">Entweder die Anzahl der unfallfreien Tage eintragen (Startdatum wird automatisch berechnet) — oder direkt ein Startdatum setzen.</p>
+    <form method="post" action="{{ url_for('admin_zahlung_days') }}" class="field">
+      <input type="number" name="days" min="0" placeholder="z. B. 465 (Tage)">
+      <button class="btn" type="submit">Tage übernehmen</button>
+    </form>
+    <form method="post" action="{{ url_for('admin_zahlung_date') }}" class="field" style="margin-top:10px">
+      <input type="date" name="start_date" value="{{ start_date }}">
+      <button class="btn" type="submit">Datum übernehmen</button>
+    </form>
+    <div class="hint" style="margin-top:10px">
+      {% if start_date %}Zählung startet am {{ start_date_de }}.{% else %}Automatisch: ab Monatsanfang (bzw. seit dem letzten Unfall).{% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <h3><span class="ico">⚠</span> Unfall melden</h3>
+    <p class="hint" style="margin:0 0 14px">Datum, Person und Beschreibung eintragen — der Tag wird automatisch markiert und der Zähler startet neu.</p>
+    <form method="post" action="{{ url_for('admin_unfall') }}" class="unfall-form">
+      <input type="date" name="date" value="{{ today_iso }}" required>
+      <select name="type">
+        <option value="red">Unfall</option>
+        <option value="yellow">Beinahe-Unfall</option>
+      </select>
+      <input type="text" name="person" placeholder="Betroffene Person" style="flex:1;min-width:180px">
+      <input type="text" name="desc" placeholder="Was ist passiert?" style="flex:1;min-width:180px">
+      <button class="btn" type="submit" style="background:var(--red)">Eintragen</button>
+    </form>
+
+    <details class="recent">
+      <summary>Letzte Einträge ({{ recent|length }})</summary>
+      {% for r in recent %}
+      <div class="acc-item">
+        <span class="acc-dot" style="background:{% if r.status == 'red' %}var(--red){% else %}var(--yellow){% endif %}"></span>
+        <span class="acc-date">{{ r.date }}</span>
+        <span class="acc-note">{{ r.note or ('Unfall' if r.status == 'red' else 'Beinahe-Unfall') }}</span>
+      </div>
+      {% else %}
+      <div class="hint">Noch keine Einträge.</div>
+      {% endfor %}
+    </details>
+  </div>
+
+  <div class="card">
+    <h3><span class="ico">⏻</span> System</h3>
+    <p class="hint" style="margin:0 0 14px">Raspberry Pi sicher neu starten oder herunterfahren (statt Strom zu ziehen).</p>
+    <div class="field">
+      <form method="post" action="{{ url_for('admin_reboot') }}" onsubmit="return confirm('Raspberry Pi wirklich neu starten?')">
+        <button class="btn" type="submit">Neustart</button>
+      </form>
+      <form method="post" action="{{ url_for('admin_shutdown') }}" onsubmit="return confirm('Raspberry Pi wirklich herunterfahren?')">
+        <button class="btn ghost" type="submit">Herunterfahren</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3><span class="ico">🔑</span> Passwort ändern</h3>
+    <form method="post" action="{{ url_for('admin_password') }}" class="field">
+      <input type="password" name="password" placeholder="Neues Passwort (min. 4 Zeichen)">
+      <button class="btn" type="submit">Speichern</button>
+    </form>
+  </div>
+</div>
+
+<script>
+  // Auto-Logout nach 60 s Inaktivität — mit sichtbarem Countdown
+  (function () {
+    var LOGOUT_MS = 60000, remaining = LOGOUT_MS / 1000, logoutTimer, tickTimer;
+    var el = document.getElementById('logout-timer');
+    function render() {
+      if (el) el.textContent = 'Logout in ' + Math.max(remaining, 0) + ' s';
+    }
+    function startTicker() {
+      clearInterval(tickTimer);
+      tickTimer = setInterval(function () {
+        remaining--;
+        render();
+        if (remaining <= 0) clearInterval(tickTimer);
+      }, 1000);
+    }
+    function reset() {
+      remaining = LOGOUT_MS / 1000;
+      render();
+      clearTimeout(logoutTimer);
+      startTicker();
+      logoutTimer = setTimeout(function () { window.location.href = "{{ url_for('logout') }}?next=/"; }, LOGOUT_MS);
+    }
+    ["mousemove", "mousedown", "keydown", "touchstart", "click", "scroll", "wheel"].forEach(function (evt) {
+      document.addEventListener(evt, reset, true);
+    });
+    reset();
+  })();
+</script>
+{% endblock %}

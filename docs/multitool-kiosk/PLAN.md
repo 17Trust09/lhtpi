@@ -2,6 +2,10 @@
 
 > Planungsstand: **09.10.2026** · Branch `feature/multitool-kiosk` (Basis `feature/terminboard` @ `48afcce`)
 > Auftrag: Tim · Umsetzung: Slices (Codex/Claude) · Verifikation: Yuuki
+>
+> **Entschieden (09.10.2026):** **Bundle** — `lhtpi` ist der Verteiler (Installer + Anzeige-Router +
+> Lizenz). Safety-Cross-Code liegt als Kopie in **`tools/safety-cross/`**; das eigene Repo
+> `17Trust09/safety-cross` wird **nicht** weiter verzweigt. Rotationstechnik: iframe-Rotation.
 
 ---
 
@@ -9,6 +13,7 @@
 
 1. **Ein Gerät** kann Slideshow + Terminboard + Safety Cross zeigen (heute: 3 getrennte Installationen).
 2. **Mehrere Tools können sich einen Ausgang teilen** → sie **wechseln sich ab** (Rotation).
+   Beispiel: Projekt 1 für 5 min, Projekt 2 für 2 min (Dauer je Tool frei einstellbar).
 3. **Anzeigedauer einstellbar** — pro Tool, in Sekunden („wie lange wird was angezeigt").
 4. **Welches Tool einen festen Bildschirm bekommt und welche sich einen teilen** → einstellbar
    (Tool mit einem Eintrag = fest; mehrere Einträge = Rotation).
@@ -31,6 +36,7 @@
 `lhtpi/install.sh` installiert LHTPi + Terminboard als **Add-on**, ordnet per `xrandr` HDMI-1/HDMI-2 zu und
 startet **einen Chromium je Tool** (`lhtpi-kiosk.service`, `terminboard-kiosk.service`).
 Safety Cross ist heute eine **eigene Installation** (`/opt/safety-cross`, eigenes Repo, eigene Lizenz).
+Im Bundle liegt der Code jetzt unter `tools/safety-cross/` — ab hier ist **diese Kopie die Quelle**.
 
 ---
 
@@ -199,11 +205,33 @@ Reihenfolge: **S1 → S2 → S4 → S5**, S3 parallel (klein, unabhängig). S6 a
 
 ---
 
-## 10. Offene Entscheidungen
+## 10. Entscheidungen (09.10.2026)
 
-1. **Ein Bundle-Repo oder drei?** Empfehlung: `lhtpi` wird **Verteiler** (Installer + Router + Lizenz),
-   Safety-Cross-Code kommt als `tools/safety-cross/` dazu (Quelle bleibt das eigene Repo, Sync per Skript).
-   Ein Installer, eine Lizenz, ein Image — passt zu „Alles an eine Hardware-Lizenz binden".
-2. **Safety-Cross-Repo:** eigene Änderungen (Cursor, Lizenzmodul, Router-Freundlichkeit) brauchen dort
-   einen eigenen Branch (`feature/multitool-bundle`) — Freigabe?
-3. **Default-Anzeigedauern**: Folien 60 s · Termine 30 s · Safety Cross 30 s — so lassen?
+1. **Bundle statt drei Repos.** `lhtpi` wird Verteiler: Anzeige-Router, Installer und Lizenz liegen hier;
+   Safety-Cross-Code liegt als Kopie unter `tools/safety-cross/` (zusammen arbeiten → auswählen, wer sich
+   einen Bildschirm teilt, geht nur mit einem gemeinsamen Stand). Das Repo `17Trust09/safety-cross`
+   bekommt **keinen** eigenen Branch; die Kopie im Bundle ist ab jetzt die weiterentwickelte Fassung.
+2. **Rotationstechnik:** iframe-Rotation im Browser (randlos eingebettet, kein Fenstermanager-Eingriff).
+3. **Default-Anzeigedauern:** Folien 60 s · Termine 30 s · Safety Cross 30 s — je Tool änderbar
+   (Beispiel 5 min / 2 min ist damit abgedeckt).
+
+## 11. Stand der Umsetzung
+
+| # | Paket | Stand |
+|---|---|---|
+| S1 | Anzeige-Router (Registry, DB, `/screen/<n>`, `/api/screens`, Admin-Seite, Tests) | ✅ erledigt (`test_kiosk_router.py`, 31 Prüfungen) |
+| S3 | Cursor einheitlich in allen drei Tools + OS-Hacks entfernt | ✅ erledigt (`test_cursor_unified.py`) |
+| S2 | Installer: Bildschirm-Anzahl, Kiosk-Service je Bildschirm | offen |
+| S4 | Installation mit Auswahl (1/2/3 Tools, interaktiv + Flags) | offen |
+| S5 | Lizenz-Bundle + Key-Generator + Lock-Screens | offen |
+| S6 | Doku/Screenshots + Hardware-Test auf dem Pi | offen |
+
+### Tests im Bundle ausführen
+
+```bash
+cd lhtpi
+./venv/bin/python test_kiosk_router.py     # Anzeige-Router
+./venv/bin/python test_cursor_unified.py   # Mauszeiger in allen drei Tools
+./venv/bin/python test_usb_source.py       # Bestand (USB-Quelle)
+cd tools/safety-cross && ../../venv/bin/python -m pytest tests/ -q   # SC (braucht pytest)
+```

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block content %}
+<header class="kiosk-header">
+  <div class="left">
+    <div class="kiosk-title">
+      <h1>Safety Cross</h1>
+      <div class="sub">Arbeitssicherheit · Lufthansa Technik</div>
+    </div>
+  </div>
+  <div class="kiosk-meta">
+    <div class="date">{{ today_str }}</div>
+    <div class="safe"><span>Tage unfallfrei</span><b>{{ safe_days }}</b></div>
+  </div>
+</header>
+
+<div class="kiosk-body">
+  <aside class="sidebar">
+    <div class="abt-card">
+      <div class="abteilung">{{ abteilung }}</div>
+      {% if meister %}<div class="meister">{{ meister }}</div>{% endif %}
+    </div>
+    <div class="ersthelfer">
+      <h2><span class="cross">✚</span> Ersthelfer</h2>
+      <ul>
+        {% for e in ersthelfer %}
+        <li><span class="avatar">{{ e.name[:2]|upper }}</span><span>{{ e.name }}</span></li>
+        {% else %}
+        <li class="empty-note">Noch keine Ersthelfer hinterlegt.</li>
+        {% endfor %}
+      </ul>
+    </div>
+    <div class="notruf">
+      <h2><span class="cross">☎&#xFE0E;</span> Notruf &amp; wichtige Nummern</h2>
+      <ul>
+        {% for n in notruf %}
+        <li><span class="n-label">{{ n.label }}</span><span class="n-value">{{ n.value }}</span></li>
+        {% else %}
+        <li class="empty-note">Noch keine Nummern hinterlegt.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </aside>
+
+  <main class="cross-panel">
+    <div class="month-title">
+      <a class="month-nav" href="{{ url_for('board', y=prev[0], m=prev[1]) }}">‹</a>
+      <span>{{ month_name }} {{ year }}</span>
+      {% if not is_current %}<a class="month-nav" href="{{ url_for('board', y=next[0], m=next[1]) }}">›</a>{% endif %}
+    </div>
+    <div class="grid">
+      {% for cell in cells %}
+      <div class="day {{ cell.cls }}">
+        {% if cell.day %}<span class="num">{{ cell.day }}</span>{% elif cell.cls == 'center' %}<span class="num">✚</span>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    <div class="legend">
+      <span class="item"><span class="dot" style="background:var(--green)"></span> Unfallfrei</span>
+      <span class="item"><span class="dot" style="background:var(--yellow)"></span> Beinahe-Unfall</span>
+      <span class="item"><span class="dot" style="background:var(--red)"></span> Unfall</span>
+    </div>
+  </main>
+</div>
+{% endblock %}

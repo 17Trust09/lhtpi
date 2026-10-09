@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="admin-wrap">
+  <div class="gate">
+    <div class="lock">🔒</div>
+    <h2>Administration</h2>
+    <p>Dieser Bereich ist passwortgeschützt.</p>
+    <form method="post" action="{{ url_for('login') }}">
+      <input type="password" name="password" placeholder="Passwort" autocomplete="off" autofocus>
+      {% if error %}<div class="err">{{ error }}</div>{% endif %}
+      <button class="btn" type="submit" style="width:100%">Anmelden</button>
+    </form>
+  </div>
+</div>
+
+<script>
+  // Rückkehr zur Anzeige nach 60 s Inaktivität
+  (function () {
+    var BACK_MS = 60000, backTimer;
+    function reset() {
+      clearTimeout(backTimer);
+      backTimer = setTimeout(function () { window.location.href = "{{ url_for('board') }}"; }, BACK_MS);
+    }
+    ["mousemove", "mousedown", "keydown", "touchstart", "click", "scroll", "wheel"].forEach(function (evt) {
+      document.addEventListener(evt, reset, true);
+    });
+    reset();
+  })();
+</script>
+{% endblock %}

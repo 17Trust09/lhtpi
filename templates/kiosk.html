@@ -5,50 +5,42 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>LHTPi - Präsentation</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box;cursor:none!important}
-html,body{width:100%;height:100%;overflow:hidden;background:#000;user-select:none;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none;cursor:none!important}
-#page{width:100%;height:100%;pointer-events:none;cursor:none!important}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;user-select:none;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none}
+#page{width:100%;height:100%;pointer-events:none}
 #player{width:100%;height:100%;display:flex;align-items:center;justify-content:center}
 #player img,#player video{max-width:100%;max-height:100%;object-fit:contain;pointer-events:none;-webkit-user-drag:none;user-drag:none}
 #player video{width:100%;height:100%}
 #empty{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:#555;font-family:sans-serif;font-size:2rem;text-align:center;pointer-events:none}
 /* Maus-Cursor-Overlay: deckt den HW-Cursor mit einem transparenten Bereich ab */
-#cursor-overlay{position:fixed;top:0;left:0;width:100%;height:100%;z-index:999999;pointer-events:none;cursor:none!important}
-/* Overlay mit unsichtbarem Cursor belegen */
-body{cursor:url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1" fill="transparent"/></svg>'),default!important}
+#cursor-overlay{position:fixed;top:0;left:0;width:100%;height:100%;z-index:999999;pointer-events:none}
 /* Google Translate-Overlay komplett unsichtbar machen */
 iframe[src*="translate"], div[class*="translate"], div[id*="translate"], div[aria-label*="Translate"], .goog-te-banner-frame, .goog-te-menu-frame, .goog-te-gadget-simple, .VIpgJd-ZVi9od-aZ2wEe-wOHMyf{display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important;position:absolute!important;top:-9999px!important;left:-9999px!important;z-index:-1!important}
 </style>
 <script>
-// Maus-Overlay-Events sofort killen – bevor Chromium den Cursor zeigt
-(function(){
-  // Cursor alle 100ms aus dem Bildschirm werfen
-  const hideCursor = () => {
-    try {
-      // Versuch 1: CSS per forceCursorNone
-      const s = document.getElementById('_cursor_hide') || (()=>{
-        const e=document.createElement('style');
-        e.id='_cursor_hide';
-        document.head.appendChild(e);
-        return e;
-      })();
-      s.textContent = '*{cursor:none!important}html,body{cursor:none!important}';
-      // Versuch 2: Maus per hiddenmousemove außerhalb treiben
-      // (nicht möglich im Browser, aber wir blocken alle Events)
-    } catch(e){}
-  };
-  hideCursor();
-  setInterval(hideCursor, 1000);
-  
-  // Pointer-Events abfangen
-  const block = e => { e.preventDefault(); e.stopPropagation(); };
-  document.addEventListener('mousemove', block, true);
-  document.addEventListener('mouseenter', block, true);
-  document.addEventListener('mouseover', block, true);
-  document.addEventListener('mouseout', block, true);
-  document.addEventListener('pointermove', block, true);
-  document.addEventListener('pointerover', block, true);
-  document.addEventListener('pointerenter', block, true);
+/* Kiosk-Mauszeiger: nach Inaktivität aus, bei Bewegung sofort wieder da.
+   Identisch in allen Tools – Referenz: tools/kiosk-cursor.js */
+(function () {
+  var q = new URLSearchParams(location.search).get('cursor_idle');
+  var MS = (parseInt(q || document.documentElement.dataset.cursorIdle || '3', 10) || 3) * 1000;
+  var timer;
+  function hide() {
+    if (document.getElementById('_kh')) return;
+    var s = document.createElement('style');
+    s.id = '_kh';
+    s.textContent = '*,html,body{cursor:none!important}';
+    document.head.appendChild(s);
+  }
+  function show() {
+    var s = document.getElementById('_kh');
+    if (s) s.remove();
+    clearTimeout(timer);
+    timer = setTimeout(hide, MS);
+  }
+  ['mousemove', 'mousedown', 'wheel', 'keydown', 'touchstart'].forEach(function (e) {
+    document.addEventListener(e, show, true);
+  });
+  timer = setTimeout(hide, MS);
 })();
 
 document.addEventListener('contextmenu', e => e.preventDefault());

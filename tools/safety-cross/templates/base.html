@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Safety Cross – Lufthansa Technik</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<nav class="tabbar">
+  <div class="brand"><span>LUFTHANSA</span></div>
+  <a class="tab {% if active_tab == 'anzeige' %}active{% endif %}" href="{{ url_for('board') }}">Anzeige</a>
+  <a class="tab {% if active_tab == 'admin' %}active{% endif %}" href="{{ url_for('admin') }}">Admin</a>
+</nav>
+{% block content %}{% endblock %}
+<script>
+/* Kiosk-Mauszeiger: nach Inaktivität aus, bei Bewegung sofort wieder da.
+   Identisch in allen Tools – Referenz: tools/kiosk-cursor.js */
+(function () {
+  var q = new URLSearchParams(location.search).get('cursor_idle');
+  var MS = (parseInt(q || document.documentElement.dataset.cursorIdle || '3', 10) || 3) * 1000;
+  var timer;
+  function hide() {
+    if (document.getElementById('_kh')) return;
+    var s = document.createElement('style');
+    s.id = '_kh';
+    s.textContent = '*,html,body{cursor:none!important}';
+    document.head.appendChild(s);
+  }
+  function show() {
+    var s = document.getElementById('_kh');
+    if (s) s.remove();
+    clearTimeout(timer);
+    timer = setTimeout(hide, MS);
+  }
+  ['mousemove', 'mousedown', 'wheel', 'keydown', 'touchstart'].forEach(function (e) {
+    document.addEventListener(e, show, true);
+  });
+  timer = setTimeout(hide, MS);
+})();
+</script>
+</body>
+</html>

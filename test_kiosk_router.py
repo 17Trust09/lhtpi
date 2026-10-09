@@ -63,6 +63,7 @@ ok([t['tool'] for t in cfg2['tools']] == ['terminboard'], 'Bildschirm 2 zeigt Te
 ok(len(client.get('/api/screens').get_json()['screens']) == 2, 'zwei Bildschirme aktiv')
 
 # ── 4. Speichern über die Admin-Seite: Rotation mit eigenen Dauern ───────────
+#     Beispiel Tim: Projekt 1 für 5 min, Projekt 2 für 2 min
 resp = client.post('/display/save', data={
     'screen_count': '2',
     'cursor_idle': '5',
@@ -70,9 +71,9 @@ resp = client.post('/display/save', data={
     'screen_1_present': '1', 'screen_1_active': '1',
     'name_1': 'Eingang', 'hdmi_1': 'HDMI-1',
     'tool_1_slideshow_present': '1', 'tool_1_slideshow_active': '1',
-    'tool_1_slideshow_dwell': '45', 'tool_1_slideshow_sort': '0',
+    'tool_1_slideshow_dwell': '300', 'tool_1_slideshow_sort': '0',
     'tool_1_safetycross_present': '1', 'tool_1_safetycross_active': '1',
-    'tool_1_safetycross_dwell': '15', 'tool_1_safetycross_sort': '1',
+    'tool_1_safetycross_dwell': '120', 'tool_1_safetycross_sort': '1',
     'tool_1_terminboard_present': '1', 'tool_1_terminboard_dwell': '30',
     'screen_2_present': '1', 'screen_2_active': '1',
     'name_2': 'Werkstatt', 'hdmi_2': 'HDMI-2',
@@ -86,7 +87,10 @@ ok(cfg['mode'] == 'rotate', 'Bildschirm 1 rotiert bei zwei Tools')
 ok(cfg['name'] == 'Eingang', 'Bildschirmname gespeichert')
 ok([t['tool'] for t in cfg['tools']] == ['slideshow', 'safetycross'],
    'Reihenfolge nach Sortierwert')
-ok([t['dwell'] for t in cfg['tools']] == [45, 15], 'Anzeigedauern je Tool')
+ok([t['dwell'] for t in cfg['tools']] == [300, 120],
+   'Anzeigedauern wie gewünscht: 5 min und 2 min')
+ok(all('cursor_idle=5' in t['url'] for t in cfg['tools']),
+   'Cursor-Zeit wird an die eingebetteten Tools mitgegeben')
 ok(cfg['cursor_idle'] == 5, 'Cursor-Idle gespeichert')
 ok(cfg['reload_minutes'] == 15, 'Reload-Zeit gespeichert')
 

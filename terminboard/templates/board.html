@@ -7,7 +7,7 @@
 <style>
 :root{--navy:#05164D;--yellow:#FFAD00;--blue2:#1B4B8F;--bg:#F4F6FA;--card:#FFFFFF;
 --text:#1A1A1A;--muted:#5D6B7C;--border:#E4E8F0;--green:#1E8E3E;--red:#D93025}
-*{margin:0;padding:0;box-sizing:border-box;cursor:none!important}
+*{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
 font-family:Inter,-apple-system,'Segoe UI',Roboto,Arial,sans-serif;user-select:none}
 .topbar{background:var(--navy);color:#fff;padding:1.05rem 2.2rem;display:flex;align-items:center;justify-content:space-between}
@@ -183,6 +183,32 @@ refresh();
 setInterval(refresh,30000);
 setInterval(setHeader,60000);
 setInterval(cycleAzubi,10000);
+</script>
+<script>
+/* Kiosk-Mauszeiger: nach Inaktivität aus, bei Bewegung sofort wieder da.
+   Identisch in allen Tools – Referenz: tools/kiosk-cursor.js */
+(function () {
+  var q = new URLSearchParams(location.search).get('cursor_idle');
+  var MS = (parseInt(q || document.documentElement.dataset.cursorIdle || '3', 10) || 3) * 1000;
+  var timer;
+  function hide() {
+    if (document.getElementById('_kh')) return;
+    var s = document.createElement('style');
+    s.id = '_kh';
+    s.textContent = '*,html,body{cursor:none!important}';
+    document.head.appendChild(s);
+  }
+  function show() {
+    var s = document.getElementById('_kh');
+    if (s) s.remove();
+    clearTimeout(timer);
+    timer = setTimeout(hide, MS);
+  }
+  ['mousemove', 'mousedown', 'wheel', 'keydown', 'touchstart'].forEach(function (e) {
+    document.addEventListener(e, show, true);
+  });
+  timer = setTimeout(hide, MS);
+})();
 </script>
 </body>
 </html>
