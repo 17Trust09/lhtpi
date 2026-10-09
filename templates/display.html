@@ -219,10 +219,9 @@
         <div class="note">Keine Tools installiert – Installation mit Auswahl erneut ausführen.</div>
       {% endif %}
 
-      {% if not lokal %}
-      <p><a class="btn ghost" href="{{ url_for('screen', idx=s.idx) }}" target="_blank"
-            rel="noopener">Vorschau öffnen</a></p>
-      {% endif %}
+      <p><button type="submit" class="btn ghost" name="weiter"
+                 value="vorschau_{{ s.idx }}" formtarget="_blank">Vorschau
+        (speichert zuerst)</button></p>
     </div>
     {% endfor %}
 

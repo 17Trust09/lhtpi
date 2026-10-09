@@ -20,6 +20,9 @@ def screen(idx):
     cfg = router.screen_config(idx)
     if cfg is None:
         abort(404)
+    # Vorschau (aus der Verwaltung): zeigt an, welches Tool gerade dran ist.
+    # Der Kiosk lädt die Seite ohne diesen Zusatz - dort bleibt alles ruhig.
+    cfg['vorschau'] = request.args.get('vorschau') == '1'
     return render_template('screen.html', cfg=cfg)
 
 
@@ -109,5 +112,18 @@ def display_save():
 
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return jsonify({'ok': True})
+
+    # Knopf "Vorschau": die Auswahl wird zuerst gespeichert, damit man genau
+    # das sieht, was gleich auf dem Bildschirm läuft (nicht den alten Stand).
+    weiter = (request.form.get('weiter') or '').strip()
+    if weiter.startswith('vorschau_'):
+        try:
+            idx = int(weiter.split('_', 1)[1])
+        except (IndexError, ValueError):
+            idx = 0
+        if idx:
+            flash('Gespeichert – die Vorschau zeigt diesen Bildschirm.')
+            return redirect(url_for('screen', idx=idx, vorschau=1))
+
     flash('Anzeige-Einstellungen gespeichert')
     return redirect(url_for('display'))

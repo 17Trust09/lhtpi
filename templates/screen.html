@@ -92,7 +92,12 @@
       }
       f.classList.toggle('on', k === i);
     });
-    if (tools.length > 1) {
+    if (cfg.vorschau) {
+      // Vorschau aus der Verwaltung: immer anzeigen, welches Tool läuft
+      badge.hidden = false;
+      badge.textContent = 'Vorschau · ' + tools[i].short +
+        (tools.length > 1 ? ' (' + (i + 1) + '/' + tools.length + ')' : ' (fest)');
+    } else if (tools.length > 1) {
       badge.hidden = false;
       badge.textContent = (i + 1) + '/' + tools.length + ' · ' + tools[i].short;
     }

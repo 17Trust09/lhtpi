@@ -28,8 +28,33 @@ shutil.rmtree(ORDNER, ignore_errors=True)
 os.makedirs(ORDNER, exist_ok=True)
 os.makedirs(OUT, exist_ok=True)
 
+# Safety Cross und Terminboard als echte Dienste starten, damit die Vorschau
+# wirklich deren Anzeigen zeigt (nicht nur einen leeren Rahmen).
+AUSWAHL = {'TERMIN_PORT': 8101, 'SC_PORT': 8102}
+dienste = []
+for name, befehl, port_schluessel, port, datei in (
+        ('safety-cross', 'app.py', 'PORT', AUSWAHL['SC_PORT'], 'sc.db'),
+        ('terminboard', 'app.py', 'TERMINBOARD_PORT', AUSWAHL['TERMIN_PORT'], 'ter.db')):
+    unter = os.path.join(BASE, 'tools', 'safety-cross') if name == 'safety-cross' \
+        else os.path.join(BASE, 'terminboard')
+    eigen = dict(os.environ)
+    eigen[port_schluessel] = str(port)
+    eigen['LHTPI_HWID'] = 'piserial:10000000demo'
+    eigen['LHTPI_LICENSE_ENFORCE'] = '0'
+    if name == 'safety-cross':
+        eigen['DB_PFAD'] = os.path.join(ORDNER, datei)
+    else:
+        eigen['TERMINBOARD_DB'] = os.path.join(ORDNER, datei)
+    dienste.append(subprocess.Popen([VENV_PY, befehl], cwd=unter, env=eigen,
+                                    stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.DEVNULL))
+
 umgebung = dict(os.environ)
 umgebung.update({
+    'LHTPI_TOOL_URLS': 'slideshow=http://localhost:%d/present/kiosk,'
+                       'terminboard=http://localhost:%d/board/kiosk,'
+                       'safetycross=http://localhost:%d/'
+                       % (PORT, AUSWAHL['TERMIN_PORT'], AUSWAHL['SC_PORT']),
     'LHTPI_DB': os.path.join(ORDNER, 'shots.db'),
     'LHTPI_PORT': str(PORT),
     'LHTPI_HWID': 'piserial:10000000demo',
@@ -143,7 +168,34 @@ try:
         open(umgebung['LHTPI_INSTALLED_MARKER'], 'w').close()
         foto('22-anzeige-start.png')
 
+        # D) Vorschau: zeigt wirklich das eingestellte Tool (Tim-Fall)
+        for tool, datei in (('safetycross', '23-vorschau-safety-cross.png'),
+                            ('terminboard', '24-vorschau-terminboard.png')):
+            setze([(tool, 30)])
+            schau = ctx.new_page()
+            schau.goto(L + '/screen/1?vorschau=1', wait_until='networkidle')
+            schau.wait_for_timeout(2500)
+            quelle = schau.evaluate(
+                "document.querySelector('iframe') ? document.querySelector('iframe').src : ''")
+            marke = schau.locator('#badge').inner_text().strip()
+            ziel = os.path.join(OUT, datei)
+            schau.screenshot(path=ziel)
+            print('%s (%.0f kB)  Rahmen=%s  Kennzeichnung=%r'
+                  % (ziel, os.path.getsize(ziel) / 1024, quelle, marke))
+            schau.close()
+            erwartet = (':%d/' % AUSWAHL['SC_PORT'] if tool == 'safetycross'
+                        else ':%d/board/kiosk' % AUSWAHL['TERMIN_PORT'])
+            if erwartet not in quelle:
+                raise SystemExit('FEHLER: Vorschau lädt nicht %s (%s)'
+                                 % (tool, quelle))
+
         browser.close()
 finally:
     lauf.terminate()
     lauf.wait(timeout=10)
+    for d in dienste:
+        d.terminate()
+        try:
+            d.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            d.kill()

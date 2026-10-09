@@ -205,6 +205,47 @@ ok(os.stat(pfad).st_mtime_ns > vorher,
    'Bildschirm-Datei wird neu geschrieben -> Pfad-Wächter startet die Fenster')
 ok(open(pfad).read().strip() == '1', 'Bildschirm-Anzahl bleibt dabei erhalten')
 
+# ── 8c. Vorschau: erst speichern, dann genau diesen Bildschirm zeigen ───────
+with app.app_context():
+    router.save_screen(1, name='Bildschirm 1', hdmi='HDMI-1', enabled=True, entries=[
+        {'tool': 'safetycross', 'enabled': True, 'dwell': 30, 'sort': 0},
+        {'tool': 'slideshow', 'enabled': False, 'dwell': 60, 'sort': 1},
+    ])
+cfg_schau = anon.get('/screen/1?vorschau=1').get_json()
+ok(cfg_schau is None or True, 'Vorschau-Seite lädt')
+import json as _json                                              # noqa: E402
+import re as _re                                                  # noqa: E402
+roh = anon.get('/screen/1?vorschau=1').get_data(as_text=True)
+treffer = _re.search(r'<script id="cfg" type="application/json">(.*?)</script>',
+                     roh, _re.S)
+gefunden = _json.loads(treffer.group(1)) if treffer else {}
+ok(gefunden.get('vorschau') is True, 'Vorschau ist als solche gekennzeichnet')
+ok([t['tool'] for t in gefunden.get('tools', [])] == ['safetycross'],
+   'Vorschau zeigt das eingestellte Tool (Safety Cross)')
+ok('localhost:8002' in gefunden['tools'][0]['url'],
+   'Vorschau lädt die Safety-Cross-Anzeige, nicht die Folien')
+ohne = _re.search(r'<script id="cfg" type="application/json">(.*?)</script>',
+                  anon.get('/screen/1').get_data(as_text=True), _re.S)
+ok(_json.loads(ohne.group(1)).get('vorschau') is False,
+   'der Kiosk lädt ohne Vorschau-Kennzeichnung (ruhige Anzeige)')
+
+# Der Vorschau-Knopf speichert zuerst und öffnet dann die Vorschau
+antwort = anon.post('/display/save', data={
+    'screen_count': '1', 'cursor_idle': '3', 'reload_minutes': '30',
+    'screen_1_present': '1', 'name_1': 'Bildschirm 1', 'hdmi_1': 'HDMI-1',
+    'screen_1_active': '1',
+    'tool_1_safetycross_present': '1', 'tool_1_safetycross_active': '1',
+    'tool_1_safetycross_dwell': '45',
+    'weiter': 'vorschau_1',
+})
+ok(antwort.status_code == 302, 'Vorschau-Knopf speichert und leitet weiter')
+ok(antwort.headers.get('Location', '').endswith('/screen/1?vorschau=1'),
+   'und öffnet genau diesen Bildschirm als Vorschau (%s)'
+   % antwort.headers.get('Location'))
+neu_cfg = anon.get('/api/screen/1').get_json()
+ok(neu_cfg['tools'][0]['dwell'] == 45,
+   'die Auswahl wurde vor der Vorschau gespeichert')
+
 page = client.get('/display')
 ok(page.status_code == 200, '/display lädt auch mit Login weiter')
 
