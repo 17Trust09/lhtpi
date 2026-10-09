@@ -171,10 +171,7 @@ def _systembefehl(ziel):
     if not router.systembefehl(ziel):
         # Die Kiosk-Fenster sind schon geschlossen: Anzeige wieder hochfahren
         # (derselbe Weg wie „Anzeige starten" - der Pfad-Wächter übernimmt).
-        try:
-            router.set_screen_count(router.screen_count())
-        except (OSError, ValueError):
-            pass
+        router.anzeige_neu_starten()
         return ('', 500)
     return ('', 204)
 

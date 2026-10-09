@@ -379,6 +379,23 @@ def fehlversuch_protokollieren(ziel, zeilen):
         pass
 
 
+def anzeige_neu_starten():
+    """Die Kiosk-Fenster neu hochfahren (ueber den Pfad-Waechter).
+
+    Der Waechter (lhtpi-anzeige.path) reagiert auf Aenderungen an der
+    Steuerdatei. Sie wird deshalb neu geschrieben und der Zeitstempel
+    erneuert - so greift es auch, wenn der Inhalt gleich bleibt.
+    """
+    ziel = tools.SCREENS_FILE
+    try:
+        with open(ziel, 'w') as datei:
+            datei.write('%s\n' % screen_count())
+        os.utime(ziel, None)
+    except OSError:
+        return False
+    return True
+
+
 def systembefehl(ziel):
     """Neustart oder Herunterfahren ausloesen.
 
