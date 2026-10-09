@@ -431,7 +431,11 @@ ${PI_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl po
 SUDOEOF
 if visudo -c -f "${SUDO_TMP}" >/dev/null 2>&1; then
     install -m 0440 -o root -g root "${SUDO_TMP}" "${SUDOERS_DATEI}"
-    log "  Neustart/Herunterfahren freigegeben (${SUDOERS_DATEI})"
+    if [ -s "${SUDOERS_DATEI}" ]; then
+        log "  Neustart/Herunterfahren freigegeben (${SUDOERS_DATEI})"
+    else
+        log "  WARNUNG: ${SUDOERS_DATEI} ist leer - die Knoepfe gehen nicht"
+    fi
 else
     log "  WARNUNG: sudoers-Datei nicht gesetzt (Prüfung fehlgeschlagen)"
 fi

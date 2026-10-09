@@ -124,6 +124,8 @@ ok('/etc/sudoers.d/020_lhtpi-kiosk' in text and 'visudo -c -f' in text,
    'install.sh erlaubt Neustart/Herunterfahren (sudoers, nur diese Befehle)')
 ok('/usr/bin/systemctl reboot' in text and '/usr/bin/systemctl poweroff' in text,
    'die Freigabe deckt systemctl mit Unterbefehl ab (Symlink /sbin/reboot greift nicht)')
+ok('-s "${SUDOERS_DATEI}"' in text,
+   'install.sh prueft, dass die Freigabe wirklich Inhalt hat')
 ok('--install' in text and 'license_bundle.py' in text,
    'Lizenz wird beim Installieren für dieses Gerät erzeugt')
 ok('MARKER_FILE' in text and '/etc/lhtpi/installed' in text,
