@@ -312,6 +312,8 @@ After=${SERVICE_APP}
 Requires=${SERVICE_APP}
 # Startet erst, wenn die Einrichtung abgeschlossen ist
 ${cond}
+StartLimitIntervalSec=120
+StartLimitBurst=3
 
 [Service]
 Type=simple
@@ -323,9 +325,6 @@ ExecStartPre=/bin/sleep 5
 ExecStart=${script}
 Restart=on-failure
 RestartSec=10
-StartLimitIntervalSec=120
-StartLimitBurst=3
-
 EOF
     systemctl daemon-reload
     # NICHT beim Booten starten: die Anzeigen-Steuerung startet das Fenster,
@@ -710,6 +709,8 @@ configure_services() {
 Description=LHTPi - Flask Web-App
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -723,8 +724,6 @@ Environment=LHTPI_SECRET=${secret}
 ExecStart=${PROJECT_DIR}/venv/bin/python ${PROJECT_DIR}/app.py
 Restart=always
 RestartSec=5
-StartLimitIntervalSec=120
-StartLimitBurst=5
 
 [Install]
 WantedBy=multi-user.target
@@ -1174,6 +1173,8 @@ configure_terminboard() {
 Description=Terminboard - Flask Web-App
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -1187,8 +1188,6 @@ Environment=TERMINBOARD_SECRET=${secret}
 ExecStart=${TERMIN_DIR}/venv/bin/python ${TERMIN_DIR}/app.py
 Restart=always
 RestartSec=5
-StartLimitIntervalSec=120
-StartLimitBurst=5
 
 [Install]
 WantedBy=multi-user.target
@@ -1251,6 +1250,8 @@ configure_safetycross_app() {
 Description=Safety Cross - Flask Web-App
 After=network-online.target
 Wants=network-online.target
+StartLimitIntervalSec=120
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -1264,8 +1265,6 @@ Environment=SAFETY_LICENSE=${SC_DIR}/license.key
 ExecStart=${SC_DIR}/venv/bin/python ${SC_DIR}/app.py
 Restart=always
 RestartSec=5
-StartLimitIntervalSec=120
-StartLimitBurst=5
 
 [Install]
 WantedBy=multi-user.target

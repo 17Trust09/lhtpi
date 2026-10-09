@@ -467,6 +467,20 @@ ok('start kiosk-screen2.service' in zwei,
 with open(os.path.join(LZ, 'screens'), 'w') as f:
     f.write('1\n')
 
+print('\n18) Einheiten: Startgrenze im richtigen Abschnitt')
+
+# StartLimitIntervalSec/Burst gehören in [Unit]. In [Service] meckert systemd
+# ("Unknown key ... ignoring") und die Grenze wirkt nicht.
+falsch = []
+for treffer in re.finditer(r'StartLimit(?:IntervalSec|Burst)', text):
+    vor = text[:treffer.start()]
+    einheit = vor.rfind('[Unit]')
+    dienst = vor.rfind('[Service]')
+    if einheit < 0 or dienst > einheit:
+        falsch.append(text[vor.rfind('\n', 0, treffer.start()) + 1:
+                           text.find('\n', treffer.start())].strip())
+ok(not falsch, 'Startgrenzen stehen in [Unit] (%s)' % (falsch or 'alle richtig'))
+
 print('\n%s%d Prüfungen bestanden, %d fehlgeschlagen'
       % ('OK – ' if failed == 0 else 'FEHLER – ', passed, failed))
 sys.exit(1 if failed else 0)
