@@ -76,7 +76,10 @@
   ['mousemove', 'mousedown', 'wheel', 'touchstart'].forEach(function (e) {
     document.addEventListener(e, zeigen, true);
   });
-  zeigen();                      /* beim Start kurz sichtbar, damit auffindbar */
+  /* Beim Start laenger sichtbar, damit der Knopf auffindbar ist; danach wie
+     gewohnt nur bei Mausbewegung. */
+  knopf.hidden = false;
+  timer = setTimeout(function () { knopf.hidden = true; }, 30000);
 })();
 
 /* ── Mauszeiger: nach Inaktivität aus, bei Bewegung wieder da ─────────────── */
