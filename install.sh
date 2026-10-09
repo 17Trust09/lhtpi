@@ -33,6 +33,8 @@ SERVICE_SC_APP="safetycross.service"
 ROUTER_BASE_URL="http://localhost:${APP_PORT}/screen"
 # Überschreibbar über Umgebungsvariablen (wie in der App) - so lassen sich die
 # Schritte auch ohne /etc testen.
+LIGHTDM_DIR="${LHTPI_LIGHTDM_DIR:-/etc/lightdm}"
+LIGHTDM_CONF="${LHTPI_LIGHTDM_CONF:-${LIGHTDM_DIR}/lightdm.conf}"
 TOOLS_FILE="${LHTPI_TOOLS_FILE:-/etc/lhtpi/tools}"
 SCREENS_FILE="${LHTPI_SCREENS_FILE:-/etc/lhtpi/screens}"
 LICENSE_FILE="${LHTPI_LICENSE_FILE:-/etc/lhtpi/license.key}"
@@ -660,6 +662,73 @@ EOF
     ok "Verteiler-App installiert und aktiviert (Port ${APP_PORT})"
 }
 
+# Automatische Anmeldung: der Kiosk muss ohne Login starten.
+#
+# Drei Wege, weil die Wirksamkeit je nach Image unterschiedlich ist:
+#   1) Werte direkt in lightdm.conf (dort greifen sie unabhaengig von der
+#      Reihenfolge der Dateien)
+#   2) Drop-in in lightdm.conf.d (bereits in configure_desktop geschrieben)
+#   3) das Werkzeug von Raspberry Pi OS (raspi-config)
+# Am Ende wird geprueft, was LightDM wirklich verwendet.
+configure_autologin() {
+    log "Automatische Anmeldung einrichten (Kiosk ohne Login)"
+
+    # 0) Welcher Anmeldedienst läuft überhaupt?
+    if systemctl list-unit-files lightdm.service >/dev/null 2>&1; then
+        if ! systemctl is-enabled lightdm >/dev/null 2>&1; then
+            warn "LightDM ist nicht aktiv – Anmeldedienst prüfen:"
+            warn "  systemctl status display-manager --no-pager | head -3"
+        fi
+    else
+        warn "LightDM nicht gefunden – bitte prüfen, welcher Anmeldedienst läuft"
+    fi
+
+    # 1) direkt in der Hauptdatei
+    if [ -f "${LIGHTDM_CONF}" ]; then
+        cp -a "${LIGHTDM_CONF}" "${BACKUP_DIR}/lightdm.conf.bak" 2>/dev/null || true
+        if grep -qE '^\[Seat:\*\]' "${LIGHTDM_CONF}"; then
+            awk -v user="${PI_USER}" '
+                { print }
+                /^\[Seat:\*\]/ && !_done {
+                    print "autologin-user=" user
+                    print "autologin-user-timeout=0"
+                    print "user-session=openbox"
+                    print "autologin-session=openbox"
+                    _done = 1
+                }' "${LIGHTDM_CONF}" > "${LIGHTDM_CONF}.neu" \
+                && mv "${LIGHTDM_CONF}.neu" "${LIGHTDM_CONF}"
+        else
+            printf '\n# --- LHTPi: Kiosk startet ohne Anmeldung ---\n[Seat:*]\nautologin-user=%s\nautologin-user-timeout=0\nuser-session=openbox\nautologin-session=openbox\n' \
+                "${PI_USER}" >> "${LIGHTDM_CONF}"
+        fi
+        chmod 644 "${LIGHTDM_CONF}" 2>/dev/null || true
+        ok "Anmeldung ohne Passwort in ${LIGHTDM_CONF} hinterlegt"
+    else
+        warn "${LIGHTDM_CONF} fehlt – wird beim nächsten Schritt angelegt"
+    fi
+
+    # 2) Drop-in zusätzlich (bereits von configure_desktop geschrieben)
+    mkdir -p "${LIGHTDM_DIR}/lightdm.conf.d"
+    cp -a "${LIGHTDM_DIR}/lightdm.conf.d/50-lhtpi-autologin.conf" \
+        "${BACKUP_DIR}/50-lhtpi-autologin.conf.bak" 2>/dev/null || true
+
+    # 3) Werkzeug von Raspberry Pi OS
+    if command -v raspi-config >/dev/null 2>&1; then
+        raspi-config nonint do_boot_behaviour B4 >/dev/null 2>&1 \
+            && ok "raspi-config: Desktop-Autologin gesetzt" \
+            || warn "raspi-config konnte das Autologin nicht setzen"
+    fi
+
+    # 4) Kontrolle: was gilt wirklich?
+    local wirk
+    wirk="$(lightdm --show-config 2>/dev/null | grep -i 'autologin-user' | tail -2 || true)"
+    if [ -n "${wirk}" ]; then
+        ok "LightDM sagt: $(echo "${wirk}" | tr '\n' ' ')"
+    else
+        log "  (Kontrolle mit 'lightdm --show-config' nicht möglich)"
+    fi
+}
+
 configure_desktop() {
     log "Konfiguriere X11/LightDM/Openbox und HDMI-Fallback"
 
@@ -1205,6 +1274,7 @@ main() {
     configure_setup_mode
     cleanup_old_kiosks
     configure_desktop
+    configure_autologin
     configure_screens
     configure_policies
     configure_firewall

@@ -219,6 +219,34 @@ ok('make-key' in r.stdout and 'bleibt gesperrt' in r.stdout,
 ok(not os.path.exists(leer['LHTPI_LICENSE_FILE']),
    'auf dem Gerät entsteht keine Lizenz von selbst')
 
+print('\n13d) Autologin (Kiosk startet ohne Anmeldung)')
+
+ok('configure_autologin' in text, 'Autologin-Schritt ist im Skript vorhanden')
+ok('configure_autologin' in text.split('main()')[1],
+   'Autologin ist in den Ablauf eingehängt')
+
+LD = os.path.join(LZ, 'lightdm')
+os.makedirs(os.path.join(LD, 'lightdm.conf.d'), exist_ok=True)
+CONF = os.path.join(LD, 'lightdm.conf')
+open(CONF, 'w').write('[Seat:*]\n#autologin-user=\n#autologin-user-timeout=0\n'
+                      'greeter-session=pi-greeter\n')
+LDU = dict(UMG, LHTPI_LIGHTDM_DIR=LD, LHTPI_LIGHTDM_CONF=CONF)
+r = schritt('configure_autologin', env=LDU)
+ok(r.returncode == 0, 'Autologin-Schritt bricht nicht ab')
+inhalt = open(CONF).read()
+ok('autologin-user=pi' in inhalt, 'Autologin-Benutzer steht in lightdm.conf')
+ok(inhalt.index('autologin-user=pi') < inhalt.index('greeter-session'),
+   'Werte stehen direkt in der [Seat:*]-Sektion (nicht am Dateiende)')
+ok(inhalt.count('[Seat:*]') == 1, 'keine doppelte Sektion angelegt')
+ok('autologin-session=openbox' in inhalt, 'Sitzung ist openbox (X11, kein Wayland)')
+
+# Ohne [Seat:*]-Sektion wird eine angelegt
+CONF2 = os.path.join(LD, 'leer.conf')
+open(CONF2, 'w').write('# noch nichts konfiguriert\n')
+r = schritt('configure_autologin', env=dict(LDU, LHTPI_LIGHTDM_CONF=CONF2))
+ok(r.returncode == 0 and 'autologin-user=pi' in open(CONF2).read(),
+   'ohne Sektion wird [Seat:*] angelegt')
+
 print('\n13c) Alle Schritte nennen ihre Variablen (Schutz vor set -u)')
 from_a = open(INSTALL).read()
 import re as _re
