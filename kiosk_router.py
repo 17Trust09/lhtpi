@@ -63,11 +63,13 @@ def screen_count():
     """Anzahl der Bildschirme: Einstellung, sonst Installer-Wert, sonst Erkennung.
 
     Die Hardware-Lizenz ist die Obergrenze — mehr Bildschirme als lizenziert
-    werden nie ausgeliefert.
+    werden nie ausgeliefert. Solange nichts eingestellt wurde, gilt der
+    KLEINERE Wert aus Installation und Erkennung: hängt nur ein Monitor am
+    Gerät, soll kein zweiter Kiosk auf demselben Schirm aufgehen.
     """
-    default = (tools.configured_screen_count()
-               or tools.detected_screen_count()
-               or DEFAULT_SCREEN_COUNT)
+    werte = [w for w in (tools.configured_screen_count(),
+                         tools.detected_screen_count()) if w]
+    default = min(werte) if werte else DEFAULT_SCREEN_COUNT
     n = _as_int(get_setting(SETTING_SCREEN_COUNT, default), default, 1, MAX_SCREENS)
     grenze = tools.licensed_screen_limit()
     if grenze is not None:

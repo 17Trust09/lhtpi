@@ -267,6 +267,21 @@ with app.app_context():
     router.set_screen_count(1)
     ok(not os.path.exists(marke2), 'bei einem Bildschirm verschwindet die Marke')
 
+    # Vorgabe (noch nichts eingestellt): der kleinere Wert gewinnt – mit einem
+    # Monitor darf kein zweiter Kiosk auf demselben Schirm aufgehen.
+    import usb_source as _us
+    alt_conf, alt_det = tools.configured_screen_count, tools.detected_screen_count
+    tools.configured_screen_count = lambda: 2
+    tools.detected_screen_count = lambda: 1
+    _us.set_setting(router.SETTING_SCREEN_COUNT, '')
+    ok(router.screen_count() == 1,
+       'ein Monitor erkannt -> Vorgabe 1 Bildschirm (kein zweiter Kiosk)')
+    tools.detected_screen_count = lambda: 2
+    _us.set_setting(router.SETTING_SCREEN_COUNT, '')
+    ok(router.screen_count() == 2, 'zwei Monitore erkannt -> Vorgabe 2 Bildschirme')
+    tools.configured_screen_count, tools.detected_screen_count = alt_conf, alt_det
+    router.set_screen_count(1)
+
     ok(not router.ist_eingerichtet(), 'vor der Einrichtung: Gerät gilt als nicht eingerichtet')
 
     anon = app.test_client()
