@@ -5,6 +5,8 @@ richtet alles ein; **welche Tools auf welchen Bildschirmen laufen, wird beim
 ersten Start auf dem Bildschirm gefragt** (Maus + Tastatur) — siehe
 [ERSTEINRICHTUNG.md](ERSTEINRICHTUNG.md).
 
+Neue Fassung auf ein bestehendes Gerät bringen: [AKTUALISIEREN.md](AKTUALISIEREN.md).
+
 ## Tools
 
 | Ziffer | Tool | Port | Rolle |

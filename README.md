@@ -16,6 +16,8 @@ LHTPi verwandelt einen Raspberry Pi 4/5 in einen autarken Präsentations-Player:
 - Automatischer HDMI-Kiosk mit Chromium: `http://localhost:8000/present/kiosk`
 - Hardware-Lizenz **signiert** (RSA-2048): Kopie auf ein anderes Gerät ist gesperrt,
   Lizenzen kann nur der Hersteller erzeugen ([Details](docs/multitool-kiosk/LIZENZ.md))
+* Neue Fassung einspielen: [Aktualisieren](docs/multitool-kiosk/AKTUALISIEREN.md)
+  (kurzer Weg bei App-Änderungen, voller Weg wenn `install.sh` betroffen ist)
 - **Kein Access Point**: `wlan0` wird nicht angefasst, keine WLAN-Verbindungen gelöscht
 - `eth0` optional per DHCP (die Anzeige braucht kein Netzwerk)
 - Kein `hostapd`, kein `dnsmasq`, kein `iptables-persistent`
