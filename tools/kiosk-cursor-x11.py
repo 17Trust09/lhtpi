@@ -34,7 +34,10 @@ def verbinde(display_name: str | None):
 
     d = display.Display(display_name)
     root = d.screen().root
-    opcode = d.get_extension_major('XFIXES')
+    erweiterung = d.query_extension('XFIXES')
+    if erweiterung is None:
+        raise RuntimeError('XFIXES fehlt am X-Server')
+    opcode = erweiterung.major_opcode
 
     def verstecken(fenster):
         xfixes.HideCursor(display=d, opcode=opcode, window=fenster)
