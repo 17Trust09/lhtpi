@@ -536,6 +536,11 @@ ok('.frame.on{pointer-events:auto}' in seite_bedienbar,
    'bei Wartung an nimmt das sichtbare Tool Klicks an (Admin erreichbar)')
 ok("setAttribute('scrolling', cfg.wartung_knopf ? 'auto' : 'no')" in seite_bedienbar,
    'im Wartungsbetrieb darf der Rahmen scrollen (Verwaltung bedienbar)')
+ok('id="einst"' in seite_bedienbar,
+   'Einstellungen oeffnen im Kiosk-Fenster (kein Fensterwechsel, kein Kioskverlust)')
+_disp = anon.get('/display').get_data(as_text=True)
+ok('lhtpi_zurueck' in _disp,
+   'die Einstellungs-Seite meldet sich beim Kiosk-Rahmen zurueck')
 with app.app_context():
     router.set_wartung_knopf(False)
 seite_gesperrt = anon.get('/screen/1').get_data(as_text=True)

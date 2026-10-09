@@ -244,10 +244,10 @@
     <div class="actions">
       <button type="submit" class="btn save">Speichern</button>
       {% if eingerichtet %}
-      <a class="btn ghost" href="{{ url_for('screen', idx=1) }}">Zurück zur Anzeige</a>
+      <a class="btn ghost" id="zurueck" href="{{ url_for('screen', idx=1) }}">Zurück zur Anzeige</a>
       {% endif %}
       {% if not eingerichtet %}
-      <button type="submit" class="btn start"
+      <button type="submit" class="btn start" id="startknopf"
               formaction="{{ url_for('setup_abschluss') }}">Einrichtung abschließen
         und Anzeige starten</button>
       {% endif %}
@@ -325,6 +325,32 @@ document.querySelectorAll('.card[data-screen]').forEach(function (karte) {
       if (info) info.textContent = 'Automatik angehalten – bitte „Anzeige jetzt starten" drücken.';
     });
   }
+})();
+</script>
+<script>
+/* Im Kiosk-Rahmen darf diese Seite nicht das Fenster wechseln - sonst verliert
+   die Anzeige ihren Kiosk-Modus (Leiste und Reiter kommen zurueck). Sie meldet
+   sich stattdessen beim Rahmen an, der die Anzeige wieder einblendet.
+   Ausserhalb des Rahmens (normaler Browser) bleibt alles wie gewohnt. */
+(function () {
+  if (window.self === window.top) return;
+  var zu = document.getElementById('zurueck');
+  if (zu) zu.addEventListener('click', function (e) {
+    e.preventDefault();
+    parent.postMessage({ lhtpi: 'zurueck' }, location.origin);
+  });
+  var st = document.getElementById('startknopf');
+  if (st) st.addEventListener('click', function () {
+    try { sessionStorage.setItem('lhtpi_zurueck', '1'); } catch (err) {}
+  });
+  try {
+    if (sessionStorage.getItem('lhtpi_zurueck')) {
+      sessionStorage.removeItem('lhtpi_zurueck');
+      setTimeout(function () {
+        parent.postMessage({ lhtpi: 'zurueck' }, location.origin);
+      }, 700);
+    }
+  } catch (err) {}
 })();
 </script>
 </body>

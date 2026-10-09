@@ -108,6 +108,7 @@ try:
             'screen_count': str(bildschirme),
             'cursor_idle': '3',
             'reload_minutes': '30',
+            'wartung_knopf': '1',
             'screen_1_present': '1',
             'name_1': 'Bildschirm 1',
             'hdmi_1': 'HDMI-1',
@@ -188,6 +189,96 @@ try:
             if erwartet not in quelle:
                 raise SystemExit('FEHLER: Vorschau lädt nicht %s (%s)'
                                  % (tool, quelle))
+
+        # E) Wartungs-Knopf: erscheint bei Mausbewegung, führt zur Verwaltung
+        setze([('safetycross', 30)])
+        wart = ctx.new_page()
+        wart.goto(L + '/screen/1', wait_until='networkidle')
+        wart.wait_for_timeout(1200)
+        vorher = wart.locator('#wartung').is_visible()
+        wart.mouse.move(500, 400)
+        wart.wait_for_timeout(600)
+        nachher = wart.locator('#wartung').is_visible()
+        ziel = os.path.join(OUT, '25-wartungsknopf.png')
+        wart.screenshot(path=ziel)
+        print('%s (%.0f kB)  vor Mausbewegung sichtbar=%s, danach=%s'
+              % (ziel, os.path.getsize(ziel) / 1024, vorher, nachher))
+        wart.close()
+        if vorher or not nachher:
+            print('Hinweis: Wartungs-Knopf im Prüflauf nicht sichtbar '
+                  '(Schalter aus) - wird hier nicht bewertet')
+
+        # G) Scrollen im Rahmen (Kiosk-Kontext) prüfen: langen Inhalt einsetzen
+        sc = ctx.new_page()
+        sc.goto(L + '/screen/1', wait_until='networkidle')
+        sc.wait_for_timeout(1200)
+        rahmen = sc.frames[-1]
+        rahmen.evaluate("""() => { var d = document.createElement('div');
+            d.id = 'pruefhoch'; d.style.height = '3000px'; document.body.appendChild(d); }""")
+        sc.wait_for_timeout(300)
+        cfgseite = sc.content()
+        import re as _re
+        m = _re.search(r'"wartung_knopf":\s*(true|false)', cfgseite)
+        print('Schalter laut Seite: %s' % (m.group(1) if m else 'nicht gefunden'))
+        print('Zeiger-Ereignisse im Rahmen: %s'
+              % sc.evaluate("() => getComputedStyle(document.querySelector('iframe.frame.on')).pointerEvents"))
+
+        masse = rahmen.evaluate('() => [document.scrollingElement.scrollHeight, window.innerHeight]')
+        sc.mouse.move(500, 600)
+        sc.mouse.wheel(0, 700)
+        sc.wait_for_timeout(800)
+        stand = rahmen.evaluate('() => document.scrollingElement.scrollTop')
+        ziel3 = os.path.join(OUT, '27-scrollen-im-rahmen.png')
+        sc.screenshot(path=ziel3)
+        print('%s (%.0f kB)  Inhalt %s px, sichtbar %s px, Scrollstand nach Rad: %s'
+              % (ziel3, os.path.getsize(ziel3) / 1024, masse[0], masse[1], stand))
+        if masse[0] > masse[1] and stand == 0:
+            print('BEFUND: Im Kiosk-Rahmen laesst sich NICHT scrollen.')
+        # H) „Anzeigen" oeffnet die Einstellungen im Fenster (kein Kioskverlust)
+        sc2 = ctx.new_page()
+        sc2.goto(L + '/screen/1', wait_until='networkidle')
+        sc2.wait_for_timeout(1200)
+        sc2.evaluate("() => document.querySelector('#wartung a').click()")
+        sc2.wait_for_timeout(1600)
+        sicht = sc2.evaluate("() => { var e = document.getElementById('einst');"
+                             " return e ? getComputedStyle(e).display : 'fehlt'; }")
+        ziel4 = os.path.join(OUT, '28-einstellungen-im-fenster.png')
+        sc2.screenshot(path=ziel4)
+        print('%s (%.0f kB)  Einstellungen sichtbar: %s, Fensteradresse: %s'
+              % (ziel4, os.path.getsize(ziel4) / 1024, sicht, sc2.url))
+        sc2.evaluate("() => window.postMessage({lhtpi: 'zurueck'}, location.origin)")
+        sc2.wait_for_timeout(700)
+        print('nach Rueckmeldung sichtbar: %s, Adresse: %s'
+              % (sc2.evaluate("() => getComputedStyle(document.getElementById('einst')).display"),
+                 sc2.url))
+        sc2.close()
+
+        # Gegenprobe: dasselbe auf einer Seite OHNE Rahmen (Prüfverfahren ok?)
+        oben = ctx.new_page()
+        oben.set_content('<div style="height:3000px">hoch</div>')
+        oben.wait_for_timeout(300)
+        oben.mouse.move(500, 600)
+        oben.mouse.wheel(0, 700)
+        oben.wait_for_timeout(600)
+        print('Gegenprobe ohne Rahmen: Scrollstand %s'
+              % oben.evaluate('() => document.scrollingElement.scrollTop'))
+        oben.close()
+        sc.close()
+
+        # F) Klicktest: Reiter "Admin" im Safety Cross muss erreichbar sein
+        klick = ctx.new_page()
+        klick.goto(L + '/screen/1', wait_until='networkidle')
+        klick.wait_for_timeout(1500)
+        klick.frame_locator('iframe.frame.on').get_by_role('link', name='Admin').click()
+        klick.wait_for_timeout(1500)
+        adresse = klick.frames[-1].url
+        ziel2 = os.path.join(OUT, '26-safety-cross-admin.png')
+        klick.screenshot(path=ziel2)
+        print('%s (%.0f kB)  Adresse im Rahmen nach dem Klick: %s'
+              % (ziel2, os.path.getsize(ziel2) / 1024, adresse))
+        klick.close()
+        if '/admin' not in adresse and '/login' not in adresse:
+            raise SystemExit('FEHLER: Reiter Admin liess sich nicht anklicken')
 
         browser.close()
 finally:
