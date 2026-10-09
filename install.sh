@@ -497,7 +497,11 @@ EOF
 # Kiosk-Services früherer Versionen (ein Kiosk je Tool) entfernen
 cleanup_old_kiosks() {
     # Namen früherer Fassungen (ein Kiosk je Tool, teils mit dem Dashboard)
-    local behalten=" lhtpi.service lhtpi-setup.service lhtpi-anzeige.service kiosk-screen1.service kiosk-screen2.service "
+    # Alles, was DIESE Fassung anlegt, muss bleiben - sonst räumt sich die
+    # Einrichtung selbst weg (Lizenz-Import, Uhrzeit-Dienst, Anzeige-Einheiten).
+    local behalten=" lhtpi.service lhtpi-setup.service lhtpi-anzeige.service lhtpi-anzeige.path \
+kiosk-screen1.service kiosk-screen2.service lhtpi-lizenz-import.service \
+lhtpi-fake-hwclock.service lhtpi-fake-hwclock-save.service lhtpi-fake-hwclock-save.timer "
     local unit name datei
     for unit in lhtpi-kiosk.service terminboard-kiosk.service safety-cross-kiosk.service; do
         if [ -f "${UNIT_DIR}/${unit}" ]; then
@@ -513,8 +517,13 @@ cleanup_old_kiosks() {
     for datei in "${UNIT_DIR}"/*.service; do
         [ -f "${datei}" ] || continue
         name="$(basename "${datei}")"
+        # Nur unser Namensraum. "display-manager.service" gehoert dem System
+        # (Anmeldedienst) und darf hier NIE angefasst werden.
+        if [ "${name}" = "display-manager.service" ]; then
+            continue
+        fi
         case "${name}" in
-            lhtpi*|kiosk*|*dashboard*|*anzeige*|*display*) ;;
+            lhtpi*|*kiosk*|*anzeige*|*dashboard*) ;;
             *) continue ;;
         esac
         case "${behalten}" in

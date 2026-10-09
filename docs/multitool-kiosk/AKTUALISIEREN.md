@@ -61,6 +61,24 @@ curl -s http://localhost:8000/display | grep -c "Anzeige starten"
 Die Anzeigen-Seite ist von außen (LAN) weiterhin nur mit Login erreichbar
 (Standard `admin` / `admin`), am Gerät selbst ohne.
 
+## Wenn der Bildschirm schwarz bleibt
+
+Die Anzeigen-Seite zurück auf den Schirm holen (per SSH):
+
+```bash
+sudo systemctl start lhtpi-setup.service
+```
+
+Zustandsbericht des Geräts ansehen — die Seite `/diagnose` zeigt Dienste,
+Anzeigen, Logs und die Bildschirm-Erkennung als reinen Text (Login nötig,
+Standard `admin` / `admin`):
+
+```bash
+curl -s -c /tmp/c -b /tmp/c -d 'username=admin&password=admin' \
+     http://localhost:8000/login >/dev/null
+curl -s -b /tmp/c http://localhost:8000/diagnose
+```
+
 ## Wenn etwas schiefgeht
 
 ```bash

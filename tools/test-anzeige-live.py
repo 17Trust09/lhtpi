@@ -145,6 +145,12 @@ try:
            'Abschluss-Knopf ist verschwunden')
     pruefe('data-pill' in seite and 'rot-feld' in seite,
            'Betriebsart und Dauer-Felder sind für die Live-Umschaltung markiert')
+    print('5) Diagnose-Seite liefert den Bericht')
+    status, seite = hole('/diagnose')
+    pruefe(status == 200, '/diagnose antwortet (HTTP %s)' % status)
+    if status == 200:
+        for abschnitt in ('Dienste', 'Anzeigen laut Router', 'Tool-Dienste'):
+            pruefe(abschnitt in seite, 'Bericht enthält "%s"' % abschnitt)
 finally:
     lauf.terminate()
     lauf.wait(timeout=10)

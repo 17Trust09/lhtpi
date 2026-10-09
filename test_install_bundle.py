@@ -10,6 +10,7 @@ Getestet wird, was ohne Hardware prüfbar ist:
   * /etc/lhtpi/tools enthält genau die gewählten Tools
 """
 import os
+import re
 import subprocess
 import sys
 
@@ -365,6 +366,41 @@ for name in bleiben:
     ok(os.path.exists(os.path.join(UD2, name)),
        'aktuelle/fremde Einheit bleibt: %s' % name)
 ok('alte Einheit entfernt' in r.stdout, 'Aufräumen wird im Protokoll gemeldet')
+
+print('\n16) Aufräumen lässt die eigenen Einheiten in Ruhe')
+
+UD3 = os.path.join(LZ, 'units3')
+os.makedirs(UD3, exist_ok=True)
+EIGENE = ['lhtpi.service', 'lhtpi-setup.service', 'lhtpi-anzeige.service',
+          'lhtpi-anzeige.path', 'kiosk-screen1.service', 'kiosk-screen2.service',
+          'lhtpi-lizenz-import.service', 'lhtpi-fake-hwclock.service',
+          'lhtpi-fake-hwclock-save.service', 'lhtpi-fake-hwclock-save.timer']
+FREMDE = ['sshd.service', 'display-manager.service', 'cups.service']
+ALTE = ['lhtpi-dashboard.service', 'terminboard-kiosk.service',
+        'safety-cross-kiosk.service']
+for n in EIGENE + FREMDE + ALTE:
+    with open(os.path.join(UD3, n), 'w') as f:
+        f.write('[Unit]\nDescription=%s\n' % n)
+
+schritt('cleanup_old_kiosks', env=dict(UMG, LHTPI_UNIT_DIR=UD3))
+weg = [n for n in EIGENE + FREMDE if not os.path.exists(os.path.join(UD3, n))]
+ok(not weg, 'eigene und fremde Einheiten bleiben erhalten (%s)' % (weg or 'alle da'))
+rest = [n for n in ALTE if os.path.exists(os.path.join(UD3, n))]
+ok(not rest, 'alte Anzeige-Einheiten sind entfernt (%s)' % (rest or 'alle weg'))
+
+# Jede Einheit, die install.sh selbst anlegt, muss auf der Behalten-Liste stehen
+angelegt = set(re.findall(r'UNIT_DIR\}/([A-Za-z0-9_.-]+\.(?:service|path|timer))',
+                          text))
+angelegt |= set(re.findall(r'/etc/systemd/system/([A-Za-z0-9_.-]+\.(?:service|path|timer))',
+                           text))
+angelegt |= {'lhtpi.service', 'lhtpi-lizenz-import.service'}   # aus Variablen
+# display-manager.service gehört dem System (Anmeldedienst) - die Einrichtung
+# schaltet ihn nur ab und darf ihn nie löschen.
+angelegt.discard('display-manager.service')
+liste = re.search(r'local behalten="([^"]+)"', text, re.S).group(1).split()
+fehlt = sorted(n for n in angelegt if n.endswith('.service') and n not in liste)
+ok(not fehlt, 'jede selbst angelegte Einheit steht auf der Behalten-Liste (%s)'
+   % (fehlt or 'alle'))
 
 print('\n%s%d Prüfungen bestanden, %d fehlgeschlagen'
       % ('OK – ' if failed == 0 else 'FEHLER – ', passed, failed))

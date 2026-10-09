@@ -437,6 +437,27 @@ with app.app_context():
 
     ok(tools.detected_screen_count() >= 1, 'Bildschirm-Erkennung liefert mindestens 1')
 
+print('\n9b) Diagnose-Seite (nur lesend, nur mit Zugang)')
+
+fern = app.test_client()
+a = fern.get('/diagnose', environ_base={'REMOTE_ADDR': '192.168.178.50'})
+ok(a.status_code == 302, 'aus dem LAN braucht /diagnose den Login (302)')
+ok('/login' in a.headers.get('Location', ''), 'und leitet auf die Anmeldung')
+
+with app.app_context():
+    router.save_screen(1, name='Bildschirm 1', hdmi='HDMI-1', enabled=True, entries=[
+        {'tool': 'safetycross', 'enabled': True, 'dwell': 30, 'sort': 0}])
+diag = client.get('/diagnose')
+ok(diag.status_code == 200, 'mit Login liefert /diagnose den Bericht (200)')
+bericht = diag.get_data(as_text=True)
+for abschnitt in ('Dienste', 'Anzeigen laut Router', 'Tool-Dienste',
+                  'kiosk-screen1.service', 'lhtpi-anzeige.path'):
+    ok(abschnitt in bericht, 'Bericht enthält "%s"' % abschnitt)
+ok('safetycross' in bericht and 'localhost:8002' in bericht,
+   'Bericht zeigt das eingestellte Tool mit seiner Anzeige-Adresse')
+ok(diag.headers.get('Content-Type', '').startswith('text/plain'),
+   'Bericht kommt als reiner Text (leicht weiterzugeben)')
+
 print('OK – %d Prüfungen bestanden' % len(checks))
 for passed, msg in checks:
     print('  ✓', msg)
