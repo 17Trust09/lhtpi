@@ -34,7 +34,8 @@ ROUTER_BASE_URL="http://localhost:${APP_PORT}/screen"
 # Überschreibbar über Umgebungsvariablen (wie in der App) - so lassen sich die
 # Schritte auch ohne /etc testen.
 LIGHTDM_DIR="${LHTPI_LIGHTDM_DIR:-/etc/lightdm}"
-XSESSIONS_DIR="${LHTPI_XSESSIONS_DIR:-/usr/share/xsessions}"
+UNIT_DIR="${LHTPI_UNIT_DIR:-/etc/systemd/system}"
+PI_HOME="${LHTPI_PI_HOME:-/home/${PI_USER}}"
 LIGHTDM_CONF="${LHTPI_LIGHTDM_CONF:-${LIGHTDM_DIR}/lightdm.conf}"
 TOOLS_FILE="${LHTPI_TOOLS_FILE:-/etc/lhtpi/tools}"
 SCREENS_FILE="${LHTPI_SCREENS_FILE:-/etc/lhtpi/screens}"
@@ -210,7 +211,13 @@ PROFILE="/home/pi/.config/chromium-screen__IDX__"
 
 mkdir -p "$(dirname "$LOG")" "$PROFILE"
 touch "$LOG"
-echo "$(date '+%F %T') - Kiosk Bildschirm __IDX__ gestartet, warte auf die App" >> "$LOG"
+echo "$(date '+%F %T') - Kiosk Bildschirm __IDX__ gestartet, warte auf den Bildschirm" >> "$LOG"
+
+# Ohne Anmeldedienst startet X gleichzeitig - hier kurz warten, bis er da ist
+for i in $(seq 1 60); do
+    xset q >/dev/null 2>&1 && break
+    sleep 1
+done
 
 # Geometrie dieses Ausgangs (Breite x Höhe +X+Y) – Fallback 1920x1080
 GEO=$(xrandr --current 2>/dev/null | awk -v m="$MON" \
@@ -301,7 +308,7 @@ configure_screen_kiosk() {
     cat > "/etc/systemd/system/${service}" <<EOF
 [Unit]
 Description=Kiosk Bildschirm ${idx} - Anzeige-Router
-After=graphical.target ${SERVICE_APP}
+After=${SERVICE_APP}
 Requires=${SERVICE_APP}
 # Startet erst, wenn die Einrichtung abgeschlossen ist
 ${cond}
@@ -320,7 +327,7 @@ StartLimitIntervalSec=120
 StartLimitBurst=3
 
 [Install]
-WantedBy=graphical.target
+WantedBy=multi-user.target
 EOF
     systemctl daemon-reload
     systemctl enable "${service}"
@@ -356,6 +363,12 @@ READY_URL="http://localhost:__PORT__/login"
 mkdir -p "$(dirname "$LOG")"
 touch "$LOG"
 echo "$(date '+%F %T') - Ersteinrichtung gestartet" >> "$LOG"
+
+# Ohne Anmeldedienst startet X gleichzeitig - erst warten, dann Ausgaenge setzen
+for i in $(seq 1 60); do
+    xset q >/dev/null 2>&1 && break
+    sleep 1
+done
 
 # Alle angeschlossenen Ausgaenge einschalten, der erste wird primaer
 xrandr --auto >/dev/null 2>&1 || true
@@ -427,7 +440,7 @@ configure_setup_mode() {
     cat > /etc/systemd/system/lhtpi-setup.service <<EOF
 [Unit]
 Description=Ersteinrichtung - Anzeigen-Seite auf dem Bildschirm
-After=graphical.target ${SERVICE_APP}
+After=${SERVICE_APP}
 Requires=${SERVICE_APP}
 # Nur solange die Einrichtung nicht abgeschlossen ist
 ConditionPathExists=!${MARKER_FILE}
@@ -444,7 +457,7 @@ Restart=on-failure
 RestartSec=5
 
 [Install]
-WantedBy=graphical.target
+WantedBy=multi-user.target
 EOF
 
     local steuer="/usr/local/bin/lhtpi-anzeige-steuern.sh"
@@ -677,97 +690,76 @@ EOF
 # mit dem Image überein - LightDM führt das Autologin dann nicht aus und zeigt
 # den Greeter. Deshalb legt der Installer seine EIGENE Sitzung an und räumt
 # widersprüchliche Werte in der Konfiguration weg.
+# Die Anzeige startet ohne jede Anmeldung.
+#
+# Weg (so macht es Raspberry Pi OS von Haus aus):
+#   1) Anmeldebildschirm (LightDM) abschalten
+#   2) tty1 meldet den Benutzer automatisch an (kein Passwort, keine Eingabe)
+#   3) X startet bei dieser Anmeldung selbst (startx + openbox, kein Desktop)
+#
+# Damit gibt es keinen Anmeldebildschirm und keine Passworteingabe.
+# Wartung läuft über SSH - dort wird nichts automatisch gestartet.
 configure_autologin() {
-    log "Automatische Anmeldung einrichten (Kiosk ohne Login)"
+    log "Anzeige ohne Anmeldung einrichten (kein Anmeldebildschirm)"
 
-    # 1) Werkzeug von Raspberry Pi OS zuerst - was es setzt, korrigieren wir gleich
+    # 1) Grafik-Anmeldung abschalten
+    if [ -f "${UNIT_DIR}/display-manager.service" ] \
+       || [ -f /lib/systemd/system/lightdm.service ] \
+       || [ -f /usr/lib/systemd/system/lightdm.service ]; then
+        systemctl disable lightdm.service >/dev/null 2>&1 || true
+        systemctl stop lightdm.service >/dev/null 2>&1 || true
+        ok "Anmeldebildschirm (LightDM) abgeschaltet"
+    else
+        log "  Kein LightDM gefunden - nichts abzuschalten"
+    fi
+
+    # 2) Automatische Anmeldung auf tty1
     if command -v raspi-config >/dev/null 2>&1; then
-        raspi-config nonint do_boot_behaviour B4 >/dev/null 2>&1 \
-            && ok "raspi-config: Desktop-Autologin gesetzt" \
-            || warn "raspi-config konnte das Autologin nicht setzen"
+        raspi-config nonint do_boot_behaviour B2 >/dev/null 2>&1 \
+            && ok "raspi-config: automatische Konsolen-Anmeldung gesetzt" \
+            || warn "raspi-config B2 nicht möglich - Übersteuerung wird selbst angelegt"
     fi
-
-    # 2) Eigene X11-Sitzung anlegen - der Name kann so nicht falsch sein
-    local sitzung="" exe=""
-    exe="$(command -v openbox-session 2>/dev/null || command -v openbox 2>/dev/null || true)"
-    if [ -n "${exe}" ]; then
-        mkdir -p "${XSESSIONS_DIR}"
-        cat > "${XSESSIONS_DIR}/lhtpi-kiosk.desktop" <<EOF
-[Desktop Entry]
-Name=LHTPi Kiosk
-Comment=Anzeige ohne Anmeldung (X11 mit openbox)
-Exec=${exe}
-Type=Application
+    mkdir -p "${UNIT_DIR}/getty@tty1.service.d"
+    cat > "${UNIT_DIR}/getty@tty1.service.d/lhtpi-autologin.conf" <<EOF
+[Service]
+ExecStart=
+ExecStart=-/sbin/agetty --autologin ${PI_USER} --noclear %I \$TERM
 EOF
-        sitzung="lhtpi-kiosk"
-        ok "Eigene Sitzung angelegt: ${sitzung} (${exe})"
+    ok "tty1 meldet ${PI_USER} automatisch an (keine Eingabe nötig)"
+
+    # 3) Anzeige startet bei dieser Anmeldung (nur tty1, nie bei SSH)
+    local profil="${PI_HOME}/.bash_profile"
+    mkdir -p "${PI_HOME}"
+    touch "${profil}"
+    if ! grep -q 'LHTPi-Kiosk' "${profil}" 2>/dev/null; then
+        cat >> "${profil}" <<'PROFIL_EOF'
+
+# --- LHTPi-Kiosk: Anzeige automatisch starten (nur auf tty1) ---
+if [ -z "${DISPLAY:-}" ] && [ "$(tty)" = "/dev/tty1" ]; then
+    exec startx
+fi
+# --- Ende LHTPi-Kiosk ---
+PROFIL_EOF
+        ok "Anzeige startet beim Booten automatisch (${profil})"
     else
-        local datei
-        datei="$(ls "${XSESSIONS_DIR}"/*.desktop 2>/dev/null | head -1 || true)"
-        if [ -n "${datei}" ]; then
-            sitzung="$(basename "${datei}" .desktop)"
-            warn "openbox fehlt - nutze vorhandene Sitzung '${sitzung}'"
-        else
-            sitzung="openbox"
-            warn "Keine X11-Sitzung gefunden - versuche '${sitzung}'"
-        fi
+        ok "Anzeige startet beim Booten automatisch (war schon eingerichtet)"
     fi
+    chown "${PI_USER}:${PI_GROUP}" "${profil}" 2>/dev/null || true
 
-    # 3) Werte in lightdm.conf setzen: widersprechende Zeilen auskommentieren,
-    #    dann unseren Block an die [Seat:*]-Sektion setzen
-    if command -v python3 >/dev/null 2>&1; then
-        python3 - "${LIGHTDM_CONF}" "${PI_USER}" "${sitzung}" <<'PYEOF_LDM'
-import os
-import re
-import sys
-
-pfad, nutzer, sitzung = sys.argv[1:4]
-text = open(pfad, encoding='utf-8').read() if os.path.exists(pfad) else ''
-
-# Bestehende (aktive) Werte auskommentieren, damit unsere gelten
-muster = r'^(autologin-user|autologin-user-timeout|user-session|autologin-session)\s*=.*$'
-text = re.sub(muster, lambda m: '#' + m.group(0), text, flags=re.M)
-
-block = ('[Seat:*]\n'
-         'autologin-user=%s\nautologin-user-timeout=0\n'
-         'user-session=%s\nautologin-session=%s\n' % (nutzer, sitzung, sitzung))
-
-if '[Seat:*]' in text:
-    text = text.replace('[Seat:*]', block, 1)
-else:
-    text = text.rstrip('\n') + '\n\n# --- LHTPi: Kiosk startet ohne Anmeldung ---\n' + block
-
-open(pfad, 'w', encoding='utf-8').write(text)
-print('geschrieben')
-PYEOF_LDM
-        chmod 644 "${LIGHTDM_CONF}" 2>/dev/null || true
-        ok "Anmeldung ohne Passwort in ${LIGHTDM_CONF} hinterlegt (Sitzung ${sitzung})"
+    local xinitrc="${PI_HOME}/.xinitrc"
+    if ! grep -q 'openbox-session' "${xinitrc}" 2>/dev/null; then
+        printf '# LHTPi-Kiosk: X-Sitzung ohne Desktop (kein Panel, keine Anmeldung)\nexec openbox-session\n' \
+            > "${xinitrc}"
+        ok "X-Sitzung eingerichtet (openbox, ohne Anmeldung)"
     else
-        fail "python3 fehlt - ${LIGHTDM_CONF} kann nicht angepasst werden"
+        ok "X-Sitzung eingerichtet (war schon vorhanden)"
     fi
+    chown "${PI_USER}:${PI_GROUP}" "${xinitrc}" 2>/dev/null || true
 
-    # 4) Drop-in zusätzlich auf denselben Stand bringen
-    mkdir -p "${LIGHTDM_DIR}/lightdm.conf.d"
-    cat > "${LIGHTDM_DIR}/lightdm.conf.d/50-lhtpi-autologin.conf" <<EOF
-[Seat:*]
-autologin-user=${PI_USER}
-autologin-user-timeout=0
-user-session=${sitzung}
-autologin-session=${sitzung}
-EOF
-
-    # 5) Kontrolle: was gilt wirklich?
-    local wirk
-    wirk="$(lightdm --show-config 2>/dev/null | grep -iE 'autologin|user-session' | tail -4 || true)"
-    if [ -n "${wirk}" ]; then
-        ok "LightDM verwendet: $(echo "${wirk}" | tr '\n' ' ')"
-    else
-        warn "Kontrolle nicht möglich (lightdm --show-config lieferte nichts)"
-    fi
-    if [ -f "${XSESSIONS_DIR}/${sitzung}.desktop" ]; then
-        ok "Sitzungsdatei vorhanden: ${XSESSIONS_DIR}/${sitzung}.desktop"
-    else
-        warn "Sitzungsdatei ${sitzung}.desktop fehlt - bitte diese Zeile melden"
+    # 4) Ohne Anmeldebildschirm bleiben wir auf multi-user
+    systemctl set-default multi-user.target >/dev/null 2>&1 || true
+    if ! command -v startx >/dev/null 2>&1 && ! command -v xinit >/dev/null 2>&1; then
+        fail "startx/xinit fehlt - X kann nicht starten (Paket xinit installieren)"
     fi
 }
 
@@ -822,14 +814,6 @@ xset s noblank
 EOF
     chown -R "${PI_USER}:${PI_GROUP}" "/home/${PI_USER}/.config"
 
-    # Getty-Autologin tty1
-    mkdir -p /etc/systemd/system/getty@tty1.service.d
-    cat > /etc/systemd/system/getty@tty1.service.d/autologin.conf <<EOF
-[Service]
-ExecStart=
-ExecStart=-/sbin/agetty --autologin ${PI_USER} --noclear %I \$TERM
-EOF
-
     # HDMI-Fallback in config.txt
     if [ -f /boot/firmware/config.txt ]; then
         grep -qxF 'hdmi_force_hotplug=1' /boot/firmware/config.txt || echo 'hdmi_force_hotplug=1' >> /boot/firmware/config.txt
@@ -839,8 +823,8 @@ EOF
         warn "/boot/firmware/config.txt nicht gefunden – HDMI-Fallback nicht gesetzt"
     fi
 
-    systemctl set-default graphical.target
-    ok "Desktop/Kiosk-Autostart konfiguriert"
+    systemctl set-default multi-user.target >/dev/null 2>&1 || true
+    ok "Autostart ohne Anmeldebildschirm konfiguriert"
 }
 
 configure_policies() {

@@ -219,71 +219,54 @@ ok('make-key' in r.stdout and 'bleibt gesperrt' in r.stdout,
 ok(not os.path.exists(leer['LHTPI_LICENSE_FILE']),
    'auf dem Gerät entsteht keine Lizenz von selbst')
 
-print('\n13d) Autologin (Kiosk startet ohne Anmeldung)')
+print('\n13d) Kein Anmeldebildschirm (Anzeige startet ohne Login)')
 
 ok('configure_autologin' in text, 'Autologin-Schritt ist im Skript vorhanden')
 ok('configure_autologin' in text.split('main()')[1],
    'Autologin ist in den Ablauf eingehängt')
-ok('lhtpi-kiosk.desktop' in text,
-   'Installer legt eine eigene Sitzung an (Name kann nicht falsch sein)')
+ok('systemctl disable lightdm.service' in text,
+   'Anmeldebildschirm (LightDM) wird abgeschaltet')
+ok('WantedBy=graphical.target' not in text,
+   'kein Dienst hängt mehr am graphischen Ziel (kein Anmeldedienst)')
+ok('WantedBy=multi-user.target' in text, 'Dienste hängen am normalen Startziel')
+ok('autologin ${PI_USER} --noclear' in text,
+   'tty1 meldet den Benutzer automatisch an')
 
-LD = os.path.join(LZ, 'lightdm')
-XS = os.path.join(LZ, 'xsessions')
-os.makedirs(os.path.join(LD, 'lightdm.conf.d'), exist_ok=True)
-os.makedirs(XS, exist_ok=True)
-# So sieht es auf Raspberry Pi OS aus: Sitzung "rpd-x" (= "Raspberry Pi OS")
-open(os.path.join(XS, 'rpd-x.desktop'), 'w').write(
-    '[Desktop Entry]\nName=Raspberry Pi OS\nExec=/usr/bin/startlxde-pi\n')
-CONF = os.path.join(LD, 'lightdm.conf')
-open(CONF, 'w').write('[Seat:*]\n#autologin-user=\ngreeter-session=pi-greeter\n'
-                      'autologin-user=falschernutzer\nautologin-session=wayland\n')
-LDU = dict(UMG, LHTPI_LIGHTDM_DIR=LD, LHTPI_LIGHTDM_CONF=CONF,
-           LHTPI_XSESSIONS_DIR=XS)
-r = schritt('configure_autologin', env=LDU)
-ok(r.returncode == 0, 'Autologin-Schritt bricht nicht ab')
-inhalt = open(CONF).read()
-ok('autologin-user=pi' in inhalt, 'Autologin-Benutzer steht in lightdm.conf')
-ok('autologin-user=falschernutzer' not in inhalt.replace('#autologin-user=falschernutzer', ''),
-   'widersprechende Benutzer-Zeile wurde auskommentiert')
-ok('#autologin-session=wayland' in inhalt,
-   'widersprechende Sitzung (wayland) wurde auskommentiert')
-ok('user-session=rpd-x' in inhalt and 'autologin-session=rpd-x' in inhalt,
-   'Sitzung wird aus den vorhandenen Sitzungsdateien übernommen (rpd-x)')
-ok(inhalt.index('autologin-user=pi') < inhalt.index('greeter-session'),
-   'Werte stehen in der [Seat:*]-Sektion (nicht am Dateiende)')
-ok(inhalt.count('[Seat:*]') == 1, 'keine doppelte Sektion angelegt')
-ok('user-session=rpd-x' in open(os.path.join(
-    LD, 'lightdm.conf.d', '50-lhtpi-autologin.conf')).read(),
-   'Drop-in steht auf derselben Sitzung')
-ok('Sitzungsdatei vorhanden' in r.stdout,
-   'Kontrolle bestätigt die Sitzungsdatei')
-ok('LightDM verwendet' in r.stdout or 'Kontrolle nicht möglich' in r.stdout,
-   'Ergebnis der LightDM-Kontrolle steht im Protokoll')
-
-# Auf dem Pi ist openbox installiert -> der Installer nutzt seine EIGENE Sitzung
+# Ablauf wirklich ausführen (mit Testordnern statt /home/pi und /etc)
 BIN = os.path.join(LZ, 'bin')
 os.makedirs(BIN, exist_ok=True)
-open(os.path.join(BIN, 'openbox-session'), 'w').write('#!/bin/sh\nexec openbox\n')
-os.chmod(os.path.join(BIN, 'openbox-session'), 0o755)
-CONF3 = os.path.join(LD, 'mit-openbox.conf')
-open(CONF3, 'w').write('[Seat:*]\n#autologin-user=\n')
-r = schritt('configure_autologin',
-            env=dict(LDU, PATH=BIN + os.pathsep + LDU['PATH'],
-                     LHTPI_LIGHTDM_CONF=CONF3))
-ok('Eigene Sitzung angelegt: lhtpi-kiosk' in r.stdout,
-   'mit openbox entsteht die eigene Sitzung lhtpi-kiosk')
-ok('user-session=lhtpi-kiosk' in open(CONF3).read(),
-   'lightdm.conf verweist auf die eigene Sitzung')
-sitzungsdatei = os.path.join(XS, 'lhtpi-kiosk.desktop')
-ok(os.path.exists(sitzungsdatei) and 'Exec=' in open(sitzungsdatei).read(),
-   'Sitzungsdatei lhtpi-kiosk.desktop wurde angelegt')
+open(os.path.join(BIN, 'startx'), 'w').write('#!/bin/sh\nexec xinit "$@"\n')
+open(os.path.join(BIN, 'raspi-config'), 'w').write('#!/bin/sh\nexit 0\n')
+for _b in ('startx', 'raspi-config'):
+    os.chmod(os.path.join(BIN, _b), 0o755)
+HAUS = os.path.join(LZ, 'home', 'pi')
+UD = os.path.join(LZ, 'units')
+os.makedirs(HAUS, exist_ok=True)
+os.makedirs(UD, exist_ok=True)
+AUT = dict(UMG, LHTPI_PI_HOME=HAUS, LHTPI_UNIT_DIR=UD,
+           PATH=BIN + os.pathsep + UMG['PATH'])
+r = schritt('configure_autologin', env=AUT)
+ok(r.returncode == 0, 'Autologin-Schritt bricht nicht ab (set -u)')
+profil = open(os.path.join(HAUS, '.bash_profile')).read()
+ok('exec startx' in profil, 'Anzeige startet automatisch über startx')
+ok('"/dev/tty1"' in profil, 'startx nur auf tty1 (SSH bleibt normal)')
+ok('DISPLAY' in profil, 'startet nur ohne laufende Anzeige (kein Doppelstart)')
+xinitrc = os.path.join(HAUS, '.xinitrc')
+ok(os.path.exists(xinitrc) and 'exec openbox-session' in open(xinitrc).read(),
+   'X-Sitzung: openbox ohne Desktop')
+gotty = os.path.join(UD, 'getty@tty1.service.d', 'lhtpi-autologin.conf')
+ok(os.path.exists(gotty) and '--autologin pi' in open(gotty).read(),
+   'automatische Anmeldung auf tty1 hinterlegt')
 
-# Ohne [Seat:*]-Sektion wird eine angelegt
-CONF2 = os.path.join(LD, 'leer.conf')
-open(CONF2, 'w').write('# noch nichts konfiguriert\n')
-r = schritt('configure_autologin', env=dict(LDU, LHTPI_LIGHTDM_CONF=CONF2))
-ok(r.returncode == 0 and 'autologin-user=pi' in open(CONF2).read(),
-   'ohne Sektion wird [Seat:*] angelegt')
+# Zweiter Lauf darf nichts doppeln
+r = schritt('configure_autologin', env=AUT)
+profil2 = open(os.path.join(HAUS, '.bash_profile')).read()
+ok(profil2.count('exec startx') == 1, 'zweiter Lauf doppelt nichts')
+ok('war schon eingerichtet' in r.stdout, 'zweiter Lauf erkennt den Zustand')
+
+# Wartezeiten: ohne Anmeldedienst startet X gleichzeitig
+ok(text.count('xset q >/dev/null 2>&1 && break') >= 2,
+   'Kiosk- und Einrichtungsskript warten auf den Bildschirm (X)')
 
 print('\n13c) Alle Schritte nennen ihre Variablen (Schutz vor set -u)')
 from_a = open(INSTALL).read()
