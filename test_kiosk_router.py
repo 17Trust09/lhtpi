@@ -534,6 +534,8 @@ ok('Bedienung' in mit_login, 'der Schalter erklärt beide Wirkungen')
 seite_bedienbar = anon.get('/screen/1').get_data(as_text=True)
 ok('.frame.on{pointer-events:auto}' in seite_bedienbar,
    'bei Wartung an nimmt das sichtbare Tool Klicks an (Admin erreichbar)')
+ok("setAttribute('scrolling', cfg.wartung_knopf ? 'auto' : 'no')" in seite_bedienbar,
+   'im Wartungsbetrieb darf der Rahmen scrollen (Verwaltung bedienbar)')
 with app.app_context():
     router.set_wartung_knopf(False)
 seite_gesperrt = anon.get('/screen/1').get_data(as_text=True)

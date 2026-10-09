@@ -98,7 +98,9 @@
     f.className = 'frame';
     f.dataset.tool = t.tool;
     f.setAttribute('allow', 'autoplay');
-    f.setAttribute('scrolling', 'no');
+    // Scrollen im Rahmen nur, wenn Wartung erlaubt ist: die Anzeige selbst
+    // braucht kein Scrollen, die Verwaltung der Tools aber schon.
+    f.setAttribute('scrolling', cfg.wartung_knopf ? 'auto' : 'no');
     f.src = t.url;
     stage.appendChild(f);
     frames[t.tool] = f;
