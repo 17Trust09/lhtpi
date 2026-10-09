@@ -5,3 +5,9 @@ venv/
 test_venv/
 .env
 uploads/
+
+# Lizenzdateien (signiert, gehören nicht ins Repo)
+lizenz.key
+*.lizenz.key
+privat*.json
+privatschluessel*

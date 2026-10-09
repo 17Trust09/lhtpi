@@ -22,6 +22,10 @@ os.environ['LHTPI_HWID'] = 'piserial:10000000testgeraet'
 os.environ['LHTPI_LICENSE_FILE'] = os.path.join(TMP, 'license.key')
 os.environ['LHTPI_INSTALLED_MARKER'] = os.path.join(TMP, 'installed')
 os.environ['LHTPI_LICENSE_ENFORCE'] = '0'
+
+# Lizenzprüfung mit dem Test-Schlüssel (siehe test_keys.py)
+import test_keys                                        # noqa: E402
+test_keys.install_env()
 os.environ['LHTPI_SCREENS_FILE'] = os.path.join(TMP, 'screens')
 
 from app import app                        # noqa: E402
@@ -273,6 +277,21 @@ with app.app_context():
 
     # Sicher anmelden – frühere Abschnitte können die Sitzung verändert haben
     client.post('/login', data={'username': 'admin', 'password': 'admin'})
+
+    # Ohne Lizenz darf die Einrichtung nicht abschließen (sonst sperrt sich das
+    # Gerät mit dem Merkmal selbst). Fall 1: echter Gerätezustand – keine Lizenz,
+    # noch kein Merkmal -> Seite bleibt in der Einrichtung.
+    os.environ.pop('LHTPI_LICENSE_ENFORCE')
+    antwort = client.post('/setup/abschluss')
+    ok(antwort.status_code == 302 and not os.path.exists(marker),
+       'ohne Lizenz kein Abschluss (Gerät würde sich sonst selbst sperren)')
+    # Fall 2: erzwungene Lizenzprüfung -> die App ist rundherum gesperrt
+    os.environ['LHTPI_LICENSE_ENFORCE'] = '1'
+    antwort = client.post('/setup/abschluss')
+    ok(antwort.status_code == 403 and not os.path.exists(marker),
+       'mit aktiver Lizenzprüfung ist die App gesperrt (403)')
+    os.environ['LHTPI_LICENSE_ENFORCE'] = '0'
+
     antwort = client.post('/setup/abschluss')
     ok(antwort.status_code == 302, 'Einrichtung abschließen leitet zurück')
     ok(antwort.headers.get('Location', '').endswith('/display'),

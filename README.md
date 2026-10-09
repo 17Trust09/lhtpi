@@ -14,6 +14,8 @@ LHTPi verwandelt einen Raspberry Pi 4/5 in einen autarken Präsentations-Player:
 - Playlist-Verwaltung und Endlos-Wiedergabe
 - **USB-Stick als Quelle**: Ordner `slides/` im Stick-Root wird automatisch abgespielt (Vorrang vor der Web-Playlist)
 - Automatischer HDMI-Kiosk mit Chromium: `http://localhost:8000/present/kiosk`
+- Hardware-Lizenz **signiert** (RSA-2048): Kopie auf ein anderes Gerät ist gesperrt,
+  Lizenzen kann nur der Hersteller erzeugen ([Details](docs/multitool-kiosk/LIZENZ.md))
 - **Kein Access Point**: `wlan0` wird nicht angefasst, keine WLAN-Verbindungen gelöscht
 - `eth0` optional per DHCP (die Anzeige braucht kein Netzwerk)
 - Kein `hostapd`, kein `dnsmasq`, kein `iptables-persistent`

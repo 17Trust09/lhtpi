@@ -56,6 +56,13 @@ def setup_abschluss():
     Setzt das Merkmal: ab jetzt startet die Anzeige (systemd-Pfad-Wächter) und
     die Lizenzprüfung ist aktiv.
     """
+    # Ohne Lizenz würde sich das Gerät mit dem Merkmal sofort selbst sperren –
+    # das fangen wir hier ab.
+    if not lic.read_license() and os.environ.get('LHTPI_LICENSE_ENFORCE') != '0':
+        flash('Ohne Lizenz wäre die Anzeige sofort gesperrt. Bitte lizenz.key auf '
+              'die Boot-Partition der SD-Karte legen (oder nach '
+              + lic.LICENSE_FILE + ' kopieren) und das Gerät neu starten.')
+        return redirect(url_for('display'))
     pfad = lic.MARKER_FILE
     try:
         ordner = os.path.dirname(pfad)

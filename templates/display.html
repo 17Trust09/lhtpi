@@ -80,6 +80,13 @@
     dann „Speichern" — und darunter <b>Einrichtung abschließen</b>.
     Danach startet die Anzeige automatisch.
     <div class="note">Erkannte Ausgänge: <b>{{ erkannte_schirme }}</b></div>
+    {% if not lizenz_da %}
+    <div class="note" style="background:#5a1e1e;border:1px solid #b05555;color:#ffdede">
+      <b>Lizenz fehlt</b> – die Einrichtung lässt sich erst abschließen, wenn
+      <code>lizenz.key</code> auf der Boot-Partition der SD-Karte liegt (oder in
+      <code>/etc/lhtpi/license.key</code>). Danach das Gerät neu starten.
+    </div>
+    {% endif %}
     <form method="post" action="{{ url_for('setup_abschluss') }}">
       <button class="knopf" type="submit">Einrichtung abschließen und Anzeige starten</button>
     </form>

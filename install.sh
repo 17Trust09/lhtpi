@@ -14,6 +14,7 @@ APP_PORT="8000"
 # Kein WLAN-Access-Point: die Anzeige läuft ohne Netzwerk (alles über localhost).
 KIOSK_URL="http://localhost:8000/present/kiosk"
 SERVICE_APP="lhtpi.service"
+SERVICE_LICENSE="lhtpi-lizenz-import"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_DIR="/root/lhtpi-backup-$(date +%Y%m%d%H%M%S)"
 
@@ -505,23 +506,106 @@ configure_screens_file() {
     ok "Bildschirme laut Installation: ${SCREEN_COUNT}"
 }
 
-# Hardware-Lizenz für DIESES Gerät erzeugen und hinterlegen
+# Hardware-Lizenz hinterlegen (signiert - der private Schlüssel bleibt beim Hersteller).
+#
+# Auf dem Gerät liegt nur der ÖFFENTLICHE Schlüssel. Eine Lizenz wird deshalb
+# mitgeliefert und hier nur übernommen:
+#   * --license=/pfad/datei
+#   * lizenz.key auf der Boot-Partition der SD-Karte (/boot/firmware/lizenz.key)
+#   * lizenz.key im Projektverzeichnis
+# Nur auf dem Hersteller-Rechner (LHTPI_SIGN_KEY_FILE gesetzt) wird sie direkt
+# erzeugt - dann läuft die Installation in einem Schritt.
+LICENSE_STATUS="fehlt"
+
+lizenz_uebernehmen() {
+    install -m 644 "$1" "${LICENSE_FILE}" || return 1
+    LICENSE_STATUS="übernommen ($1)"
+    ok "Lizenz übernommen: $1"
+    return 0
+}
+
 configure_license() {
-    log "Erzeuge Hardware-Lizenz für dieses Gerät"
-    local tools_arg
-    tools_arg="$(tools_file_content | paste -sd, -)"
-    if [ -z "${tools_arg}" ]; then
-        warn "Keine Tools gewählt – keine Lizenz erzeugt"
+    log "Hardware-Lizenz hinterlegen"
+    mkdir -p "$(dirname "${LICENSE_FILE}")"
+    chown "root:${PI_GROUP}" "$(dirname "${LICENSE_FILE}")"
+    chmod 775 "$(dirname "${LICENSE_FILE}")"
+
+    if [ -n "${LICENSE_ARG}" ]; then
+        if [ -f "${LICENSE_ARG}" ] && lizenz_uebernehmen "${LICENSE_ARG}"; then
+            return 0
+        fi
+        warn "Lizenzdatei '${LICENSE_ARG}' nicht gefunden"
+    fi
+
+    local quelle
+    for quelle in /boot/firmware/lizenz.key /boot/lizenz.key "${PROJECT_DIR}/lizenz.key"; do
+        if [ -f "${quelle}" ] && lizenz_uebernehmen "${quelle}"; then
+            return 0
+        fi
+    done
+
+    if [ -f "${LICENSE_FILE}" ]; then
+        LICENSE_STATUS="vorhanden (unverändert)"
+        ok "Vorhandene Lizenz bleibt erhalten"
         return 0
     fi
-    if "${PROJECT_DIR}/venv/bin/python" "${PROJECT_DIR}/license_bundle.py" \
-            --install "--tools=${tools_arg}" "--screens=${SCREEN_COUNT}"; then
-        ok "Lizenz hinterlegt (${LICENSE_FILE})"
-        # Das Merkmal ${MARKER_FILE} setzt die Ersteinrichtung auf dem
-        # Bildschirm ("Einrichtung abschließen") - erst danach läuft die Anzeige.
-    else
-        warn "Lizenz konnte nicht erzeugt werden (läuft die App trotzdem?)"
+
+    if [ -n "${LHTPI_SIGN_KEY_FILE:-}" ] && [ -f "${LHTPI_SIGN_KEY_FILE}" ]; then
+        local tools_arg
+        tools_arg="$(tools_file_content | paste -sd, -)"
+        if [ -n "${tools_arg}" ] && "${PROJECT_DIR}/venv/bin/python" \
+                "${PROJECT_DIR}/license_bundle.py" --install \
+                "--tools=${tools_arg}" "--screens=${SCREEN_COUNT}"; then
+            LICENSE_STATUS="erzeugt und hinterlegt"
+            ok "Lizenz erzeugt und hinterlegt (${LICENSE_FILE})"
+            return 0
+        fi
     fi
+
+    warn "Keine Lizenz hinterlegt – die Anzeige bleibt gesperrt."
+    warn "Lizenz auf einem anderen Rechner erzeugen:"
+    warn "  1) auf dem Pi:   python3 license_bundle.py --info      (Geräte-ID ablesen)"
+    warn "  2) herstellen:   python3 license_bundle.py --make-key \\"
+    warn "                     --tools=1,2,3 --screens=2 --hwid=<Geräte-ID> > lizenz.key"
+    warn "  3) lizenz.key auf die Boot-Partition der SD-Karte legen (oder --license=…)"
+}
+
+# Holt eine später gelieferte Lizenz beim Start von der Boot-Partition nach.
+configure_license_import() {
+    log "Erstelle Dienst zum Nachholen der Lizenz"
+    cat > /usr/local/bin/lhtpi-lizenz-import.sh <<'IMPORT_EOF'
+#!/bin/bash
+# Holt eine mitgelieferte Lizenz von der Boot-Partition (lizenz.key), wenn noch
+# keine hinterlegt ist oder sich die Datei geändert hat.
+set -u
+ZIEL=/etc/lhtpi/license.key
+for quelle in /boot/firmware/lizenz.key /boot/lizenz.key; do
+    [ -f "$quelle" ] || continue
+    if ! cmp -s "$quelle" "$ZIEL" 2>/dev/null; then
+        install -m 644 "$quelle" "$ZIEL"
+        logger -t lhtpi "Lizenz von $quelle uebernommen"
+    fi
+done
+exit 0
+IMPORT_EOF
+    chmod 755 /usr/local/bin/lhtpi-lizenz-import.sh
+
+    cat > "/etc/systemd/system/${SERVICE_LICENSE}.service" <<EOF
+[Unit]
+Description=LHTPi - Lizenz von der Boot-Partition uebernehmen
+After=local-fs.target
+Before=${SERVICE_APP}
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/lhtpi-lizenz-import.sh
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload 2>/dev/null || true
+    systemctl enable "${SERVICE_LICENSE}.service" >/dev/null 2>&1 || true
+    ok "Lizenz-Dienst eingerichtet (${SERVICE_LICENSE}.service)"
 }
 
 configure_tools_file() {
@@ -805,7 +889,7 @@ print_summary() {
     echo ""
     echo "  🖥  Ersteinrichtung: erscheint beim ersten Booten auf dem Bildschirm"
     echo "     (Maus und Tastatur: Tools und Bildschirme wählen, dann abschließen)"
-    echo "  🌐 Dashboard:     http://192.168.4.1:${APP_PORT}  (bzw. http://<LAN-IP>:${APP_PORT})"
+    echo "  🌐 Dashboard:     http://localhost:${APP_PORT}  (bzw. http://<LAN-IP>:${APP_PORT})"
     echo "  🧭 Anzeigen:      http://<LAN-IP>:${APP_PORT}/display   ← hier einstellen:"
     echo "                     welches Tool welchen Bildschirm nutzt, Dauer je Tool,"
     echo "                     und ob mehrere Tools sich einen Bildschirm teilen."
@@ -823,8 +907,15 @@ print_summary() {
     echo "  💾 USB-Stick: Ordner 'slides/' im Stick-Root anlegen und einstecken –"
     echo "     wird automatisch abgespielt (Vorrang vor der Web-Playlist)."
     echo ""
-    echo "  ⚠️  Wichtig: DHCP-Reservierung im Router für den Pi einrichten,"
-    echo "     damit die LAN-IP stabil bleibt."
+    echo "  🔑 Lizenz:        ${LICENSE_STATUS}"
+    if [ "${LICENSE_STATUS}" = "fehlt" ]; then
+        echo "     ⚠️  Ohne Lizenz bleibt die Anzeige gesperrt – lizenz.key auf die"
+        echo "        Boot-Partition legen und neu starten."
+    fi
+    echo ""
+    echo "  🔌 Netzwerk ist optional: die Anzeige läuft vollständig über localhost."
+    echo "     Ein LAN-Kabel braucht nur, wer die Seiten von einem anderen"
+    echo "     Rechner aufrufen will."
     echo "-----------------------------------------------"
     echo ""
     if [ "$NO_REBOOT" = "1" ]; then
@@ -1033,6 +1124,10 @@ Aufruf: sudo bash install.sh [Optionen]
   --screens=1|2     Bildschirme, die die Lizenz erlaubt (Standard: 2)
                     Welche genutzt werden, wird bei der Ersteinrichtung
                     auf dem Bildschirm gewählt.
+  --license=<datei> Lizenzdatei für dieses Gerät (sonst wird lizenz.key auf
+                    der Boot-Partition bzw. im Projektverzeichnis gesucht)
+  --sign-key=<datei> privater Signaturschlüssel (nur Hersteller-Rechner:
+                    damit wird die Lizenz direkt erzeugt)
   --no-reboot       nicht automatisch neu starten
   -h, --help        diese Hilfe
 
@@ -1054,6 +1149,8 @@ main() {
             --no-reboot) NO_REBOOT=1 ;;
             --tools=*)   selection="${arg#--tools=}" ;;
             --screens=*) screens="${arg#--screens=}" ;;
+            --license=*) LICENSE_ARG="${arg#--license=}" ;;
+            --sign-key=*) export LHTPI_SIGN_KEY_FILE="${arg#--sign-key=}" ;;
             -*)          fail "Unbekannte Option '${arg}' (siehe --help)" ;;
             *)           selection="$arg" ;;
         esac
@@ -1096,6 +1193,7 @@ main() {
     fi
     configure_tools_file
     configure_license
+    configure_license_import
     configure_setup_mode
     cleanup_old_kiosks
     configure_desktop

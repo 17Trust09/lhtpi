@@ -9,6 +9,7 @@ from flask_login import login_required
 from app import app
 import kiosk_router as router
 import kiosk_tools as tools
+import license_bundle as lic
 
 
 # ── Anzeige (Kiosk, ohne Login) ──────────────────────────────────────────────
@@ -47,7 +48,8 @@ def api_screen(idx):
 def display():
     return render_template('display.html', o=router.display_overview(),
                            eingerichtet=router.ist_eingerichtet(),
-                           erkannte_schirme=tools.detected_screen_count())
+                           erkannte_schirme=tools.detected_screen_count(),
+                           lizenz_da=bool(lic.read_license()))
 
 
 @app.route('/display/save', methods=['POST'])

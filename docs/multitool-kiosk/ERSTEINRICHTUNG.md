@@ -18,10 +18,12 @@ Verteiler-App.
 
 ## Ablauf beim ersten Booten
 
-1. Der Installer (`sudo bash install.sh`) richtet alles ein, erzeugt die
-   Hardware-Lizenz für dieses Gerät — setzt aber **kein** Merkmal
-   „eingerichtet". Fragen nach Tools/Bildschirmen stellt er nicht mehr (nur noch
-   per Argument `--tools=` / `--screens=` für die Image-Vorbereitung).
+1. Der Installer (`sudo bash install.sh`) richtet alles ein — setzt aber **kein**
+   Merkmal „eingerichtet". Fragen nach Tools/Bildschirmen stellt er nicht mehr
+   (nur noch per Argument `--tools=` / `--screens=` für die Image-Vorbereitung).
+   Die **Lizenz** legt er nur ab, wenn sie mitgeliefert wird (`--license=…` oder
+   `lizenz.key` auf der Boot-Partition) — erzeugen kann er sie nicht, der private
+   Signaturschlüssel bleibt beim Hersteller. Siehe [LIZENZ.md](LIZENZ.md).
 2. Beim ersten Booten startet **kein Kiosk**. Stattdessen öffnet
    `lhtpi-setup.service` auf dem ersten angeschlossenen Ausgang die
    **Anzeigen-Seite** (`http://localhost:8000/display`) im Vollbild.
@@ -35,6 +37,12 @@ Verteiler-App.
 5. Ein Pfad-Wächter (`lhtpi-anzeige.path`) reagiert sofort: die
    Ersteinrichtungs-Seite wird beendet, die Anzeige(n) starten — **kein
    Neustart nötig**.
+
+   Fehlt die Lizenz noch, verweigert die Seite den Abschluss mit einem Hinweis
+   (sonst würde sich das Gerät mit dem Merkmal sofort selbst sperren). Dann
+   `lizenz.key` auf die Boot-Partition legen, Gerät neu starten — der Dienst
+   `lhtpi-lizenz-import.service` holt sie automatisch nach
+   `/etc/lhtpi/license.key` — und die Einrichtung abschließen.
 
 ## Technik
 
@@ -82,6 +90,10 @@ wäre Fernzugriff — bewusst nicht vorgesehen.
 * Ist kein Bildschirm beim ersten Booten angeschlossen, erscheint nichts.
   Gerät mit Bildschirm neu starten.
 * Ohne Merkmal gilt der Entwicklungsmodus der Lizenzprüfung (keine Sperre) —
-  das ist gewollt, sonst käme man bei der Einrichtung nicht weiter.
+  das ist gewollt, sonst käme man bei der Einrichtung nicht weiter. Mit Merkmal
+  **und** ohne gültige Lizenz ist alles gesperrt (Sperrseite mit Geräte-ID).
+* Lizenzen sind **gerätegebunden und signiert**: eine Kopie der SD-Karte auf
+  einem anderen Pi ist ungültig. Erzeugt wird sie beim Hersteller, siehe
+  [LIZENZ.md](LIZENZ.md).
 * Der echte Test auf dem Pi steht noch aus (S6): Installer, Erststart, Maus +
   Tastatur, Umschalten der Bildschirm-Anzahl im Betrieb.

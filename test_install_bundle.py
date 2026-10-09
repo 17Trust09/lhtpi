@@ -173,6 +173,19 @@ r = sourced('select_components "" ""\necho "T=$TOOL_SLIDESHOW$TOOL_TERMIN$TOOL_S
 ok('T=111' in r.stdout, 'ohne Angabe werden alle Tools installiert')
 ok('S=2' in r.stdout, 'Bildschirm-Anzahl kommt aus der Ersteinrichtung')
 
+print('\n13) Lizenz kommt vom Hersteller (kein Schlüssel auf dem Gerät)')
+ok('nur der ÖFFENTLICHE Schlüssel' in text,
+   'Kommentar stellt klar: privater Schlüssel bleibt beim Hersteller')
+ok('--license=' in text and 'LICENSE_ARG' in text,
+   'Option --license=<datei> vorhanden')
+ok('/boot/firmware/lizenz.key' in text and '/boot/lizenz.key' in text,
+   'Lizenz wird von der Boot-Partition übernommen')
+ok('${LHTPI_SIGN_KEY_FILE:-}' in text,
+   'Selbst erzeugen nur mit Signierschlüssel (Hersteller-Rechner)')
+ok('lhtpi-lizenz-import' in text and 'lhtpi-lizenz-import.sh' in text,
+   'Dienst holt eine später gelieferte Lizenz beim Start nach')
+ok('${LICENSE_STATUS}' in text, 'Abschluss-Ausgabe nennt den Lizenzstand')
+
 print('\n12) Knopf in der Safety-Cross-Admin-Seite')
 sc_admin = os.path.join(BASE, 'tools/safety-cross/templates/admin.html')
 if os.path.exists(sc_admin):

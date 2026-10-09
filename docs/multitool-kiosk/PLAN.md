@@ -171,7 +171,11 @@ sudo ./install.sh --tools=slideshow,terminboard --screens=2
 
 ## 8. Hardware-Lizenz (Bundle)
 
-Ein Secret (Tim, **nie im Repo**), ein Key je Gerät, Gültigkeit für **Seriennummer + Tool-Set**:
+**Signiert** mit RSA-2048 (SHA-256) — im Code steht nur der **öffentliche**
+Schlüssel, signiert wird beim Hersteller mit dem privaten. Ein Geheimnis im Repo
+gibt es nicht mehr (das Repo ist öffentlich). Details: [LIZENZ.md](LIZENZ.md).
+
+Ein Key je Gerät, Gültigkeit für **Seriennummer + Tool-Set**:
 
 ```
 license.key (auf dem Pi, /etc/lhtpi/license.key, chmod 600)
@@ -245,9 +249,10 @@ Reihenfolge: **S1 → S2 → S4 → S5**, S3 parallel (klein, unabhängig). S6 a
 python3 license_bundle.py --make-key --tools=1,3 --screens=2 --hwid=piserial:1000000012345678
 ```
 
-**Grenze:** Wer den Signaturschlüssel (`SECRET` in `license_bundle.py`) aus dem
-ausgelieferten Image holt, kann sich selbst Lizenzschlüssel erzeugen. Im
-Kunden-Image deshalb das Modul verschleiern (Skill `python-source-protection`).
+**Grenze:** Wer die Prüfung im Image patcht, umgeht jede Lizenzprüfung; dagegen
+hilft nur Verschleierung des Moduls (Skill `python-source-protection`). Eine
+Lizenz nachbauen kann er aber nicht — dafür fehlt ihm der private Schlüssel.
+Auf dem Gerät sind `--make-key`/`--install` ohne Signierschlüssel wirkungslos.
 
 ### Tests im Bundle ausführen
 
@@ -300,4 +305,19 @@ Knopf in der **Safety-Cross-Admin-Seite**.
 | S10 | Hardware-Test: Erststart, Maus + Tastatur, Bildschirm-Anzahl im Betrieb umstellen | offen (braucht Pi) |
 
 Details: [ERSTEINRICHTUNG.md](ERSTEINRICHTUNG.md)
+
+## 12. Lizenz auf RSA umgestellt (09.10.2026)
+
+Anlass: Das Repository ist öffentlich, damit war der HMAC-Schlüssel in
+`license_bundle.py` lesbar — Lizenzen ließen sich für jede Seriennummer selbst
+erzeugen. Jetzt asymmetrisch (RSA-2048): nur der öffentliche Schlüssel liegt im
+Code, der private bleibt beim Hersteller.
+
+| Schritt | Inhalt | Stand |
+|---|---|---|
+| S11 | Signatur auf RSA-2048/SHA-256 (PKCS#1 v1.5), `SECRET` entfernt | ✅ erledigt |
+| S12 | Privater Schlüssel außerhalb des Repos, `--make-key` verweigert ohne ihn | ✅ erledigt |
+| S13 | Installer übernimmt Lizenz (Boot-Partition/`--license=`) statt sie zu erzeugen, Nachlade-Dienst | ✅ erledigt |
+| S14 | Tests: 41 Lizenz-Prüfungen, Gegenprobe mit `openssl`, Live-Prüfung über HTTP | ✅ erledigt |
+| S15 | Verschlüsselung/Verschleierung des Moduls im Kunden-Image | offen (nicht nötig für den Kopierschutz selbst) |
 
