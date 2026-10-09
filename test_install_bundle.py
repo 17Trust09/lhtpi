@@ -124,7 +124,18 @@ r = sourced('select_components "1,3" "2"; echo "ARG=$(tools_file_content | paste
 ok('ARG=slideshow,safetycross' in r.stdout,
    'Lizenz erhält die gewählten Tools und die Bildschirm-Anzahl')
 
-print('\n8) Altlasten')
+print('\n8) Tool-URLs per Umgebung überschreibbar (Demo/Test)')
+r = subprocess.run(
+    [sys.executable, '-c', 'import kiosk_tools as t; print(t.default_url("slideshow"))'],
+    cwd=BASE, capture_output=True, text=True,
+    env=dict(os.environ, LHTPI_TOOL_URLS='slideshow=http://localhost:8900/present/kiosk'))
+ok('8900' in r.stdout, 'LHTPI_TOOL_URLS ersetzt die Tool-URL')
+r = subprocess.run(
+    [sys.executable, '-c', 'import kiosk_tools as t; print(t.default_url("slideshow"))'],
+    cwd=BASE, capture_output=True, text=True)
+ok(':8000' in r.stdout, 'ohne Override gilt die Standard-URL')
+
+print('\n9) Altlasten')
 ok('INSTALL_LHTPI' not in text and 'INSTALL_TERMIN' not in text,
    'keine alte Auswahl-Logik (INSTALL_LHTPI/INSTALL_TERMIN) mehr')
 ok('SERVICE_KIOSK=' not in text and 'KIOSK_SCRIPT=' not in text,

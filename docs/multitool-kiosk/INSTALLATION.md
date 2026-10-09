@@ -86,6 +86,31 @@ curl -s localhost:8000/api/screens        # Zuordnung Bildschirm -> Tools
 cat /etc/lhtpi/tools /etc/lhtpi/screens   # was installiert ist
 ```
 
+## Screenshots
+
+In `docs/multitool-kiosk/screenshots/` liegen echte Aufnahmen (keine Mockups):
+`00-uebersicht.png` (alle neun auf einer Tafel), Dashboard, Einstellungen,
+Lizenz, Anzeige Schirm 1 (Rotation) und 2 (fest), die drei Tools einzeln und
+die Sperrseite.
+
+Neu erzeugen (auf einem Rechner, nicht auf dem Pi):
+
+```bash
+bash tools/shots-setup.sh                 # Chrome-for-Testing + Playwright
+./venv/bin/python tools/shots-demo-daten.py   # Demo-Daten + Titelbilder
+# Demo-Instanzen starten (eigene Ports, eigene DBs):
+LHTPI_DB=/tmp/shots/lhtpi.db LHTPI_PORT=8900 LHTPI_SCREEN_COUNT=2 \
+  LHTPI_TOOL_URLS="slideshow=http://localhost:8900/present/kiosk,terminboard=http://localhost:8901/board/kiosk,safetycross=http://localhost:8902/" \
+  LHTPI_LICENSE_FILE=/tmp/shots/license.key ./venv/bin/python app.py
+# + Terminboard auf 8901, Safety Cross auf 8902, gesperrte Instanz auf 8903
+/tmp/shots-venv/bin/python tools/shots-machen.py      # PNGs
+./venv/bin/python tools/shots-uebersicht.py           # Übersichtstafel
+```
+
+Hinweis: Die Demo-Instanzen laufen bewusst auf **anderen Ports** (8900+). Auf
+Port 8000 kann ein fremder Dienst liegen (z. B. Django) — dann startet die App
+dort nicht und die Screenshots zeigen die falsche Seite.
+
 ## Hardware-Lizenz
 
 Jede Installation ist an **dieses** Gerät gebunden (Seriennummer des Pi). Die

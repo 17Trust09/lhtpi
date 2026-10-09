@@ -39,6 +39,25 @@ TOOLS_FILE = os.environ.get('LHTPI_TOOLS_FILE', '/etc/lhtpi/tools')
 SCREENS_FILE = os.environ.get('LHTPI_SCREENS_FILE', '/etc/lhtpi/screens')
 
 
+def _apply_url_overrides():
+    """Tool-URLs per Umgebung überschreiben (Test/Demo):
+
+    ``LHTPI_TOOL_URLS="slideshow=http://localhost:8900/present/kiosk,terminboard=..."``
+    Im Normalbetrieb nicht gesetzt, dann gelten die URLs oben.
+    """
+    raw = os.environ.get('LHTPI_TOOL_URLS', '')
+    for part in raw.split(','):
+        if '=' not in part:
+            continue
+        tool, url = part.split('=', 1)
+        tool, url = tool.strip(), url.strip()
+        if tool in TOOLS and url:
+            TOOLS[tool]['url'] = url
+
+
+_apply_url_overrides()
+
+
 def tool_ids():
     """Alle bekannten Tool-IDs (stabile Reihenfolge)."""
     return list(TOOLS)
