@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Anzeigen – LHTPi</title>
+<style>
+  :root{--navy:#05164D;--yellow:#FFAD00;--blue2:#1B4B8F;--bg:#F4F6FA;--card:#fff;
+    --text:#1A1A1A;--muted:#5D6B7C;--border:#E4E8F0;--green:#1E8E3E;--red:#D93025}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:Inter,-apple-system,'Segoe UI',Roboto,Arial,sans-serif}
+  .topbar{background:var(--navy);color:#fff;padding:1rem 2rem;display:flex;
+    align-items:center;justify-content:space-between;gap:1rem}
+  .topbar .brand{font-size:1.5rem;font-weight:900;letter-spacing:.02em}
+  .topbar .brand span{color:var(--yellow)}
+  .topbar a{color:#fff;text-decoration:none;font-weight:700;opacity:.9}
+  .topbar a:hover{opacity:1}
+  main{max-width:1100px;margin:0 auto;padding:1.6rem 1.2rem 4rem}
+  h2{font-size:1.15rem;margin:0 0 .8rem}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:16px;
+    padding:1.2rem 1.3rem;margin-bottom:1.4rem;box-shadow:0 6px 22px rgba(5,22,77,.06)}
+  .card > header{display:flex;align-items:center;justify-content:space-between;gap:1rem;
+    padding-bottom:.7rem;margin-bottom:.9rem;border-bottom:1px solid var(--border)}
+  .card > header h3{margin:0;font-size:1.1rem}
+  .pill{display:inline-block;padding:.15rem .6rem;border-radius:999px;font-size:.78rem;
+    font-weight:800;letter-spacing:.02em}
+  .pill.fest{background:#E6F4EA;color:var(--green)}
+  .pill.rotation{background:#FFF4D6;color:#8a5a00}
+  .pill.leer{background:#FCE8E6;color:var(--red)}
+  .pill.aus{background:#EEF1F6;color:var(--muted)}
+  .row{display:flex;align-items:center;gap:.9rem;padding:.55rem 0;
+    border-bottom:1px solid #F1F4F9}
+  .row:last-child{border-bottom:0}
+  .row .name{flex:1;font-weight:700}
+  .row .hint{font-weight:500;color:var(--muted);font-size:.85rem}
+  input[type=number],input[type=text],select{padding:.5rem .6rem;border:1px solid var(--border);
+    border-radius:9px;font-size:1rem;font-family:inherit;background:#fff;color:var(--text)}
+  input[type=number]{width:92px}
+  input[type=checkbox]{width:1.35rem;height:1.35rem;accent-color:var(--blue2)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem}
+  label.field{display:flex;flex-direction:column;gap:.3rem;font-weight:700;font-size:.9rem}
+  label.field small{font-weight:500;color:var(--muted)}
+  .btn{display:inline-block;padding:.75rem 1.5rem;border:0;border-radius:11px;
+    background:var(--blue2);color:#fff;font-weight:800;font-size:1rem;cursor:pointer;
+    text-decoration:none}
+  .btn.save{background:var(--green)}
+  .btn.ghost{background:#EEF1F6;color:var(--navy)}
+  .actions{position:sticky;bottom:0;background:linear-gradient(to top,var(--bg) 60%,transparent);
+    padding:1rem 0;display:flex;gap:1rem;align-items:center}
+  .flash{background:#E6F4EA;border:1px solid #B7E1C1;color:#14532d;padding:.7rem 1rem;
+    border-radius:11px;margin-bottom:1rem;font-weight:700}
+  .note{color:var(--muted);font-size:.9rem;margin-top:.4rem}
+  .tools-missing{margin-top:.8rem;color:var(--muted);font-size:.88rem}
+  .tools-missing b{color:var(--text)}
+</style>
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">🎬 <span>LHTPi</span> · Anzeigen</div>
+  <div><a href="{{ url_for('dashboard') }}">← Zurück zum Dashboard</a></div>
+</div>
+
+<main>
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}<div class="flash">{{ messages[0] }}</div>{% endif %}
+  {% endwith %}
+
+  <form method="post" action="{{ url_for('display_save') }}">
+    <div class="card">
+      <header><h3>Gerät &amp; Grundeinstellungen</h3></header>
+      <div class="grid">
+        <label class="field">Anzahl Bildschirme
+          <select name="screen_count">
+            {% for n in range(1, o.max_screens + 1) %}
+              <option value="{{ n }}" {% if o.count == n %}selected{% endif %}>{{ n }}</option>
+            {% endfor %}
+          </select>
+          <small>1 oder 2 HDMI-Ausgänge</small>
+        </label>
+        <label class="field">Mauszeiger ausblenden nach (s)
+          <input type="number" name="cursor_idle" min="1" max="120" value="{{ o.cursor_idle }}">
+          <small>Bewegung zeigt ihn sofort wieder</small>
+        </label>
+        <label class="field">Tools neu laden nach (min)
+          <input type="number" name="reload_minutes" min="1" max="240" value="{{ o.reload_minutes }}">
+          <small>beim Wechsel auf ein älteres Tool</small>
+        </label>
+      </div>
+      <div class="note">Installierte Tools auf diesem Gerät:
+        <b>{{ o.installed|join(', ') if o.installed else 'keine' }}</b></div>
+      {% set missing = o.known|selectattr('installed', 'equalto', false)|map(attribute='label')|list %}
+      {% if missing %}
+        <div class="tools-missing">Nicht installiert (im Installationsprogramm aktivieren):
+          <b>{{ missing|join(', ') }}</b></div>
+      {% endif %}
+    </div>
+
+    {% for s in o.screens %}
+    <div class="card">
+      <header>
+        <h3>Bildschirm {{ s.idx }}</h3>
+        {% set active_rows = s.rows|selectattr('enabled')|list %}
+        {% if not s.enabled %}
+          <span class="pill aus">nicht aktiv</span>
+        {% elif active_rows|length > 1 %}
+          <span class="pill rotation">Rotation · {{ active_rows|length }} Tools</span>
+        {% elif active_rows|length == 1 %}
+          <span class="pill fest">fest · {{ active_rows[0].label }}</span>
+        {% else %}
+          <span class="pill leer">kein Tool aktiv</span>
+        {% endif %}
+      </header>
+
+      <input type="hidden" name="screen_{{ s.idx }}_present" value="1">
+      <div class="grid">
+        <label class="field">Name
+          <input type="text" name="name_{{ s.idx }}" value="{{ s.name }}">
+        </label>
+        <label class="field">HDMI-Ausgang
+          <select name="hdmi_{{ s.idx }}">
+            <option value="HDMI-1" {% if s.hdmi == 'HDMI-1' %}selected{% endif %}>HDMI-1</option>
+            <option value="HDMI-2" {% if s.hdmi == 'HDMI-2' %}selected{% endif %}>HDMI-2</option>
+          </select>
+        </label>
+        <label class="field">Bildschirm aktiv
+          <span><input type="checkbox" name="screen_{{ s.idx }}_active" value="1"
+            {% if s.enabled %}checked{% endif %}> ja</span>
+        </label>
+      </div>
+
+      <h2 style="margin-top:1.2rem">Tools auf diesem Bildschirm</h2>
+      {% for r in s.rows %}
+        {% if r.installed %}
+        <div class="row">
+          <input type="hidden" name="tool_{{ s.idx }}_{{ r.tool }}_present" value="1">
+          <input type="checkbox" name="tool_{{ s.idx }}_{{ r.tool }}_active" value="1"
+                 {% if r.enabled %}checked{% endif %}>
+          <div class="name">{{ r.label }}
+            <div class="hint">{{ 'fest' if r.enabled and (s.rows|selectattr('enabled')|list|length) == 1 else 'Teil der Rotation' }}</div>
+          </div>
+          <label class="field" style="flex-direction:row;align-items:center;gap:.4rem">
+            <span class="hint">Dauer</span>
+            <input type="number" name="tool_{{ s.idx }}_{{ r.tool }}_dwell" min="1" max="3600"
+                   value="{{ r.dwell }}"> s
+          </label>
+          <label class="field" style="flex-direction:row;align-items:center;gap:.4rem">
+            <span class="hint">Reihenfolge</span>
+            <input type="number" name="tool_{{ s.idx }}_{{ r.tool }}_sort" min="0" max="99"
+                   value="{{ r.sort }}">
+          </label>
+        </div>
+        {% endif %}
+      {% endfor %}
+      {% if not s.rows|selectattr('installed')|list %}
+        <div class="note">Keine Tools installiert – Installation mit Auswahl erneut ausführen.</div>
+      {% endif %}
+
+      <p><a class="btn ghost" href="{{ url_for('screen', idx=s.idx) }}" target="_blank"
+            rel="noopener">Vorschau öffnen</a></p>
+    </div>
+    {% endfor %}
+
+    <div class="actions">
+      <button type="submit" class="btn save">Speichern</button>
+      <span class="note">Änderungen greifen sofort – die Anzeige lädt sich selbst neu.</span>
+    </div>
+  </form>
+</main>
+</body>
+</html>

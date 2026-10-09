@@ -4,8 +4,9 @@ from flask_login import LoginManager
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('LHTPI_SECRET', 'lhtpi-dev-secret-change-me')
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.path.join(
-    os.path.dirname(os.path.abspath(__file__)), 'lhtpi.db'
+# DB-Pfad überschreibbar (Tests/mehrere Instanzen): LHTPI_DB=/pfad/datei.db
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.environ.get(
+    'LHTPI_DB', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lhtpi.db')
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
@@ -36,6 +37,12 @@ with app.app_context():
         db.session.commit()
 
 from routes import *
+from routes_kiosk import *          # Multitool-Kiosk: /screen/N, /display, /api/screens
+
+with app.app_context():
+    # Bildschirme beim Start sicherstellen (legt Default-Belegung an, wenn leer)
+    import kiosk_router
+    kiosk_router.ensure_defaults()
 
 if __name__ == '__main__':
     import os

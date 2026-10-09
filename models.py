@@ -52,3 +52,36 @@ class Setting(db.Model):
     """Einfacher Key/Value-Speicher für App-weite Einstellungen."""
     key = db.Column(db.String(80), primary_key=True)
     value = db.Column(db.String(200), nullable=False, default='')
+
+
+class KioskScreen(db.Model):
+    """Ein Bildschirm-Ausgang (HDMI) des Geräts.
+
+    ``idx`` bestimmt die Router-URL ``/screen/<idx>`` und entspricht dem
+    Kiosk-Service ``kiosk-screen<idx>.service``.
+    """
+    __tablename__ = 'kiosk_screen'
+    id = db.Column(db.Integer, primary_key=True)
+    idx = db.Column(db.Integer, unique=True, nullable=False)
+    name = db.Column(db.String(80), default='')
+    hdmi = db.Column(db.String(20), default='')
+    enabled = db.Column(db.Boolean, default=True)
+    tools = db.relationship('KioskScreenTool', back_populates='screen',
+                            order_by='KioskScreenTool.sort',
+                            cascade='all, delete-orphan')
+
+
+class KioskScreenTool(db.Model):
+    """Belegung eines Bildschirms mit einem Tool (mit Anzeigedauer).
+
+    Ein Eintrag pro Bildschirm = festes Tool, mehrere Einträge = Rotation.
+    """
+    __tablename__ = 'kiosk_screen_tool'
+    __table_args__ = (db.UniqueConstraint('screen_id', 'tool', name='uq_screen_tool'),)
+    id = db.Column(db.Integer, primary_key=True)
+    screen_id = db.Column(db.Integer, db.ForeignKey('kiosk_screen.id'), nullable=False)
+    tool = db.Column(db.String(40), nullable=False)
+    dwell_seconds = db.Column(db.Integer, default=20)
+    sort = db.Column(db.Integer, default=0)
+    enabled = db.Column(db.Boolean, default=True)
+    screen = db.relationship('KioskScreen', back_populates='tools')

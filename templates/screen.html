@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Anzeige – {{ cfg.name }}</title>
+<style>
+  html,body{margin:0;padding:0;width:100%;height:100%;background:#000;overflow:hidden;
+    user-select:none;-webkit-user-select:none;-webkit-user-drag:none}
+  #stage{position:absolute;inset:0}
+  .frame{position:absolute;inset:0;width:100%;height:100%;border:0;background:#000;
+    opacity:0;transition:opacity .7s ease;pointer-events:none}
+  .frame.on{opacity:1}
+  #hint{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+    color:#8a93a3;font-family:Inter,Arial,sans-serif;font-size:2rem;text-align:center;
+    line-height:1.5}
+  #badge{position:fixed;right:.8rem;bottom:.6rem;z-index:10;padding:.2rem .6rem;
+    border-radius:999px;background:rgba(255,255,255,.07);color:rgba(255,255,255,.45);
+    font:600 .8rem Inter,Arial,sans-serif;letter-spacing:.03em}
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="hint" hidden></div>
+<div id="badge" hidden></div>
+
+<script id="cfg" type="application/json">{{ cfg|tojson }}</script>
+<script>
+/* ── Mauszeiger: nach Inaktivität aus, bei Bewegung wieder da ─────────────── */
+(function () {
+  var MS = {{ (cfg.cursor_idle or 3) * 1000 }}, timer;
+  function hide() {
+    if (document.getElementById('_kh')) return;
+    var s = document.createElement('style');
+    s.id = '_kh';
+    s.textContent = '*,html,body{cursor:none!important}';
+    document.head.appendChild(s);
+  }
+  function show() {
+    var s = document.getElementById('_kh');
+    if (s) s.remove();
+    clearTimeout(timer);
+    timer = setTimeout(hide, MS);
+  }
+  ['mousemove', 'mousedown', 'wheel', 'keydown', 'touchstart'].forEach(function (e) {
+    document.addEventListener(e, show, true);
+  });
+  timer = setTimeout(hide, MS);
+})();
+
+/* ── Anzeige-Router: Tools fest oder rotierend ────────────────────────────── */
+(function () {
+  var cfg = JSON.parse(document.getElementById('cfg').textContent);
+  var stage = document.getElementById('stage');
+  var hint = document.getElementById('hint');
+  var badge = document.getElementById('badge');
+  var tools = cfg.tools || [];
+  var reloadMs = (cfg.reload_minutes || 30) * 60000;
+  var frames = {}, loaded = {}, current = 0, timer = null;
+
+  document.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+
+  if (!tools.length) {
+    hint.hidden = false;
+    // statischer Text (keine Nutzereingaben) – daher unkritisch
+    hint.innerHTML = 'Kein Tool aktiv<br><span style="font-size:1rem">' +
+      'Bitte in der Verwaltung unter „Anzeigen" einstellen.</span>';
+    return;
+  }
+
+  // Alle Tools vorab laden (kein Flackern beim Wechsel)
+  tools.forEach(function (t) {
+    var f = document.createElement('iframe');
+    f.className = 'frame';
+    f.dataset.tool = t.tool;
+    f.setAttribute('allow', 'autoplay');
+    f.setAttribute('scrolling', 'no');
+    f.src = t.url;
+    stage.appendChild(f);
+    frames[t.tool] = f;
+    loaded[t.tool] = Date.now();
+  });
+
+  function show(i) {
+    tools.forEach(function (t, k) {
+      var f = frames[t.tool];
+      if (!f) return;
+      // abgelaufene Frames beim Aktivieren frisch laden
+      if (k === i && Date.now() - (loaded[t.tool] || 0) > reloadMs) {
+        f.src = t.url;
+        loaded[t.tool] = Date.now();
+      }
+      f.classList.toggle('on', k === i);
+    });
+    if (tools.length > 1) {
+      badge.hidden = false;
+      badge.textContent = (i + 1) + '/' + tools.length + ' · ' + tools[i].short;
+    }
+  }
+
+  function schedule() {
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      current = (current + 1) % tools.length;
+      show(current);
+      schedule();
+    }, Math.max(1, tools[current].dwell) * 1000);
+  }
+
+  show(0);
+  if (tools.length > 1) schedule();   // 1 Tool = fest, kein Timer
+
+  // Änderungen in der Verwaltung ohne Chromium-Neustart übernehmen
+  setInterval(function () {
+    fetch('/api/screen/' + cfg.idx, { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d || !d.tools) return;
+        var a = d.tools.map(function (t) { return t.tool + ':' + t.dwell; }).join(',');
+        var b = tools.map(function (t) { return t.tool + ':' + t.dwell; }).join(',');
+        if (a !== b) location.reload();
+      })
+      .catch(function () {});
+  }, 60000);
+})();
+</script>
+</body>
+</html>
