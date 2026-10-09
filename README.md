@@ -14,8 +14,8 @@ LHTPi verwandelt einen Raspberry Pi 4/5 in einen autarken Präsentations-Player:
 - Playlist-Verwaltung und Endlos-Wiedergabe
 - **USB-Stick als Quelle**: Ordner `slides/` im Stick-Root wird automatisch abgespielt (Vorrang vor der Web-Playlist)
 - Automatischer HDMI-Kiosk mit Chromium: `http://localhost:8000/present/kiosk`
-- LAN bleibt über `eth0` per DHCP erreichbar
-- WLAN `wlan0` wird als Access Point über **NetworkManager** betrieben
+- **Kein Access Point**: `wlan0` wird nicht angefasst, keine WLAN-Verbindungen gelöscht
+- `eth0` optional per DHCP (die Anzeige braucht kein Netzwerk)
 - Kein `hostapd`, kein `dnsmasq`, kein `iptables-persistent`
 - UFW-Firewall erlaubt SSH und Port `8000/tcp`
 
@@ -26,14 +26,22 @@ LHTPi verwandelt einen Raspberry Pi 4/5 in einen autarken Präsentations-Player:
 | Komponente | Vorgabe |
 |---|---|
 | Hardware | Raspberry Pi 4 oder Raspberry Pi 5 |
-| Betriebssystem | Raspberry Pi OS Desktop **Trixie** |
+| Betriebssystem | Raspberry Pi OS Desktop **Trixie, 64 Bit (arm64)** — 32 Bit läuft auch |
 | Desktop | X11 / LightDM / Openbox |
 | Kiosk | Chromium Browser |
-| Netzwerk LAN | `eth0` per DHCP |
-| Netzwerk WLAN | `wlan0` als NetworkManager-Access-Point |
+| Netzwerk | **kein Netzwerk nötig** (alles über `localhost`); `eth0` optional per DHCP |
+| WLAN | wird **nicht** angefasst (kein Access Point mehr) |
 | App | Flask, SQLite, Port `8000` |
 
-**Nicht unterstützt:** Raspberry Pi OS Lite/headless-only Installationen. Der Kiosk braucht eine Desktop-/X11-Umgebung.
+**Empfehlung:** Raspberry Pi OS Desktop **Trixie 64 Bit**. Der Pi 4 kann 64 Bit,
+und alle Dienste (Flask, SQLite, Chromium) laufen dort nativ; bei 8-GB-Modellen
+werden so auch alle 8 GB genutzt. 32 Bit funktioniert genauso (reine
+Python-Dienste, keine Binär-Abhängigkeiten) — sinnvoll nur für sehr alte Karten
+oder wenn ein bestehendes Image weiterverwendet wird.
+
+**Nicht unterstützt:** Raspberry Pi OS Lite/headless-only Installationen. Der Kiosk braucht eine Desktop-/X11-Umgebung. Ebenso nicht nötig: eine eigene
+Image-Anpassung — nach dem ersten Start fragt das Gerät selbst (siehe
+[ERSTEINRICHTUNG.md](docs/multitool-kiosk/ERSTEINRICHTUNG.md)).
 
 ---
 
@@ -43,7 +51,7 @@ LHTPi verwandelt einen Raspberry Pi 4/5 in einen autarken Präsentations-Player:
 
 1. Raspberry Pi OS **Desktop (Trixie)** installieren.
 2. Standardbenutzer `pi` verwenden.
-3. Pi per LAN-Kabel an den Router anschließen.
+3. Netzwerk ist **optional** — die Anzeige läuft vollständig über `localhost`.
 4. Optional, aber empfohlen: Im Router eine feste DHCP-Reservierung setzen, z. B.:
    - LAN-IP: `192.168.178.188`
    - Gerät: Raspberry Pi / LHTPi
@@ -93,18 +101,15 @@ Falls eine andere LAN-IP vergeben wurde, im Router nachsehen oder auf dem Pi aus
 hostname -I
 ```
 
-### WLAN: `wlan0` als Access Point
+### Netzwerk
 
-Der Pi erstellt ein eigenes WLAN:
+Das Gerät braucht **kein** Netzwerk: Router (Port 8000), Termine (8001) und
+Safety Cross (8002) laufen alle über `localhost`. Steckt ein LAN-Kabel, ist das
+Dashboard zusätzlich über die IP des Pi erreichbar (`hostname -I`).
 
-| Feld | Wert |
-|---|---|
-| SSID | `LHTPi` |
-| Passwort | `LHTPi123` |
-| AP-IP | `192.168.4.1` |
-| Dashboard | `http://192.168.4.1:8000` |
-
-Der AP wird nativ über **NetworkManager** eingerichtet (`ipv4.method shared`). Alte WLAN-Client-Verbindungen werden gelöscht, damit sich der Pi nicht mehr automatisch mit vorhandenen WLANs verbindet.
+**Es gibt keinen Access Point mehr.** Frühere Versionen machten `wlan0` zum AP
+`LHTPi` und löschten vorhandene WLAN-Verbindungen — das ist entfernt. Der
+Installer fasst WLAN nicht mehr an.
 
 ---
 
@@ -112,9 +117,11 @@ Der AP wird nativ über **NetworkManager** eingerichtet (`ipv4.method shared`). 
 
 1. Pi einschalten.
 2. HDMI-Bildschirm zeigt nach dem Boot automatisch den Chromium-Kiosk.
-3. Dashboard öffnen:
-   - über LAN: `http://192.168.178.188:8000` (bei empfohlener Router-Reservierung)
-   - über AP: `http://192.168.4.1:8000`
+3. Beim **ersten Start** erscheint die Anzeigen-Seite auf dem Bildschirm
+   (Maus + Tastatur): Tools und Bildschirme wählen, dann „Einrichtung
+   abschließen" — siehe [ERSTEINRICHTUNG.md](docs/multitool-kiosk/ERSTEINRICHTUNG.md).
+4. Danach Dashboard öffnen (auf dem Gerät oder über die LAN-IP):
+   `http://localhost:8000` bzw. die IP aus `hostname -I`.
 4. Einloggen:
    - Benutzer: `admin`
    - Passwort: `admin`
@@ -189,7 +196,6 @@ Die Umschaltung erfolgt im Dashboard unter **„Wiedergabe-Quelle"**.
 - Flask-App-Service: `lhtpi.service`
 - Kiosk-Service: `lhtpi-kiosk.service`
 - Kiosk-Skript: `/home/pi/start_lhtpi_kiosk.sh`
-- NetworkManager-AP: `lhtpi-ap`
 - WLAN-Powersave aus: `/etc/NetworkManager/conf.d/99-lhtpi-wifi-powersave.conf`
 - LightDM-Autologin für Benutzer `pi`
 - Openbox-Autostart mit deaktiviertem Bildschirmschoner/DPMS
@@ -257,22 +263,22 @@ sudo systemctl restart lhtpi-kiosk.service
    hostname -I
    ```
 
-### AP `LHTPi` ist nicht sichtbar
+### Beim ersten Start erscheint nichts auf dem Bildschirm
 
-1. NetworkManager-Verbindung prüfen:
+1. Ist ein Bildschirm beim Booten angeschlossen und eingeschaltet?
    ```bash
-   nmcli con show
-   nmcli con show lhtpi-ap
-   nmcli dev status
+   xrandr --current | grep connected
    ```
-2. AP manuell starten:
+2. Läuft die Ersteinrichtung?
    ```bash
-   sudo nmcli con up lhtpi-ap
+   systemctl status lhtpi-setup.service
+   tail -20 /home/pi/setup.log
    ```
-3. Sicherstellen, dass keine alten AP-Dienste laufen:
+3. Einrichtung wiederholen: Merkmale löschen und das Gerät neu starten
    ```bash
-   systemctl status hostapd dnsmasq
+   sudo rm -f /etc/lhtpi/installed /etc/lhtpi/screen2
    ```
+   (danach neu booten)
    Beide Dienste sollen gestoppt/maskiert sein.
 4. WLAN-Powersave prüfen:
    ```bash

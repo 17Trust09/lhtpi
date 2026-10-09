@@ -13,7 +13,7 @@ Raspberry-Pi-Kiosk** mit Web-Admin.
 
 ## Installation
 
-Auf einem Raspberry Pi (32-bit Raspberry Pi OS **Desktop**):
+Auf einem Raspberry Pi (Raspberry Pi OS **Desktop**, 32- oder 64-Bit):
 
 ```bash
 git clone https://github.com/17Trust09/safety-cross.git
