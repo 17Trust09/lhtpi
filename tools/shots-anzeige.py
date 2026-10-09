@@ -253,6 +253,16 @@ try:
                  sc2.url))
         sc2.close()
 
+        # I) Mauszeiger blendet sich nach Ruhe aus (ohne Klick)
+        sc3 = ctx.new_page()
+        sc3.goto(L + '/screen/1', wait_until='networkidle')
+        sc3.mouse.move(700, 500)
+        sc3.wait_for_timeout(5200)
+        print('Mauszeiger nach Ruhe ausgeblendet - Kioskseite: %s, Tool-Rahmen: %s'
+              % (sc3.evaluate("() => !!document.getElementById('_kh')"),
+                 sc3.frames[-1].evaluate("() => !!document.getElementById('_kh')")))
+        sc3.close()
+
         # Gegenprobe: dasselbe auf einer Seite OHNE Rahmen (Prüfverfahren ok?)
         oben = ctx.new_page()
         oben.set_content('<div style="height:3000px">hoch</div>')
