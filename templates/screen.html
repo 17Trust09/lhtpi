@@ -106,13 +106,12 @@
     if (e.data && e.data.lhtpi === 'maus') zeigen();
   });
   knopf.hidden = false;                    /* beim Laden kurz sichtbar */
-  timer = setTimeout(function () { knopf.hidden = true; }, 20000);
+  timer = setTimeout(function () { knopf.hidden = true; }, 12000);
 })();
 
 /* ── Mauszeiger: nach Inaktivität aus, bei Bewegung wieder da ─────────────── */
 (function () {
-  /* Im Wartungsbetrieb bleibt der Zeiger sichtbar (MS = 0). */
-  var MS = {{ 0 if cfg.wartung_knopf else (cfg.cursor_idle or 3) * 1000 }}, timer, eigenKlick = 0;
+  var MS = {{ (cfg.cursor_idle or 3) * 1000 }}, timer, eigenKlick = 0;
   /* Chromium zeichnet den Mauszeiger erst beim naechsten Mausereignis neu.
      Steht die Maus still, bleibt der Zeiger trotz Ausblenden sichtbar - bis
      jemand klickt. Deshalb loest die Anzeige nach der Ruhezeit selbst einen
@@ -132,7 +131,15 @@
       document.head.appendChild(s);
     }
     eigenKlick = Date.now();
+    /* Der Klick darf nie ein Bedienelement im Tool treffen (im Wartungsbetrieb
+       nimmt der Rahmen Eingaben an): kurz die Eingaben abschalten, klicken,
+       danach wieder freigeben. */
+    var fs = document.querySelectorAll('iframe.frame.on');
+    for (var i = 0; i < fs.length; i++) fs[i].style.pointerEvents = 'none';
     try { fetch('/zeiger/klick', { method: 'POST' }); } catch (e) {}
+    setTimeout(function () {
+      for (var j = 0; j < fs.length; j++) fs[j].style.pointerEvents = '';
+    }, 900);
   }
   function show() {
     if (eigenerKlick()) return;

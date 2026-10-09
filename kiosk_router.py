@@ -338,11 +338,7 @@ def tool_url(tool, cursor_idle=None):
     url = tools.default_url(tool)
     if not url:
         return url
-    if wartung_knopf():
-        # Wartungsbetrieb: Zeiger bleibt sichtbar. Die Tools wuerden ihn sonst
-        # nach der Ruhezeit ausblenden - beim Bedienen waere das hinderlich.
-        cursor_idle = 0
-    elif cursor_idle is None:
+    if cursor_idle is None:
         cursor_idle = cursor_idle_seconds()
     sep = '&' if '?' in url else '?'
     return '%s%scursor_idle=%d' % (url, sep, int(cursor_idle))

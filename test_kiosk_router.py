@@ -110,8 +110,8 @@ with app.app_context():
     _url_mit = router.tool_url('safetycross')
 ok('cursor_idle=5' in _url_ohne,
    'ohne Wartung bekommen die Tools die eingestellte Cursor-Zeit (5 s)')
-ok('cursor_idle=0' in _url_mit,
-   'im Wartungsbetrieb bleibt der Zeiger in den Tools sichtbar (cursor_idle=0)')
+ok('cursor_idle=5' in _url_mit,
+   'im Wartungsbetrieb bekommen die Tools die normale Zeit - der Zeiger blendet aus')
 ok(cfg['cursor_idle'] == 5, 'Cursor-Idle gespeichert')
 ok(cfg['reload_minutes'] == 15, 'Reload-Zeit gespeichert')
 
