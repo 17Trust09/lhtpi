@@ -12,8 +12,9 @@ gezeigt. Er laeuft in der X-Sitzung des Kiosk-Geraets (siehe install.sh) und
 braucht nur python-xlib - kein root, keine Systempakete.
 
 Der Zeiger wird auf dem Fenster versteckt, ueber dem er gerade steht (bei der
-Kiosk-Anzeige ist das das Chromium-Fenster). Bewegt er sich, wird er wieder
-gezeigt - danach laeuft die Ruhezeit erneut.
+Kiosk-Anzeige ist das das Chromium-Fenster). Waehrend der Ruhe wird das
+Verstecken jede Sekunde erneuert, damit ein Fenster, das beim Ueberfahren
+wieder einen Zeiger setzt, ihn nicht zurueckbringt.
 
 Aufruf:  kiosk-cursor-x11.py [--ruhe 3] [--display :0] [--test]
 """
@@ -27,28 +28,38 @@ TAKT = 0.25  # Sekunden zwischen zwei Positionsabfragen
 
 
 def verbinde(display_name: str | None):
+    """Verbindet zum X-Server und liefert Fenster + zwei kleine Helfer."""
     from Xlib import display
     from Xlib.ext import xfixes
 
     d = display.Display(display_name)
-    return d, d.screen().root, xfixes
+    root = d.screen().root
+    opcode = d.get_extension_major('XFIXES')
+
+    def verstecken(fenster):
+        xfixes.HideCursor(display=d, opcode=opcode, window=fenster)
+        d.sync()
+
+    def zeigen(fenster):
+        xfixes.ShowCursor(display=d, opcode=opcode, window=fenster)
+        d.sync()
+
+    return d, root, verstecken, zeigen
 
 
-def testlauf(d, root, xfixes) -> int:
+def testlauf(root, verstecken, zeigen) -> int:
     """Versteckt den Zeiger kurz und zeigt ihn wieder - reiner Selbsttest."""
     p = root.query_pointer()
     fenster = p.child or root
-    xfixes.hide_cursor(d, fenster)
-    d.sync()
+    verstecken(fenster)
     print("Zeiger versteckt auf Fenster %s" % hex(fenster.id))
     time.sleep(2)
-    xfixes.show_cursor(d, fenster)
-    d.sync()
+    zeigen(fenster)
     print("Zeiger wieder sichtbar")
     return 0
 
 
-def wache(d, root, xfixes, ruhe: float) -> int:
+def wache(root, verstecken, zeigen, ruhe: float) -> int:
     versteckt = None            # Fenster, auf dem der Zeiger versteckt ist
     letzte_pos = None
     letzte_bewegung = time.time()
@@ -64,16 +75,11 @@ def wache(d, root, xfixes, ruhe: float) -> int:
                 letzte_pos = pos
                 letzte_bewegung = time.time()
                 if versteckt is not None:
-                    xfixes.show_cursor(d, versteckt)
-                    d.sync()
+                    zeigen(versteckt)
                     versteckt = None
             elif time.time() - letzte_bewegung >= ruhe and \
                     time.time() - letztes_verstecken >= 1.0:
-                # Waehrend der Ruhe regelmaessig erneuern: setzt das Fenster
-                # (Chromium) beim Ueberfahren wieder einen Zeiger, bleibt er
-                # trotzdem verschwunden.
-                xfixes.hide_cursor(d, fenster)
-                d.sync()
+                verstecken(fenster)
                 versteckt = fenster
                 letztes_verstecken = time.time()
         except Exception as fehler:      # niemals still sterben
@@ -93,14 +99,14 @@ def main() -> int:
     a = ap.parse_args()
 
     try:
-        d, root, xfixes = verbinde(a.display)
+        _d, root, verstecken, zeigen = verbinde(a.display)
     except Exception as fehler:
         print("Kein Zugang zum X-Server: %s" % fehler, file=sys.stderr)
         return 1
 
     if a.test:
-        return testlauf(d, root, xfixes)
-    return wache(d, root, xfixes, a.ruhe)
+        return testlauf(root, verstecken, zeigen)
+    return wache(root, verstecken, zeigen, a.ruhe)
 
 
 if __name__ == '__main__':
