@@ -6,6 +6,7 @@ Nutzt eine temporäre SQLite-DB (LHTPI_DB) — die echte lhtpi.db bleibt unberü
 TCP-Probes werden abgeschaltet (LHTPI_KIOSK_PROBE=0), damit der Test ohne die
 laufenden Tool-Dienste deterministisch ist.
 """
+import json
 import os
 import sys
 import tempfile
@@ -582,6 +583,26 @@ with tempfile.TemporaryDirectory() as tmp:
        'alte Sitzung wird verworfen (keine Browserleiste mehr)')
     ok(not (profil / 'Last Session').exists(), 'und die letzte ebenfalls')
     ok((profil / 'Preferences').exists(), 'Einstellungen des Profils bleiben')
+
+    # Dauerhaft: Chromium stellt keine Seiten mehr wieder her
+    p = profil / 'Preferences'
+    p.write_text(json.dumps({'session': {'restore_on_startup': 1},
+                             'profile': {'exit_type': 'Crashed'},
+                             'eigenes': 'bleibt'}))
+    alt_home2 = os.environ.get('HOME')
+    os.environ['HOME'] = tmp
+    try:
+        with app.app_context():
+            router.sitzungen_verwerfen()
+    finally:
+        if alt_home2:
+            os.environ['HOME'] = alt_home2
+    daten = json.loads(p.read_text())
+    ok(daten['session']['restore_on_startup'] == 4,
+       'Wiederherstellung abgeschaltet (restore_on_startup=4)')
+    ok(daten['profile']['exit_type'] == 'Normal',
+       'Profil gilt als sauber beendet (kein "Crashed")')
+    ok(daten['eigenes'] == 'bleibt', 'übrige Einstellungen bleiben erhalten')
 
 print('OK – %d Prüfungen bestanden' % len(checks))
 for passed, msg in checks:

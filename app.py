@@ -70,6 +70,14 @@ with app.app_context():
     import kiosk_router
     kiosk_router.ensure_defaults()
 
+# Beim Start einmal aufräumen: Chromium soll keine alten Seiten wiederherstellen
+# (sonst legt sich ein Fenster mit Browserleiste über die Anzeige). Darf den
+# Start nie verhindern.
+try:
+    kiosk_router.sitzungen_verwerfen()
+except Exception as fehler:                                  # noqa: BLE001
+    print('Hinweis: Sitzungs-Aufräumen übersprungen (%s)' % fehler)
+
 if __name__ == '__main__':
     import os
     port = int(os.environ.get('LHTPI_PORT', 8000))

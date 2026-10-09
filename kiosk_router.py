@@ -8,6 +8,7 @@ Regeln:
 Nicht installierte (und damit nicht lizenzierte) Tools werden nie ausgeliefert.
 """
 import glob
+import json
 import shutil
 import os
 from models import db, KioskScreen, KioskScreenTool
@@ -126,6 +127,36 @@ def ist_eingerichtet():
     return os.path.exists(license_bundle.MARKER_FILE)
 
 
+def _ohne_wiederherstellung(profil):
+    """Im Chromium-Profil dauerhaft abschalten, dass Seiten wiederhergestellt
+    werden.
+
+    Sonst bringt Chromium nach einem Neustart die zuletzt offene Seite als
+    normales Fenster mit Tab- und Adressleiste - und legt sich damit ueber die
+    Anzeige (typisch: die Anzeigen-Seite). Die Einstellung liegt in der Datei
+    ``Default/Preferences`` und bleibt erhalten.
+    """
+    pfad = os.path.join(profil, 'Default', 'Preferences')
+    daten = {}
+    try:
+        with open(pfad, encoding='utf-8') as fh:
+            daten = json.load(fh) or {}
+    except (OSError, ValueError):
+        daten = {}
+    if not isinstance(daten, dict):
+        daten = {}
+    daten['session'] = dict(daten.get('session') or {}, restore_on_startup=4,
+                            startup_urls=[])
+    daten['profile'] = dict(daten.get('profile') or {}, exit_type='Normal',
+                            exited_cleanly=True)
+    try:
+        os.makedirs(os.path.dirname(pfad), exist_ok=True)
+        with open(pfad, 'w', encoding='utf-8') as fh:
+            json.dump(daten, fh)
+    except OSError:
+        pass
+
+
 def sitzungen_verwerfen():
     """Alte Chromium-Sitzung der Kiosk-Fenster verwerfen.
 
@@ -145,6 +176,7 @@ def sitzungen_verwerfen():
                     pass
             shutil.rmtree(os.path.join(profil, 'Default', 'Sessions'),
                           ignore_errors=True)
+            _ohne_wiederherstellung(profil)
 
 
 def set_screen_count(count):
