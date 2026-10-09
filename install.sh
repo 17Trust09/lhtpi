@@ -34,6 +34,8 @@ SERVICE_SC_APP="safetycross.service"
 ROUTER_BASE_URL="http://localhost:${APP_PORT}/screen"
 TOOLS_FILE="/etc/lhtpi/tools"
 SCREENS_FILE="/etc/lhtpi/screens"
+LICENSE_FILE="/etc/lhtpi/license.key"
+MARKER_FILE="/etc/lhtpi/installed"
 MAX_SCREENS="2"
 
 # ── Installations-Auswahl ─────────────────────────────────────────────
@@ -423,6 +425,26 @@ configure_screens_file() {
     echo "${SCREEN_COUNT}" > "${SCREENS_FILE}"
     chmod 644 "${SCREENS_FILE}"
     ok "Bildschirme laut Installation: ${SCREEN_COUNT}"
+}
+
+# Hardware-Lizenz für DIESES Gerät erzeugen und hinterlegen
+configure_license() {
+    log "Erzeuge Hardware-Lizenz für dieses Gerät"
+    local tools_arg
+    tools_arg="$(tools_file_content | paste -sd, -)"
+    if [ -z "${tools_arg}" ]; then
+        warn "Keine Tools gewählt – keine Lizenz erzeugt"
+        return 0
+    fi
+    if "${PROJECT_DIR}/venv/bin/python" "${PROJECT_DIR}/license_bundle.py" \
+            --install "--tools=${tools_arg}" "--screens=${SCREEN_COUNT}"; then
+        # Merkmal: ab jetzt ist die Lizenzprüfung auf diesem Gerät aktiv
+        touch "${MARKER_FILE}"
+        chmod 644 "${MARKER_FILE}"
+        ok "Lizenz hinterlegt (${LICENSE_FILE}) – Prüfung ist aktiv"
+    else
+        warn "Lizenz konnte nicht erzeugt werden (läuft die App trotzdem?)"
+    fi
 }
 
 configure_tools_file() {
@@ -997,6 +1019,7 @@ main() {
     fi
     configure_tools_file
     configure_screens_file
+    configure_license
     cleanup_old_kiosks
     configure_desktop
     configure_screens

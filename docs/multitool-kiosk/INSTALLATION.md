@@ -86,6 +86,34 @@ curl -s localhost:8000/api/screens        # Zuordnung Bildschirm -> Tools
 cat /etc/lhtpi/tools /etc/lhtpi/screens   # was installiert ist
 ```
 
+## Hardware-Lizenz
+
+Jede Installation ist an **dieses** Gerät gebunden (Seriennummer des Pi). Die
+Lizenz schaltet frei, **welche Tools** und **wie viele Bildschirme** erlaubt
+sind. Eine kopierte SD-Karte auf einem anderen Pi ist damit ungültig.
+
+* Schlüsselformat: `LHTPI-XXXX-XXXX-XXXX-XXXX`
+* Ablage: `/etc/lhtpi/license.key`, Merkmal `/etc/lhtpi/installed`
+* Der Installer erzeugt die Lizenz passend zur gewählten Ausstattung selbst.
+* Status ansehen: `http://<LAN-IP>:8000/lizenz` (auch bei gesperrter App)
+  oder auf der Konsole:
+
+```bash
+cd /home/pi/lhtpi
+./venv/bin/python license_bundle.py --check     # gilt die Lizenz hier?
+./venv/bin/python license_bundle.py --info      # Geräte-ID für den Hersteller
+```
+
+* Ist die Lizenz ungültig, zeigen alle Seiten eine Sperrseite mit der
+  Geräte-ID — diesen Wert zum Nachfragen weitergeben.
+* Steht die Anzeige im **Entwicklungsmodus** (keine Lizenz, kein Merkmal),
+  laufen alle installierten Tools ohne Sperre. Auf einem ausgelieferten Gerät
+  ist immer eine Lizenz vorhanden.
+
+> Sicherheitshinweis: Der Signaturschlüssel steckt im Modul `license_bundle.py`.
+> Im Kunden-Image gehört er verschleiert (siehe Skill
+> `python-source-protection`), sonst lassen sich Lizenzen selbst erzeugen.
+
 ## Sicherheitshinweis
 
 Die App-Ports 8000/8001/8002 sind im LAN offen (Firewall/UFW im Installer

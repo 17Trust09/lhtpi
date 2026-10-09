@@ -38,6 +38,7 @@ with app.app_context():
 
 from routes import *
 from routes_kiosk import *          # Multitool-Kiosk: /screen/N, /display, /api/screens
+from routes_license import *        # Lizenz: /lizenz + Sperrseite
 
 with app.app_context():
     # Bildschirme beim Start sicherstellen (legt Default-Belegung an, wenn leer)

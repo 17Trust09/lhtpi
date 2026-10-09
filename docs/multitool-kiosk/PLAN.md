@@ -223,8 +223,42 @@ Reihenfolge: **S1 → S2 → S4 → S5**, S3 parallel (klein, unabhängig). S6 a
 | S3 | Cursor einheitlich in allen drei Tools + OS-Hacks entfernt | ✅ erledigt (`test_cursor_unified.py`) |
 | S2 | Installer: ein Kiosk **je Bildschirm**, Monitor-Zuordnung, Aufräumen alter Kiosks | ✅ erledigt (`test_install_bundle.py`, 29 Prüfungen) |
 | S4 | Installation mit Auswahl (1/2/3 Tools, Bildschirm-Anzahl, interaktiv + `--tools`/`--screens`) | ✅ erledigt; Merker `/etc/lhtpi/tools` + `/etc/lhtpi/screens` |
-| S5 | Lizenz-Bundle + Key-Generator + Lock-Screens für das gewählte Tool-Set | offen |
+| S5 | Lizenz-Bundle + Key-Generator + Sperrseiten für das gewählte Tool-Set | ✅ erledigt (`test_license_bundle.py`, 28 Prüfungen) |
 | S6 | Doku/Screenshots + Hardware-Test auf dem Pi | teils (Doku `INSTALLATION.md`); Hardware-Test offen |
+
+### Lizenz in Kurzform
+
+* Eine Lizenz gilt für **genau ein Gerät** (Pi-Seriennummer) und schaltet die
+  gebuchten **Tools** und **Bildschirme** frei.
+* Format `LHTPI-XXXX-XXXX-XXXX-XXXX`; die Signatur läuft über Nutzlast **und**
+  volle Geräte-ID → kopierte SD-Karte = ungültige Lizenz.
+* Der Installer erzeugt sie automatisch für das Gerät (`configure_license`),
+  hinterlegt `/etc/lhtpi/license.key` und setzt das Merkmal
+  `/etc/lhtpi/installed` (ab da ist die Prüfung aktiv).
+* Ohne Lizenz und ohne Merkmal läuft die App im **Entwicklungsmodus** (keine
+  Sperre) — auf einem echten Gerät ist immer eine Lizenz vorhanden.
+* Beim Kunden nachlesen: Geräte-ID unter `http://<LAN-IP>:8000/lizenz`
+  (bleibt auch bei gesperrter App erreichbar).
+* Schlüssel erzeugen (nur beim Hersteller):
+
+```bash
+python3 license_bundle.py --make-key --tools=1,3 --screens=2 --hwid=piserial:1000000012345678
+```
+
+**Grenze:** Wer den Signaturschlüssel (`SECRET` in `license_bundle.py`) aus dem
+ausgelieferten Image holt, kann sich selbst Lizenzschlüssel erzeugen. Im
+Kunden-Image deshalb das Modul verschleiern (Skill `python-source-protection`).
+
+### Tests im Bundle ausführen
+
+```bash
+bash run-tests.sh                          # alle Suiten auf einmal
+./venv/bin/python test_kiosk_router.py     # Anzeige-Router (48 Prüfungen)
+./venv/bin/python test_install_bundle.py   # Installer: Auswahl, Skripte, Services
+./venv/bin/python test_license_bundle.py   # Hardware-Lizenz
+./venv/bin/python test_cursor_unified.py   # Mauszeiger in allen drei Tools
+./venv/bin/python test_usb_source.py       # Bestand (USB-Quelle)
+```
 
 ### Installer in Kurzform
 

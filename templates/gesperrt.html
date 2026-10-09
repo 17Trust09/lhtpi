@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lizenz erforderlich</title>
+<style>
+  html, body { margin:0; height:100%; background:#101418; color:#e8eef4;
+               font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 8vh 24px 40px; }
+  h1 { font-size: 1.7rem; margin: 0 0 .4rem; }
+  p  { line-height: 1.55; color:#b9c6d2; }
+  .box { background:#18202a; border:1px solid #26313d; border-radius:12px;
+         padding:18px 20px; margin:20px 0; }
+  .hw { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace;
+        font-size: 1.15rem; color:#8fd3ff; word-break: break-all; }
+  .gr { color:#7fd18c; } .rd { color:#ff8b8b; }
+  code { font-family: ui-monospace, Consolas, monospace; }
+  .hint { font-size:.92rem; color:#8ea0b0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🔒 Dieses Gerät ist nicht freigeschaltet</h1>
+  <p>Die Anzeige läuft, sobald für <strong>dieses</strong> Gerät ein gültiger
+     Lizenzschlüssel hinterlegt ist. Der Schlüssel gilt nur hier – auf einem
+     anderen Gerät ist er ungültig.</p>
+
+  <div class="box">
+    <div class="hint">Geräte-ID (diese bitte weitergeben)</div>
+    <div class="hw">{{ hwid }}</div>
+  </div>
+
+  {% if key %}
+  <div class="box">
+    <div class="hint">Hinterlegter Schlüssel</div>
+    <div class="hw">{{ key }}</div>
+    {% if info and not info.valid %}
+    <p class="rd">Grund: {{ info.reason }}</p>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <p class="hint">Schlüssel hinterlegen (auf diesem Gerät):</p>
+  <div class="box">
+    <code>sudo nano /etc/lhtpi/license.key</code><br>
+    <span class="hint">Schlüssel in die Datei schreiben, speichern, danach:</span><br>
+    <code>sudo systemctl restart lhtpi.service</code>
+  </div>
+
+  <p class="hint">Status jederzeit prüfbar unter <code>/lizenz</code>.</p>
+</div>
+</body>
+</html>

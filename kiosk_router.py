@@ -14,6 +14,7 @@ import kiosk_tools as tools
 SETTING_SCREEN_COUNT = 'kiosk_screen_count'
 SETTING_CURSOR_IDLE = 'kiosk_cursor_idle_seconds'
 SETTING_IFRAME_RELOAD = 'kiosk_iframe_reload_minutes'
+SETTING_LAYOUT_TOUCHED = 'kiosk_layout_touched'   # Admin hat die Belegung gespeichert
 
 DEFAULT_SCREEN_COUNT = 1
 DEFAULT_CURSOR_IDLE = 3          # Sekunden ohne Mausbewegung -> Cursor aus
@@ -58,9 +59,17 @@ def set_iframe_reload_minutes(value):
 
 
 def screen_count():
-    """Anzahl der Bildschirme: Einstellung aus dem Dashboard, sonst Installer-Wert."""
+    """Anzahl der Bildschirme: Einstellung aus dem Dashboard, sonst Installer-Wert.
+
+    Die Hardware-Lizenz ist die Obergrenze — mehr Bildschirme als lizenziert
+    werden nie ausgeliefert.
+    """
     default = tools.configured_screen_count() or DEFAULT_SCREEN_COUNT
-    return _as_int(get_setting(SETTING_SCREEN_COUNT, default), default, 1, MAX_SCREENS)
+    n = _as_int(get_setting(SETTING_SCREEN_COUNT, default), default, 1, MAX_SCREENS)
+    grenze = tools.licensed_screen_limit()
+    if grenze is not None:
+        n = min(n, grenze)
+    return max(1, n)
 
 
 def set_screen_count(count):
@@ -113,10 +122,18 @@ def default_entries(idx):
 
 
 def ensure_defaults():
-    """Fehlende Bildschirme anlegen und sinnvoll vorbelegen (idempotent)."""
+    """Fehlende Bildschirme anlegen und sinnvoll vorbelegen (idempotent).
+
+    Bildschirme, die schon existieren, aber keine Tools haben, werden nur
+    nachbelegt, solange die Belegung noch nie gespeichert wurde — sonst würde
+    ein bewusst leer gelassener Bildschirm beim nächsten Start wieder gefüllt
+    (z. B. wenn die Lizenz beim ersten Start noch fehlte).
+    """
     changed = False
+    nachbelegen = not layout_touched()
     for idx in range(1, MAX_SCREENS + 1):
-        if get_screen(idx) is None:
+        screen = get_screen(idx)
+        if screen is None:
             screen = KioskScreen(idx=idx, name='Bildschirm %d' % idx,
                                  hdmi=HDMI_NAMES[idx - 1],
                                  enabled=idx <= screen_count())
@@ -127,9 +144,24 @@ def ensure_defaults():
                     screen_id=screen.id, tool=tool, sort=position,
                     dwell_seconds=dwell or tools.default_dwell(tool), enabled=True))
             changed = True
+        elif nachbelegen and not screen.tools:
+            for position, (tool, dwell) in enumerate(default_entries(idx)):
+                db.session.add(KioskScreenTool(
+                    screen_id=screen.id, tool=tool, sort=position,
+                    dwell_seconds=dwell or tools.default_dwell(tool), enabled=True))
+                changed = True
     if changed:
         db.session.commit()
     return changed
+
+
+def layout_touched():
+    """Hat der Admin die Belegung schon einmal gespeichert?"""
+    return str(get_setting(SETTING_LAYOUT_TOUCHED, '')).strip() == '1'
+
+
+def mark_layout_touched():
+    set_setting(SETTING_LAYOUT_TOUCHED, '1')
 
 
 def screen_url(idx):
@@ -182,6 +214,9 @@ def save_screen(idx, name=None, hdmi=None, entries=None, enabled=True):
             db.session.add(KioskScreenTool(
                 screen_id=screen.id, tool=tool, sort=data['sort'],
                 dwell_seconds=data['dwell'], enabled=data['enabled']))
+        # Ab jetzt gilt die Belegung als bewusst gesetzt: ein leer gelassener
+        # Bildschirm wird beim nächsten Start NICHT wieder gefüllt.
+        mark_layout_touched()
     db.session.commit()
     return screen
 

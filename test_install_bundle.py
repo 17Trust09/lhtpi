@@ -114,7 +114,17 @@ ok('SERVICE_SC_APP' in text and 'safetycross.service' in text,
    'eigener systemd-Service für Safety Cross')
 ok('/etc/lhtpi/tools' in text, 'gewählte Tools landen in /etc/lhtpi/tools')
 
-print('\n6) Altlasten')
+print('\n7) Hardware-Lizenz wird mitinstalliert')
+ok('configure_license()' in text, 'Installer hat einen Lizenz-Schritt')
+ok('--install' in text and 'license_bundle.py' in text,
+   'Lizenz wird beim Installieren für dieses Gerät erzeugt')
+ok('MARKER_FILE' in text and '/etc/lhtpi/installed' in text,
+   'Installationsmerkmal schaltet die Lizenzprüfung scharf')
+r = sourced('select_components "1,3" "2"; echo "ARG=$(tools_file_content | paste -sd, -)"')
+ok('ARG=slideshow,safetycross' in r.stdout,
+   'Lizenz erhält die gewählten Tools und die Bildschirm-Anzahl')
+
+print('\n8) Altlasten')
 ok('INSTALL_LHTPI' not in text and 'INSTALL_TERMIN' not in text,
    'keine alte Auswahl-Logik (INSTALL_LHTPI/INSTALL_TERMIN) mehr')
 ok('SERVICE_KIOSK=' not in text and 'KIOSK_SCRIPT=' not in text,

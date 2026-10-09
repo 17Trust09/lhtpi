@@ -17,9 +17,15 @@ TMP = tempfile.mkdtemp(prefix='lhtpi-kiosk-test-')
 os.environ['LHTPI_DB'] = os.path.join(TMP, 'test.db')
 os.environ['LHTPI_KIOSK_PROBE'] = '0'
 os.environ['LHTPI_TOOLS'] = 'slideshow,terminboard,safetycross'
+# Lizenz: künstliches Gerät, Lizenzen im Testordner, keine Zwangssperre
+os.environ['LHTPI_HWID'] = 'piserial:10000000testgeraet'
+os.environ['LHTPI_LICENSE_FILE'] = os.path.join(TMP, 'license.key')
+os.environ['LHTPI_INSTALLED_MARKER'] = os.path.join(TMP, 'installed')
+os.environ['LHTPI_LICENSE_ENFORCE'] = '0'
 
 from app import app                        # noqa: E402
 import kiosk_router as router              # noqa: E402
+import kiosk_tools as tools                # noqa: E402
 
 ALL_TOOLS = 'slideshow,terminboard,safetycross'
 checks = []
@@ -174,6 +180,70 @@ with app.app_context():
     ok(router.screen_count() == 1, 'ohne Installer-Angabe bleibt es bei 1')
     ok(tools_mod.configured_screen_count() is None,
        'ohne Datei/Umgebungsvariable meldet der Installer-Wert nichts')
+
+# ── 11. Hardware-Lizenz begrenzt Tools, Bildschirme und sperrt die App ──────
+with app.app_context():
+    import license_bundle as lic
+    from models import Setting, db as _db
+
+    key = lic.make_key('1,3', screens=1)          # nur Folien + Safety Cross, 1 Schirm
+    lic.write_license(key)
+    ok(lic.verify(lic.read_license())['valid'], 'Lizenz für dieses Gerät gültig')
+    ok(tools.installed_tools() == ['slideshow', 'safetycross'],
+       'nur lizenzierte Tools zählen als installiert (Termine gesperrt)')
+
+    alt = Setting.query.filter_by(key=router.SETTING_SCREEN_COUNT).first()
+    if alt is not None:
+        _db.session.delete(alt)
+        _db.session.commit()
+    os.environ['LHTPI_SCREEN_COUNT'] = '2'        # Gerät hat zwei Bildschirme
+    ok(router.screen_count() == 1,
+       'Installation will 2 Bildschirme, Lizenz erlaubt nur 1 -> 1')
+
+    lic.write_license(lic.make_key('1,2,3', screens=2))
+    ok(router.screen_count() == 2, 'Lizenz für 2 Bildschirme -> 2 erlaubt')
+    os.environ.pop('LHTPI_SCREEN_COUNT')
+
+    # Ungültige Lizenz + erzwungene Prüfung -> Sperrseite, /lizenz bleibt offen
+    lic.write_license('LHTPI-QQQQ-QQQQ-QQQQ-QQQQ')
+    os.environ['LHTPI_LICENSE_ENFORCE'] = '1'
+    c = app.test_client()
+    r = c.get('/screen/1')
+    ok(r.status_code == 403 and 'nicht freigeschaltet' in r.data.decode(),
+       'ungültige Lizenz -> Anzeige gesperrt')
+    r = c.get('/lizenz')
+    ok(r.status_code == 200 and lic.hardware_id() in r.data.decode(),
+       'Lizenzseite bleibt erreichbar und zeigt die Geräte-ID')
+    os.environ['LHTPI_LICENSE_ENFORCE'] = '0'
+    os.remove(lic.LICENSE_FILE)
+    ok(not lic.enforced() and tools.installed_tools() == ALL_TOOLS.split(','),
+       'ohne Lizenz wieder Entwicklungsmodus mit allen Tools')
+
+# ── 12. Leere Bildschirme werden nachbelegt (Lizenz kam erst später) ────────
+with app.app_context():
+    from models import KioskScreen, KioskScreenTool, Setting
+    # Zustand "App startete ohne gültige Lizenz": Bildschirm ohne Belegung,
+    # Belegung noch nie gespeichert.
+    old = Setting.query.filter_by(key=router.SETTING_LAYOUT_TOUCHED).first()
+    if old is not None:
+        _db.session.delete(old)
+        _db.session.commit()
+    for st in KioskScreenTool.query.all():
+        _db.session.delete(st)
+    _db.session.commit()
+    ok(not router.layout_touched(), 'Belegung wurde noch nie gespeichert')
+    ok(router.ensure_defaults() is True, 'Nachbelegung greift bei leerem Bildschirm')
+    cfg = client.get('/api/screen/1').get_json()
+    ok([t['tool'] for t in cfg['tools']] == ['slideshow'],
+       'leerer Bildschirm 1 bekommt die Werkseinstellung (Folien)')
+
+    # Jetzt bewusst leer speichern (Admin) -> darf nicht wieder gefüllt werden
+    router.save_screen(1, entries=[])
+    ok(router.layout_touched(), 'Speichern markiert die Belegung als gesetzt')
+    ok(router.ensure_defaults() is False, 'keine Nachbelegung mehr nach dem Speichern')
+    cfg = client.get('/api/screen/1').get_json()
+    ok(cfg['mode'] == 'empty' and cfg['tools'] == [],
+       'bewusst leerer Bildschirm bleibt leer')
 
 print('OK – %d Prüfungen bestanden' % len(checks))
 for passed, msg in checks:

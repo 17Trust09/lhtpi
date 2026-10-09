@@ -72,11 +72,12 @@ def port_of(url_or_tool):
 
 
 def installed_tools():
-    """Welche Tools sind auf DIESEM Gerät installiert?
+    """Welche Tools sind auf DIESEM Gerät installiert UND lizenziert?
 
     Quelle ist ``/etc/lhtpi/tools`` (vom Installer geschrieben) oder die
     Umgebungsvariable ``LHTPI_TOOLS``. Ohne Angabe (Entwicklung) gelten alle
-    Tools als installiert.
+    Tools als installiert. Ist eine Hardware-Lizenz hinterlegt, werden
+    zusätzlich nur die darin freigegebenen Tools ausgeliefert.
     """
     raw = os.environ.get('LHTPI_TOOLS')
     if raw is None:
@@ -86,9 +87,32 @@ def installed_tools():
         except OSError:
             raw = None
     if raw is None:
-        return list(TOOLS)
-    ids = [x.strip() for x in raw.replace('\n', ',').split(',') if x.strip()]
-    return [t for t in ids if t in TOOLS]
+        ids = list(TOOLS)
+    else:
+        ids = [x.strip() for x in raw.replace('\n', ',').split(',') if x.strip()]
+        ids = [t for t in ids if t in TOOLS]
+    lizenziert = licensed_tools()
+    if lizenziert is not None:
+        ids = [t for t in ids if t in lizenziert]
+    return ids
+
+
+def licensed_tools():
+    """Tool-IDs laut Hardware-Lizenz (``None``, wenn keine hinterlegt ist)."""
+    try:
+        import license_bundle
+    except ImportError:
+        return None
+    return license_bundle.licensed_tools()
+
+
+def licensed_screen_limit():
+    """Anzahl Bildschirme laut Lizenz (``None``, wenn keine hinterlegt ist)."""
+    try:
+        import license_bundle
+    except ImportError:
+        return None
+    return license_bundle.licensed_screens()
 
 
 def is_installed(tool):
