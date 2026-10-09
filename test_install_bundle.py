@@ -124,8 +124,16 @@ ok('/etc/sudoers.d/020_lhtpi-kiosk' in text and 'visudo -c -f' in text,
    'install.sh erlaubt Neustart/Herunterfahren (sudoers, nur diese Befehle)')
 ok('/usr/bin/systemctl reboot' in text and '/usr/bin/systemctl poweroff' in text,
    'die Freigabe deckt systemctl mit Unterbefehl ab (Symlink /sbin/reboot greift nicht)')
-ok('-s "${SUDOERS_DATEI}"' in text,
+ok('! -s "${tmp}"' in text,
    'install.sh prueft, dass die Freigabe wirklich Inhalt hat')
+r = sourced('render_anzeige_steuerung')
+ok(r.returncode == 0, 'das Steuer-Skript laesst sich erzeugen')
+ok('020_lhtpi-kiosk' not in r.stdout,
+   'die Freigabe steckt NICHT im erzeugten Steuer-Skript (sonst wird sie leer geschrieben)')
+ok('configure_sudoers_kiosk() {' in text,
+   'install.sh definiert einen eigenen Schritt fuer die Freigabe')
+ok('\n    configure_sudoers_kiosk\n' in text,
+   'der Hauptteil ruft den Freigabe-Schritt auf (nicht im Steuer-Skript)')
 ok('--install' in text and 'license_bundle.py' in text,
    'Lizenz wird beim Installieren für dieses Gerät erzeugt')
 ok('MARKER_FILE' in text and '/etc/lhtpi/installed' in text,

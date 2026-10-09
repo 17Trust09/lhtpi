@@ -12,6 +12,7 @@ import json
 import shutil
 import subprocess
 import sys
+import time
 import os
 from models import db, KioskScreen, KioskScreenTool
 from usb_source import get_setting, set_setting
@@ -337,6 +338,46 @@ def save_screen(idx, name=None, hdmi=None, entries=None, enabled=True):
 
 SYSTEM_DRYRUN = False       # Tests koennen das auf True setzen
 
+# Fehlversuche der Systemknoepfe - dauerhaft, ueberlebt einen Neustart.
+PROTOKOLL_DATEI = '/home/pi/lhtpi-system.log'
+
+# Kiosk-Fenster erkennt man am eigenen Chromium-Profil je Bildschirm.
+FENSTER_MUSTER = 'chromium-screen'
+
+
+def kiosk_fenster_schliessen(warte_sekunden=6):
+    """Chromium sauber beenden, damit es sein Profil schreibt.
+
+    Zoom und Fenstergroesse stecken im Chromium-Profil und landen erst beim
+    Beenden auf der Platte. Wird der Rechner hart neu gestartet, sind die
+    letzten Aenderungen weg - genau das ist Tim passiert. Danach wartet die
+    Funktion bis zu ``warte_sekunden``, damit Chromium fertig speichern kann.
+    """
+    if SYSTEM_DRYRUN:
+        return
+    befehl = ('/usr/bin/pkill -TERM -f {m} 2>/dev/null; i=0; '
+              'while [ $i -lt {n} ]; do /usr/bin/pgrep -f {m} >/dev/null 2>&1 '
+              '|| break; /bin/sleep 0.5; i=$((i+1)); done').format(
+                  m=FENSTER_MUSTER, n=warte_sekunden * 2)
+    try:
+        subprocess.run(['/bin/sh', '-c', befehl], stdin=subprocess.DEVNULL,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                       timeout=warte_sekunden + 10)
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def fehlversuch_protokollieren(ziel, zeilen):
+    """Fehlversuch dauerhaft festhalten (das Protokoll ueberlebt einen Start)."""
+    try:
+        with open(PROTOKOLL_DATEI, 'a') as datei:
+            datei.write('%s %s fehlgeschlagen\n' % (
+                time.strftime('%d.%m.%Y %H:%M:%S'), ziel))
+            for zeile in zeilen:
+                datei.write('  %s\n' % zeile)
+    except OSError:
+        pass
+
 
 def systembefehl(ziel):
     """Neustart oder Herunterfahren ausloesen.
@@ -355,6 +396,9 @@ def systembefehl(ziel):
         return False
     if SYSTEM_DRYRUN:
         return True
+    # Erst die Anzeige sauber zumachen: das schreibt den Zoom und die
+    # Fenstergroesse weg, bevor der Rechner aus dem Stand neu startet.
+    kiosk_fenster_schliessen()
     sudo = shutil.which('sudo') or '/usr/bin/sudo'
     systemctl = shutil.which('systemctl') or '/usr/bin/systemctl'
     versuche = ([sudo, '-n', systemctl, ziel],
@@ -372,11 +416,7 @@ def systembefehl(ziel):
             return True
         fehlerliste.append('%s: %s' % (' '.join(befehl),
                                        lauf.stdout.decode('utf-8', 'replace').strip()))
-    try:
-        with open('/tmp/lhtpi-system.log', 'a') as datei:
-            datei.write('\n'.join(fehlerliste) + '\n')
-    except OSError:
-        pass
+    fehlversuch_protokollieren(ziel, fehlerliste)
     return False
 
 

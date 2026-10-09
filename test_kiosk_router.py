@@ -529,6 +529,8 @@ _router_quelle = open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                    'kiosk_router.py'), encoding='utf-8').read()
 ok('shutil.which' in _router_quelle and "'-n', systemctl, ziel" in _router_quelle,
    'Systembefehl geht zuerst ueber systemctl (sudo loest den Symlink auf)')
+ok('def kiosk_fenster_schliessen' in _router_quelle and 'pkill -TERM' in _router_quelle,
+   'vor dem Systembefehl werden die Kiosk-Fenster sauber geschlossen (Profil sichern)')
 ok(anon.post('/system/neustart',
              environ_base={'REMOTE_ADDR': '192.168.178.50'}).status_code == 403,
    'Neustart nur vom Geraet (Netzwerk bekommt 403)')

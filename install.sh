@@ -422,25 +422,6 @@ if [ ! -f "${INSTALLED}" ]; then
     exit 0
 fi
 
-# Gerät: Neustart und Herunterfahren vom Bildschirm erlauben.
-# Nur genau diese zwei Befehle, ohne Passwort - alles andere bleibt gesperrt.
-SUDOERS_DATEI=/etc/sudoers.d/020_lhtpi-kiosk
-SUDO_TMP=$(mktemp)
-cat >"${SUDO_TMP}" <<SUDOEOF
-${PI_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /sbin/reboot, /sbin/poweroff
-SUDOEOF
-if visudo -c -f "${SUDO_TMP}" >/dev/null 2>&1; then
-    install -m 0440 -o root -g root "${SUDO_TMP}" "${SUDOERS_DATEI}"
-    if [ -s "${SUDOERS_DATEI}" ]; then
-        log "  Neustart/Herunterfahren freigegeben (${SUDOERS_DATEI})"
-    else
-        log "  WARNUNG: ${SUDOERS_DATEI} ist leer - die Knoepfe gehen nicht"
-    fi
-else
-    log "  WARNUNG: sudoers-Datei nicht gesetzt (Prüfung fehlgeschlagen)"
-fi
-rm -f "${SUDO_TMP}"
-
 systemctl stop lhtpi-setup.service 2>/dev/null || true
 systemctl start kiosk-screen1.service 2>/dev/null || true
 if [ "$n" -ge 2 ]; then
@@ -1408,10 +1389,38 @@ main() {
     configure_autologin
     configure_screens
     configure_policies
+    configure_sudoers_kiosk
     configure_firewall
     configure_usb_automount
     configure_clock
     print_summary
+}
+
+# ── Freigabe für Neustart / Herunterfahren ───────────────────────────────────
+# WICHTIG: Das muss im Hauptteil stehen. Steht der Block im erzeugten
+# Steuer-Skript (render_anzeige_steuerung), dann schreibt JEDER Anzeigen-Start
+# die Datei wieder leer - die Knöpfe gehen dann still nicht.
+configure_sudoers_kiosk() {
+    log "Erlaube Neustart und Herunterfahren vom Bildschirm"
+    local datei=/etc/sudoers.d/020_lhtpi-kiosk
+    local tmp
+    tmp="$(mktemp)"
+    cat >"${tmp}" <<SUDOEOF
+${PI_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /sbin/reboot, /sbin/poweroff
+SUDOEOF
+    if [ ! -s "${tmp}" ]; then
+        log "  WARNUNG: Freigabe leer geblieben - Knöpfe gehen nicht"
+        rm -f "${tmp}"
+        return 0
+    fi
+    if ! visudo -c -f "${tmp}" >/dev/null 2>&1; then
+        log "  WARNUNG: Prüfung fehlgeschlagen - Freigabe nicht gesetzt"
+        rm -f "${tmp}"
+        return 0
+    fi
+    install -m 0440 -o root -g root "${tmp}" "${datei}"
+    rm -f "${tmp}"
+    log "  Freigabe steht in ${datei} ($(wc -c < "${datei}") Bytes)"
 }
 
 # Nur ausführen, wenn direkt gestartet (nicht beim Sourcen in Tests)
