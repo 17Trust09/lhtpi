@@ -172,6 +172,8 @@ r = sourced('select_components "" ""\necho "T=$TOOL_SLIDESHOW$TOOL_TERMIN$TOOL_S
             'echo "S=$SCREEN_COUNT"')
 ok('T=111' in r.stdout, 'ohne Angabe werden alle Tools installiert')
 ok('S=2' in r.stdout, 'Bildschirm-Anzahl kommt aus der Ersteinrichtung')
+ok('Bildschirme: bis ${SCREEN_COUNT} möglich' in text,
+   'Installer nennt die Anzahl als Obergrenze (ein Bildschirm genügt')
 
 print('\n13b) Lizenz-Schritt läuft unter "set -u" wirklich durch')
 

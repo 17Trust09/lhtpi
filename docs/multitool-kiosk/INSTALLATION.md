@@ -61,6 +61,22 @@ Beispiele: `--tools=3` (nur Safety Cross, eine Abteilung), `--tools=1,2`
   ohne private Schlüssel erzeugt er keine. Siehe [LIZENZ.md](LIZENZ.md).
 * Kiosk-Services früherer Versionen (ein Kiosk je Tool) werden entfernt
 
+## Ein Bildschirm genügt
+
+Die Anzahl in Installation und Lizenz ist eine **Obergrenze**, keine Pflicht.
+Hängt nur ein Monitor am Gerät:
+
+* beim ersten Start steht „Erkannte Ausgänge: 1" — die Anzahl auf **1** lassen,
+* es läuft dann nur der Kiosk für Bildschirm 1 (der zweite Kiosk-Dienst startet
+  nicht, weil ihm das Merkmal fehlt),
+* mehrere Tools können sich denselben Bildschirm über Zeitwechsel teilen —
+  die Dauern stellst du je Tool ein,
+* ein zweiter Monitor kann später ergänzt werden (Anzahl auf 2 stellen) — die
+  Lizenz erlaubt es weiterhin.
+
+Passt die gespeicherte Anzahl nicht zur erkannten Hardware (z. B. 2 eingestellt,
+1 Ausgang erkannt), weist die Anzeigen-Seite darauf hin.
+
 ## Einstellen (das Wichtigste im Betrieb)
 
 Dashboard aufrufen: `http://<LAN-IP>:8000` → Menü **🧩 Anzeigen**

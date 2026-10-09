@@ -293,6 +293,19 @@ with app.app_context():
     # Sicher anmelden – frühere Abschnitte können die Sitzung verändert haben
     client.post('/login', data={'username': 'admin', 'password': 'admin'})
 
+    # Hinweis, wenn mehr Bildschirme eingestellt sind als angeschlossen
+    _conf, _det = tools.configured_screen_count, tools.detected_screen_count
+    tools.detected_screen_count = lambda: 1
+    router.set_screen_count(2)
+    seite = client.get('/display').get_data(as_text=True)
+    ok('erkannt ist aber nur' in seite,
+       'Hinweis: 2 eingestellt, aber nur 1 Ausgang erkannt')
+    router.set_screen_count(1)
+    seite = client.get('/display').get_data(as_text=True)
+    ok('erkannt ist aber nur' not in seite,
+       'bei passender Anzahl kein Hinweis')
+    tools.configured_screen_count, tools.detected_screen_count = _conf, _det
+
     # Ohne Lizenz darf die Einrichtung nicht abschließen (sonst sperrt sich das
     # Gerät mit dem Merkmal selbst). Fall 1: echter Gerätezustand – keine Lizenz,
     # noch kein Merkmal -> Seite bleibt in der Einrichtung.

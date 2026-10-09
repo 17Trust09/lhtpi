@@ -12,7 +12,8 @@ PY=./venv/bin/python
 
 fehler=0
 for t in test_kiosk_router.py test_install_bundle.py test_license_bundle.py \
-         test_cursor_unified.py test_usb_source.py; do
+         test_cursor_unified.py test_usb_source.py \
+         tools/test-einbildschirm-live.py; do
     printf '%-26s ' "$t"
     if out=$("$PY" "$t" 2>&1); then
         echo "$(echo "$out" | grep -oE '(OK – [0-9]+ Prüfungen bestanden|ALLES GRÜN|[0-9]+ passed)' | tail -1)"

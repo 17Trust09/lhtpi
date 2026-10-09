@@ -505,7 +505,7 @@ configure_screens_file() {
     mkdir -p "$(dirname "${SCREENS_FILE}")"
     echo "${SCREEN_COUNT}" > "${SCREENS_FILE}"
     chmod 644 "${SCREENS_FILE}"
-    ok "Bildschirme laut Installation: ${SCREEN_COUNT}"
+    ok "Bildschirme: bis ${SCREEN_COUNT} möglich (Auswahl beim ersten Start)"
 }
 
 # Hardware-Lizenz hinterlegen (signiert - der private Schlüssel bleibt beim Hersteller).
@@ -889,7 +889,7 @@ print_summary() {
     echo "================================================"
     echo ""
     echo "  🧩 Tools:         $(tools_file_content | tr '\n' ' ')"
-    echo "  📺 Bildschirme:   ${SCREEN_COUNT}"
+    echo "  📺 Bildschirme:   bis ${SCREEN_COUNT} (Auswahl am Bildschirm)"
     echo "     Anzeige 1:     ${ROUTER_BASE_URL}/1"
     if [ "${SCREEN_COUNT}" = "2" ]; then
         echo "     Anzeige 2:     ${ROUTER_BASE_URL}/2"

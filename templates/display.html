@@ -80,6 +80,13 @@
     dann „Speichern" — und darunter <b>Einrichtung abschließen</b>.
     Danach startet die Anzeige automatisch.
     <div class="note">Erkannte Ausgänge: <b>{{ erkannte_schirme }}</b></div>
+    {% if o.count > erkannte_schirme %}
+    <div class="note" style="background:#5a4a1e;border:1px solid #b09a55;color:#ffeecd">
+      Eingestellt sind <b>{{ o.count }}</b> Bildschirme, erkannt ist aber nur
+      <b>{{ erkannte_schirme }}</b> Ausgang. Bei nur einem angeschlossenen Bildschirm
+      die Anzahl auf <b>1</b> stellen – sonst öffnet der zweite Kiosk auf demselben Schirm.
+    </div>
+    {% endif %}
     {% if not lizenz_da %}
     <div class="note" style="background:#5a1e1e;border:1px solid #b05555;color:#ffdede">
       <b>Lizenz fehlt</b> – die Einrichtung lässt sich erst abschließen, wenn
