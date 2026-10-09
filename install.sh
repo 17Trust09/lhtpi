@@ -31,13 +31,15 @@ SERVICE_SC_APP="safetycross.service"
 
 # ── Bundle: gemeinsame Anzeige – EIN Kiosk je Bildschirm ──────────────
 ROUTER_BASE_URL="http://localhost:${APP_PORT}/screen"
-TOOLS_FILE="/etc/lhtpi/tools"
-SCREENS_FILE="/etc/lhtpi/screens"
-LICENSE_FILE="/etc/lhtpi/license.key"
-MARKER_FILE="/etc/lhtpi/installed"
+# Überschreibbar über Umgebungsvariablen (wie in der App) - so lassen sich die
+# Schritte auch ohne /etc testen.
+TOOLS_FILE="${LHTPI_TOOLS_FILE:-/etc/lhtpi/tools}"
+SCREENS_FILE="${LHTPI_SCREENS_FILE:-/etc/lhtpi/screens}"
+LICENSE_FILE="${LHTPI_LICENSE_FILE:-/etc/lhtpi/license.key}"
+MARKER_FILE="${LHTPI_INSTALLED_MARKER:-/etc/lhtpi/installed}"
 MAX_SCREENS="2"
 # Merkmal: Bildschirm 2 ist eingerichtet (steuert den zweiten Kiosk)
-SCREEN2_FILE="/etc/lhtpi/screen2"
+SCREEN2_FILE="${LHTPI_SCREEN2_FILE:-/etc/lhtpi/screen2}"
 
 # ── Installations-Auswahl ─────────────────────────────────────────────
 # Die Verteiler-App (LHTPi, Port 8000) trägt Dashboard, Anzeige-Router und
@@ -516,6 +518,8 @@ configure_screens_file() {
 # Nur auf dem Hersteller-Rechner (LHTPI_SIGN_KEY_FILE gesetzt) wird sie direkt
 # erzeugt - dann läuft die Installation in einem Schritt.
 LICENSE_STATUS="fehlt"
+# Leer vorbelegen: wird nur bei --license=<datei> gefüllt (set -u!)
+LICENSE_ARG=""
 
 lizenz_uebernehmen() {
     install -m 644 "$1" "${LICENSE_FILE}" || return 1
@@ -526,9 +530,12 @@ lizenz_uebernehmen() {
 
 configure_license() {
     log "Hardware-Lizenz hinterlegen"
-    mkdir -p "$(dirname "${LICENSE_FILE}")"
-    chown "root:${PI_GROUP}" "$(dirname "${LICENSE_FILE}")"
-    chmod 775 "$(dirname "${LICENSE_FILE}")"
+    local ordner
+    ordner="$(dirname "${LICENSE_FILE}")"
+    mkdir -p "${ordner}"
+    chown "root:${PI_GROUP}" "${ordner}" 2>/dev/null \
+        || warn "Konfigurationsordner ${ordner} gehört weiterhin root (Gruppe ${PI_GROUP} fehlt?)"
+    chmod 775 "${ordner}" 2>/dev/null || true
 
     if [ -n "${LICENSE_ARG}" ]; then
         if [ -f "${LICENSE_ARG}" ] && lizenz_uebernehmen "${LICENSE_ARG}"; then
@@ -550,7 +557,8 @@ configure_license() {
         return 0
     fi
 
-    if [ -n "${LHTPI_SIGN_KEY_FILE:-}" ] && [ -f "${LHTPI_SIGN_KEY_FILE}" ]; then
+    local sign_key="${LHTPI_SIGN_KEY_FILE:-}"
+    if [ -n "${sign_key}" ] && [ -f "${sign_key}" ]; then
         local tools_arg
         tools_arg="$(tools_file_content | paste -sd, -)"
         if [ -n "${tools_arg}" ] && "${PROJECT_DIR}/venv/bin/python" \

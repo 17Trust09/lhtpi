@@ -173,6 +173,62 @@ r = sourced('select_components "" ""\necho "T=$TOOL_SLIDESHOW$TOOL_TERMIN$TOOL_S
 ok('T=111' in r.stdout, 'ohne Angabe werden alle Tools installiert')
 ok('S=2' in r.stdout, 'Bildschirm-Anzahl kommt aus der Ersteinrichtung')
 
+print('\n13b) Lizenz-Schritt läuft unter "set -u" wirklich durch')
+
+import tempfile
+LZ = tempfile.mkdtemp(prefix='lhtpi-inst-')
+UMG = dict(os.environ)
+UMG.update({
+    'LHTPI_LICENSE_FILE': os.path.join(LZ, 'license.key'),
+    'LHTPI_INSTALLED_MARKER': os.path.join(LZ, 'installed'),
+    'LHTPI_TOOLS_FILE': os.path.join(LZ, 'tools'),
+    'LHTPI_SCREENS_FILE': os.path.join(LZ, 'screens'),
+    'LHTPI_SCREEN2_FILE': os.path.join(LZ, 'screen2'),
+})
+
+
+def schritt(stmts, env=None):
+    return subprocess.run(['bash', '-c', 'set -e\nsource ./install.sh\n' + stmts],
+                          cwd=BASE, env=env or UMG, capture_output=True, text=True)
+
+
+# Das war der Fehler auf dem echten Pi: ohne --license= brach der Schritt mit
+# "LICENSE_ARG: unbound variable" ab und die Installation endete vorzeitig.
+r = schritt('configure_license')
+ok(r.returncode == 0, 'configure_license ohne --license bricht nicht ab')
+ok('unbound variable' not in r.stderr, 'keine ungebundene Variable (set -u)')
+ok('bleibt gesperrt' in r.stdout, 'ohne Lizenz wird deutlich gewarnt')
+ok(not os.path.exists(UMG['LHTPI_LICENSE_FILE']), 'ohne Lizenz wird nichts angelegt')
+
+# Mit mitgelieferter Lizenz (so kommt sie beim Kunden an)
+geliefert = os.path.join(LZ, 'geliefert.key')
+open(geliefert, 'w').write('LHTPI-TEST-LIZENZ\n')
+r = schritt('LICENSE_ARG="%s"; configure_license' % geliefert)
+ok(r.returncode == 0 and os.path.exists(UMG['LHTPI_LICENSE_FILE']),
+   'mitgelieferte Lizenz (--license=) wird übernommen')
+ok(open(UMG['LHTPI_LICENSE_FILE']).read().startswith('LHTPI-TEST'),
+   'übernommene Datei hat den richtigen Inhalt')
+
+# Ohne Signierschlüssel wird auf dem Gerät nichts erzeugt
+leer = dict(UMG, LHTPI_LICENSE_FILE=os.path.join(LZ, 'frisch', 'license.key'))
+r = schritt('LICENSE_ARG=""; configure_license', env=leer)
+ok('make-key' in r.stdout and 'bleibt gesperrt' in r.stdout,
+   'ohne Signierschlüssel nur Hinweis, kein Selbst-Erzeugen')
+ok(not os.path.exists(leer['LHTPI_LICENSE_FILE']),
+   'auf dem Gerät entsteht keine Lizenz von selbst')
+
+print('\n13c) Alle Schritte nennen ihre Variablen (Schutz vor set -u)')
+from_a = open(INSTALL).read()
+import re as _re
+# Funktionen, die im Ablauf vorkommen, müssen unter set -u aufrufbar sein:
+# grob prüfen, ob groß geschriebene Variablen benutzt werden, die nirgends
+# vorbelegt sind.
+vorbelegt = set(_re.findall(r'^([A-Z][A-Z0-9_]*)="', from_a, _re.M))
+vorbelegt |= set(_re.findall(r'^([A-Z][A-Z0-9_]*)=', from_a, _re.M))
+benutzt = set(_re.findall(r'\$\{([A-Z][A-Z0-9_]*)\}', from_a))
+unbekannt = {v for v in benutzt - vorbelegt if v not in {'BASH_SOURCE', 'HOME', 'PATH', 'EUID', 'UID', 'USER'}}
+ok(not unbekannt, 'keine unvorbelegten Variablen benutzt (%s)' % (sorted(unbekannt) or 'keine'))
+
 print('\n13) Lizenz kommt vom Hersteller (kein Schlüssel auf dem Gerät)')
 ok('nur der ÖFFENTLICHE Schlüssel' in text,
    'Kommentar stellt klar: privater Schlüssel bleibt beim Hersteller')
