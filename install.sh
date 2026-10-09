@@ -832,7 +832,7 @@ PROFIL_EOF
     local xinitrc="${PI_HOME}/.xinitrc"
     if ! grep -q 'openbox-session' "${xinitrc}" 2>/dev/null \
        || ! grep -q 'kiosk-cursor-x11' "${xinitrc}" 2>/dev/null; then
-        printf '# LHTPi-Kiosk: X-Sitzung ohne Desktop (kein Panel, keine Anmeldung)\n# Mauszeiger ausblenden, wenn er ruht (CSS allein greift in Chromium nicht)\nif [ -x "%s" ]; then\n    setsid "%s" "%s/tools/kiosk-cursor-x11.py" --ruhe 3 >/dev/null 2>&1 &\nfi\nexec openbox-session\n' \
+        printf '# LHTPi-Kiosk: X-Sitzung ohne Desktop (kein Panel, keine Anmeldung)\n# Mauszeiger ausblenden, wenn er ruht (CSS allein greift in Chromium nicht)\nif [ -x "%s" ]; then\n    setsid "%s" "%s/tools/kiosk-cursor-x11.py" --ruhe 4 >/dev/null 2>&1 &\nfi\nexec openbox-session\n' \
             "${zeiger_dir}/venv/bin/python" "${zeiger_dir}/venv/bin/python" "${PROJECT_DIR}" \
             > "${xinitrc}"
         ok "X-Sitzung eingerichtet (openbox, ohne Anmeldung, Zeiger-Wache)"
