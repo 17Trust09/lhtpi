@@ -566,6 +566,8 @@ ok('Bedienung' in mit_login, 'der Schalter erklärt beide Wirkungen')
 
 # Tools bedienbar: Reiter "Admin" im Safety Cross anklickbar
 seite_bedienbar = anon.get('/screen/1').get_data(as_text=True)
+ok('#wartung[hidden]{display:none}' in seite_bedienbar,
+   'die Knopfleiste laesst sich weiter ausblenden (display:flex hebt hidden nicht auf)')
 ok('data-ziel="/system/neustart"' in seite_bedienbar,
    'Neustart-Knopf an der Anzeige')
 ok('data-ziel="/system/herunterfahren"' in seite_bedienbar,
