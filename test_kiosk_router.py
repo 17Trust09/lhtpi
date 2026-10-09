@@ -138,6 +138,43 @@ ok(page.status_code == 200 and 'Anzeigen' in page.data.decode(), '/display lädt
 ok('Anzeigedauer' in page.data.decode() or 'Dauer' in page.data.decode(),
    'Einstellfeld für die Anzeigedauer ist vorhanden')
 
+# ── 9. Vorbelegung aus der Installations-Auswahl ─────────────────────────────
+#     Abteilung mit nur einem Tool: Bildschirm 1 zeigt das verfügbare Tool.
+with app.app_context():
+    os.environ['LHTPI_TOOLS'] = 'safetycross'
+    ok(router.default_entries(1) == [('safetycross', None)],
+       'nur Safety Cross installiert -> Bildschirm 1 zeigt Safety Cross')
+    ok(router.default_entries(2) == [],
+       'nur ein Tool installiert -> zweiter Bildschirm bleibt leer')
+    os.environ['LHTPI_TOOLS'] = 'slideshow,safetycross'
+    ok(router.default_entries(1) == [('slideshow', None)],
+       'Folien installiert -> Bildschirm 1 bleibt bei den Folien')
+    ok(router.default_entries(2) == [('safetycross', None)],
+       'zweiter Bildschirm bekommt das übrige Tool')
+    os.environ['LHTPI_TOOLS'] = ALL_TOOLS
+    ok([t for t, _ in router.default_entries(1)] == ['slideshow'],
+       'Werkseinstellung bleibt: Bildschirm 1 = Folien')
+    ok([t for t, _ in router.default_entries(2)] == ['terminboard'],
+       'Werkseinstellung bleibt: Bildschirm 2 = Termine')
+
+# ── 10. Bildschirm-Anzahl kommt aus der Installation ─────────────────────────
+with app.app_context():
+    import kiosk_tools as tools_mod
+    from models import db, Setting
+    old = Setting.query.filter_by(key=router.SETTING_SCREEN_COUNT).first()
+    if old is not None:
+        db.session.delete(old)
+        db.session.commit()
+    ok(router.get_setting(router.SETTING_SCREEN_COUNT) is None,
+       'keine Bildschirm-Einstellung in der Datenbank')
+    os.environ['LHTPI_SCREEN_COUNT'] = '2'
+    ok(router.screen_count() == 2,
+       'Bildschirm-Anzahl aus der Installation (2) wird übernommen')
+    os.environ.pop('LHTPI_SCREEN_COUNT')
+    ok(router.screen_count() == 1, 'ohne Installer-Angabe bleibt es bei 1')
+    ok(tools_mod.configured_screen_count() is None,
+       'ohne Datei/Umgebungsvariable meldet der Installer-Wert nichts')
+
 print('OK – %d Prüfungen bestanden' % len(checks))
 for passed, msg in checks:
     print('  ✓', msg)

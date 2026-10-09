@@ -35,6 +35,8 @@ TOOLS = {
 DEFAULT_DWELL = 20
 # Vom Installer geschriebene Liste der auf diesem Gerät installierten Tools.
 TOOLS_FILE = os.environ.get('LHTPI_TOOLS_FILE', '/etc/lhtpi/tools')
+# Vom Installer geschriebene Anzahl der Bildschirme dieses Geräts.
+SCREENS_FILE = os.environ.get('LHTPI_SCREENS_FILE', '/etc/lhtpi/screens')
 
 
 def tool_ids():
@@ -91,6 +93,27 @@ def installed_tools():
 
 def is_installed(tool):
     return tool in installed_tools()
+
+
+def configured_screen_count():
+    """Bildschirm-Anzahl, die der Installer auf diesem Gerät eingetragen hat.
+
+    Quelle ist ``/etc/lhtpi/screens`` bzw. ``LHTPI_SCREEN_COUNT``. Ist nichts
+    eingetragen (Entwicklung), wird ``None`` geliefert und der Aufrufer
+    entscheidet selbst.
+    """
+    raw = os.environ.get('LHTPI_SCREEN_COUNT')
+    if raw is None:
+        try:
+            with open(SCREENS_FILE) as f:
+                raw = f.read()
+        except OSError:
+            return None
+    try:
+        n = int(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
+    return n if n > 0 else None
 
 
 def probe(url, timeout=0.6):

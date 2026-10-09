@@ -219,12 +219,27 @@ Reihenfolge: **S1 → S2 → S4 → S5**, S3 parallel (klein, unabhängig). S6 a
 
 | # | Paket | Stand |
 |---|---|---|
-| S1 | Anzeige-Router (Registry, DB, `/screen/<n>`, `/api/screens`, Admin-Seite, Tests) | ✅ erledigt (`test_kiosk_router.py`, 31 Prüfungen) |
+| S1 | Anzeige-Router (Registry, DB, `/screen/<n>`, `/api/screens`, Admin-Seite, Tests) | ✅ erledigt (`test_kiosk_router.py`, 45 Prüfungen) |
 | S3 | Cursor einheitlich in allen drei Tools + OS-Hacks entfernt | ✅ erledigt (`test_cursor_unified.py`) |
-| S2 | Installer: Bildschirm-Anzahl, Kiosk-Service je Bildschirm | offen |
-| S4 | Installation mit Auswahl (1/2/3 Tools, interaktiv + Flags) | offen |
-| S5 | Lizenz-Bundle + Key-Generator + Lock-Screens | offen |
-| S6 | Doku/Screenshots + Hardware-Test auf dem Pi | offen |
+| S2 | Installer: ein Kiosk **je Bildschirm**, Monitor-Zuordnung, Aufräumen alter Kiosks | ✅ erledigt (`test_install_bundle.py`, 29 Prüfungen) |
+| S4 | Installation mit Auswahl (1/2/3 Tools, Bildschirm-Anzahl, interaktiv + `--tools`/`--screens`) | ✅ erledigt; Merker `/etc/lhtpi/tools` + `/etc/lhtpi/screens` |
+| S5 | Lizenz-Bundle + Key-Generator + Lock-Screens für das gewählte Tool-Set | offen |
+| S6 | Doku/Screenshots + Hardware-Test auf dem Pi | teils (Doku `INSTALLATION.md`); Hardware-Test offen |
+
+### Installer in Kurzform
+
+```bash
+sudo bash install.sh                                  # fragt Tools + Bildschirme
+sudo bash install.sh --tools=1,3 --screens=2 --no-reboot
+```
+
+* `--tools=1,2,3` → 1 Folien · 2 Terminboard · 3 Safety Cross (Namen gehen auch)
+* Die Verteiler-App (Router + Lizenz) ist **immer** dabei; die Auswahl bestimmt,
+  welche Tools zusätzlich installiert und angezeigt werden.
+* Ein Chromium-Kiosk **je Bildschirm** (`kiosk-screen1/2.service`) auf
+  `http://localhost:8000/screen/<n>`; alte Kiosk-Services je Tool werden entfernt.
+* Der Router liest `/etc/lhtpi/tools` (nicht installierte Tools werden nie
+  angezeigt) und `/etc/lhtpi/screens` (Startwert für die Bildschirm-Anzahl).
 
 ### Tests im Bundle ausführen
 

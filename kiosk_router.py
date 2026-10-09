@@ -58,8 +58,9 @@ def set_iframe_reload_minutes(value):
 
 
 def screen_count():
-    return _as_int(get_setting(SETTING_SCREEN_COUNT, DEFAULT_SCREEN_COUNT),
-                   DEFAULT_SCREEN_COUNT, 1, MAX_SCREENS)
+    """Anzahl der Bildschirme: Einstellung aus dem Dashboard, sonst Installer-Wert."""
+    default = tools.configured_screen_count() or DEFAULT_SCREEN_COUNT
+    return _as_int(get_setting(SETTING_SCREEN_COUNT, default), default, 1, MAX_SCREENS)
 
 
 def set_screen_count(count):
@@ -92,6 +93,25 @@ def active_screens():
     return out
 
 
+def default_entries(idx):
+    """Vorbelegung eines Bildschirms aus den auf diesem Gerät installierten Tools.
+
+    Werkseinstellung ist Bildschirm 1 = Folien, Bildschirm 2 = Termine. Ist das
+    Wunsch-Tool nicht installiert (z. B. Abteilung mit nur Safety Cross), wird
+    sinnvoll ersetzt: Bildschirm 1 zeigt alles Verfügbare, weitere Bildschirme
+    zeigen das letzte verfügbare Tool fest.
+    """
+    installed = tools.installed_tools()
+    wanted = [(t, d) for (t, d) in DEFAULT_LAYOUT.get(idx, []) if t in installed]
+    if wanted:
+        return wanted
+    if idx == 1:
+        return [(t, None) for t in installed]
+    if len(installed) > 1:
+        return [(installed[-1], None)]
+    return []
+
+
 def ensure_defaults():
     """Fehlende Bildschirme anlegen und sinnvoll vorbelegen (idempotent)."""
     changed = False
@@ -102,9 +122,7 @@ def ensure_defaults():
                                  enabled=idx <= screen_count())
             db.session.add(screen)
             db.session.flush()
-            for position, (tool, dwell) in enumerate(DEFAULT_LAYOUT.get(idx, [])):
-                if not tools.is_installed(tool):
-                    continue
+            for position, (tool, dwell) in enumerate(default_entries(idx)):
                 db.session.add(KioskScreenTool(
                     screen_id=screen.id, tool=tool, sort=position,
                     dwell_seconds=dwell or tools.default_dwell(tool), enabled=True))

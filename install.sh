@@ -16,24 +16,34 @@ AP_PASS="LHTPi123"
 AP_ADDR="192.168.4.1/24"
 KIOSK_URL="http://localhost:8000/present/kiosk"
 SERVICE_APP="lhtpi.service"
-SERVICE_KIOSK="lhtpi-kiosk.service"
-KIOSK_SCRIPT="/home/pi/start_lhtpi_kiosk.sh"
-KIOSK_LOG="/home/pi/lhtpi-kiosk.log"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_DIR="/root/lhtpi-backup-$(date +%Y%m%d%H%M%S)"
 
-# ── Terminboard (Add-on, zweiter HDMI-Ausgang) ────────────────────────
+# ── Terminboard (zweites Tool) ────────────────────────────────────────
 TERMIN_DIR="/home/pi/lhtpi/terminboard"
 TERMIN_PORT="8001"
 TERMIN_KIOSK_URL="http://localhost:8001/board/kiosk"
 SERVICE_TERMIN_APP="terminboard.service"
-SERVICE_TERMIN_KIOSK="terminboard-kiosk.service"
-TERMIN_KIOSK_SCRIPT="/home/pi/start_terminboard_kiosk.sh"
-TERMIN_KIOSK_LOG="/home/pi/terminboard-kiosk.log"
+
+# ── Safety Cross (drittes Tool) ───────────────────────────────────────
+SC_DIR="/opt/safety-cross"
+SC_PORT="8002"
+SERVICE_SC_APP="safetycross.service"
+
+# ── Bundle: gemeinsame Anzeige – EIN Kiosk je Bildschirm ──────────────
+ROUTER_BASE_URL="http://localhost:${APP_PORT}/screen"
+TOOLS_FILE="/etc/lhtpi/tools"
+SCREENS_FILE="/etc/lhtpi/screens"
+MAX_SCREENS="2"
 
 # ── Installations-Auswahl ─────────────────────────────────────────────
-INSTALL_LHTPI=0
-INSTALL_TERMIN=0
+# Die Verteiler-App (LHTPi, Port 8000) trägt Dashboard, Anzeige-Router und
+# Lizenz und ist deshalb IMMER installiert. Die Auswahl bestimmt, welche Tools
+# zusätzlich installiert und angezeigt werden dürfen.
+TOOL_SLIDESHOW=0     # Folien / Playlist  (Teil der Verteiler-App)
+TOOL_TERMIN=0        # Terminboard          (Port 8001)
+TOOL_SC=0            # Safety Cross         (Port 8002)
+SCREEN_COUNT="1"     # 1 oder 2 HDMI-Ausgänge
 NO_REBOOT=0
 
 # ── Hilfsfunktionen ────────────────────────────────────────────────────
@@ -109,8 +119,9 @@ install_packages() {
     apt-get install -y -qq \
         python3 python3-pip python3-venv \
         ufw curl git \
-        xorg openbox unclutter-xfixes \
+        xorg openbox \
         chromium-browser chromium-browser-l10n \
+        i2c-tools util-linux-extra \
         exfatprogs ntfs-3g dosfstools usbutils
     ok "Systempakete installiert"
 }
@@ -233,6 +244,194 @@ EOF
     ok "Netzwerk konfiguriert: eth0=DHCP, wlan0=AP '${AP_SSID}'"
 }
 
+# ── Gemeinsame Anzeige: EIN Chromium-Kiosk je Bildschirm ───────────────
+# Jeder Bildschirm zeigt den Anzeige-Router der Verteiler-App
+# (http://localhost:8000/screen/<n>). Welche Tools dort laufen und wie lange
+# jeder angezeigt wird, wird im Dashboard unter „Anzeigen" eingestellt.
+
+kiosk_service_name() { echo "kiosk-screen$1.service"; }
+kiosk_script_path()  { echo "/home/pi/start_kiosk_screen$1.sh"; }
+kiosk_log_path()     { echo "/home/pi/kiosk-screen$1.log"; }
+
+# Kiosk-Startskript für einen Bildschirm erzeugen (nach stdout)
+render_screen_kiosk_script() {
+    local idx="$1" mon="HDMI-1"
+    [ "$idx" = "2" ] && mon="HDMI-2"
+    sed -e "s|__IDX__|${idx}|g" \
+        -e "s|__MON__|${mon}|g" \
+        -e "s|__LOG__|$(kiosk_log_path "$idx")|g" \
+        -e "s|__APP_URL__|${ROUTER_BASE_URL}/${idx}|g" \
+        -e "s|__PORT__|${APP_PORT}|g" <<'KIOSK_EOF'
+#!/bin/bash
+set -u
+
+# Kiosk Bildschirm __IDX__ – Anzeige-Router der Verteiler-App
+# Monitor-Zuordnung: HDMI-1 primär links, HDMI-2 rechts daneben
+xrandr --output HDMI-1 --primary --mode 1920x1080 --pos 0x0 \
+       --output HDMI-2 --mode 1920x1080 --right-of HDMI-1 >/dev/null 2>&1 || true
+
+LOG="__LOG__"
+APP_URL="__APP_URL__"
+READY_URL="http://localhost:__PORT__/login"
+MON="__MON__"
+PROFILE="/home/pi/.config/chromium-screen__IDX__"
+
+mkdir -p "$(dirname "$LOG")" "$PROFILE"
+touch "$LOG"
+echo "$(date '+%F %T') - Kiosk Bildschirm __IDX__ gestartet, warte auf die App" >> "$LOG"
+
+# Geometrie dieses Ausgangs (Breite x Höhe +X+Y) – Fallback 1920x1080
+GEO=$(xrandr --current 2>/dev/null | awk -v m="$MON" \
+      '$1==m && $2=="connected"{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+/){print $i; exit}}')
+W=$(echo "$GEO" | cut -dx -f1)
+REST=$(echo "$GEO" | cut -dx -f2)
+H=$(echo "$REST" | cut -d+ -f1)
+X=$(echo "$GEO" | cut -d+ -f2)
+Y=$(echo "$GEO" | cut -d+ -f3)
+W=${W:-1920}; H=${H:-1080}
+case "${X:-}" in ''|*[!0-9]*) X=0 ;; esac
+case "${Y:-}" in ''|*[!0-9]*) Y=0 ;; esac
+# Zweiter Ausgang ohne Position -> rechts neben HDMI-1
+if [ "$MON" = "HDMI-2" ] && [ "$X" = "0" ]; then
+    X=$(xrandr --current 2>/dev/null | awk \
+        '$1=="HDMI-1" && $2=="connected"{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+/){split($i,a,"x"); print a[1]; exit}}')
+    X=${X:-1920}
+fi
+
+ready=0
+for i in $(seq 1 30); do
+    if curl -fsS --connect-timeout 2 --max-time 5 "$READY_URL" >/dev/null 2>&1; then
+        ready=1
+        echo "$(date '+%F %T') - App erreichbar, starte Chromium" >> "$LOG"
+        break
+    fi
+    echo "$(date '+%F %T') - Versuch $i/30: App noch nicht bereit" >> "$LOG"
+    sleep 2
+done
+[ "$ready" -ne 1 ] && echo "$(date '+%F %T') - App nicht erreichbar, starte Chromium trotzdem" >> "$LOG"
+
+xset s off >/dev/null 2>&1 || true
+xset -dpms >/dev/null 2>&1 || true
+xset s noblank >/dev/null 2>&1 || true
+
+# Mauszeiger: NICHT auf OS-Ebene ausblenden – das macht die Anzeige selbst
+# (tools/kiosk-cursor.js: nach Inaktivität aus, bei Bewegung sofort wieder da).
+
+CHROMIUM="/usr/bin/chromium-browser"
+[ -x "$CHROMIUM" ] || CHROMIUM="/usr/bin/chromium"
+
+exec "$CHROMIUM" \
+    --app="$APP_URL" \
+    --class=kiosk-screen__IDX__ \
+    --user-data-dir="$PROFILE" \
+    --window-position="${X},${Y}" \
+    --window-size="${W},${H}" \
+    --noerrdialogs \
+    --disable-infobars \
+    --disable-session-crashed-bubble \
+    --disable-features=Translate,TranslateUI \
+    --no-first-run \
+    --check-for-update-interval=31536000 \
+    --autoplay-policy=no-user-gesture-required \
+    --disable-popup-blocking \
+    --disable-translate \
+    --overscroll-history-navigation=0 \
+    --disable-pinch \
+    --disable-context-menu \
+    --password-store=basic \
+    --touch-events=disabled \
+    --simulate-outdated-no-au='01-01-2200' \
+    --disable-component-update \
+    --lang=de \
+    --force-fieldtrials="*Translate/Disabled/" \
+    --disable-gpu \
+    --disable-gpu-compositing >> "$LOG" 2>&1
+KIOSK_EOF
+}
+
+configure_screen_kiosk() {
+    local idx="$1" script service
+    script="$(kiosk_script_path "$idx")"
+    service="$(kiosk_service_name "$idx")"
+
+    log "Kiosk für Bildschirm ${idx}: ${ROUTER_BASE_URL}/${idx}"
+    render_screen_kiosk_script "$idx" > "$script"
+    chmod +x "$script"
+    chown "${PI_USER}:${PI_GROUP}" "$script"
+
+    cat > "/etc/systemd/system/${service}" <<EOF
+[Unit]
+Description=Kiosk Bildschirm ${idx} - Anzeige-Router
+After=graphical.target ${SERVICE_APP}
+Requires=${SERVICE_APP}
+
+[Service]
+Type=simple
+User=${PI_USER}
+Group=${PI_GROUP}
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/${PI_USER}/.Xauthority
+ExecStartPre=/bin/sleep 5
+ExecStart=${script}
+Restart=on-failure
+RestartSec=10
+StartLimitIntervalSec=120
+StartLimitBurst=3
+
+[Install]
+WantedBy=graphical.target
+EOF
+    systemctl daemon-reload
+    systemctl enable "${service}"
+    ok "Bildschirm ${idx} eingerichtet (${service})"
+}
+
+configure_screens() {
+    local i=1
+    while [ "$i" -le "${SCREEN_COUNT}" ]; do
+        configure_screen_kiosk "$i"
+        i=$((i + 1))
+    done
+}
+
+# Kiosk-Services früherer Versionen (ein Kiosk je Tool) entfernen
+cleanup_old_kiosks() {
+    local unit
+    for unit in lhtpi-kiosk.service terminboard-kiosk.service safety-cross-kiosk.service; do
+        if [ -f "/etc/systemd/system/${unit}" ]; then
+            systemctl disable --now "${unit}" >/dev/null 2>&1 || true
+            rm -f "/etc/systemd/system/${unit}"
+            log "  alten Kiosk-Service entfernt: ${unit}"
+        fi
+    done
+    rm -f /home/pi/start_lhtpi_kiosk.sh /home/pi/start_terminboard_kiosk.sh
+    systemctl daemon-reload || true
+}
+
+# Welche Tools sind auf diesem Gerät aktiv? (Der Anzeige-Router liest das)
+# Tool-Kennungen der gewählten Tools (eine pro Zeile)
+tools_file_content() {
+    [ "$TOOL_SLIDESHOW" = "1" ] && echo slideshow || true
+    [ "$TOOL_TERMIN" = "1" ] && echo terminboard || true
+    [ "$TOOL_SC" = "1" ] && echo safetycross || true
+    return 0
+}
+
+# Wie viele Bildschirme hat dieses Gerät? (Startwert für die Anzeige-Einstellungen)
+configure_screens_file() {
+    mkdir -p "$(dirname "${SCREENS_FILE}")"
+    echo "${SCREEN_COUNT}" > "${SCREENS_FILE}"
+    chmod 644 "${SCREENS_FILE}"
+    ok "Bildschirme laut Installation: ${SCREEN_COUNT}"
+}
+
+configure_tools_file() {
+    mkdir -p "$(dirname "${TOOLS_FILE}")"
+    tools_file_content > "${TOOLS_FILE}"
+    chmod 644 "${TOOLS_FILE}"
+    ok "Aktivierte Tools: $(tr '\n' ' ' < "${TOOLS_FILE}")"
+}
+
 configure_services() {
     log "Erstelle systemd-Service für Flask-App"
 
@@ -265,111 +464,9 @@ StartLimitBurst=5
 WantedBy=multi-user.target
 EOF
 
-    log "Erstelle Kiosk-Startskript ${KIOSK_SCRIPT}"
-    cat > "${KIOSK_SCRIPT}" <<'EOF'
-#!/bin/bash
-set -u
-
-# Feste Monitor-Zuordnung: HDMI-1 = primär (LHTPi), HDMI-2 rechts daneben (Terminboard)
-xrandr --output HDMI-1 --primary --mode 1920x1080 --pos 0x0 \
-       --output HDMI-2 --mode 1920x1080 --right-of HDMI-1 >/dev/null 2>&1 || true
-
-LOG="/home/pi/lhtpi-kiosk.log"
-APP_URL="http://localhost:8000/present/kiosk"
-READY_URL="http://localhost:8000/login"
-
-mkdir -p "$(dirname "$LOG")"
-touch "$LOG"
-
-echo "$(date '+%F %T') - LHTPi-Kiosk gestartet, warte auf Flask-App" >> "$LOG"
-
-ready=0
-for i in $(seq 1 30); do
-    if curl -fsS --connect-timeout 2 --max-time 5 "$READY_URL" >/dev/null 2>&1; then
-        ready=1
-        echo "$(date '+%F %T') - Flask-App erreichbar, starte Chromium" >> "$LOG"
-        break
-    fi
-    echo "$(date '+%F %T') - Versuch $i/30: Flask-App noch nicht bereit" >> "$LOG"
-    sleep 2
-done
-
-if [ "$ready" -ne 1 ]; then
-    echo "$(date '+%F %T') - Flask-App nach 30 Versuchen nicht erreichbar, starte Chromium trotzdem" >> "$LOG"
-fi
-
-xset s off >/dev/null 2>&1 || true
-xset -dpms >/dev/null 2>&1 || true
-xset s noblank >/dev/null 2>&1 || true
-
-# Mauszeiger: NICHT auf OS-Ebene dauerhaft ausblenden.
-# Das Ausblenden nach Inaktivität und das Wiedereinblenden bei Bewegung macht
-# die Anzeige selbst (tools/kiosk-cursor.js, in allen Kiosk-Seiten eingebunden).
-# Deshalb hier bewusst KEIN `unclutter -idle 0`, kein transparentes Cursor-Thema
-# und keine Chromium-Extension: damit wäre der Zeiger nicht mehr sichtbar zu
-# bekommen. Die Idle-Zeit ist unter „Anzeigen" einstellbar.
-
-CHROMIUM="/usr/bin/chromium-browser"
-[ -x "$CHROMIUM" ] || CHROMIUM="/usr/bin/chromium"
-
-exec "$CHROMIUM" \
-    --app="$APP_URL" \
-    --class=lhtpi-kiosk \
-    --window-position=0,0 \
-    --window-size=1920,1080 \
-    --noerrdialogs \
-    --disable-infobars \
-    --disable-session-crashed-bubble \
-    --disable-features=Translate,TranslateUI \
-    --no-first-run \
-    --check-for-update-interval=31536000 \
-    --autoplay-policy=no-user-gesture-required \
-    --disable-popup-blocking \
-    --disable-translate \
-    --overscroll-history-navigation=0 \
-    --disable-pinch \
-    --disable-context-menu \
-    --password-store=basic \
-    --touch-events=disabled \
-    --simulate-outdated-no-au='01-01-2200' \
-    --disable-component-update \
-    --lang=de \
-    --force-fieldtrials="*Translate/Disabled/" \
-    --disable-gpu \
-    --disable-gpu-compositing \
-    "$APP_URL" >> "$LOG" 2>&1
-EOF
-    chmod +x "${KIOSK_SCRIPT}"
-    chown "${PI_USER}:${PI_GROUP}" "${KIOSK_SCRIPT}"
-    ok "Kiosk-Startskript eingerichtet (Mauszeiger steuert die Seite)"
-
-    log "Erstelle systemd-Service für HDMI-Kiosk"
-    cat > "/etc/systemd/system/${SERVICE_KIOSK}" <<EOF
-[Unit]
-Description=LHTPi - HDMI Chromium Kiosk
-After=graphical.target ${SERVICE_APP}
-Requires=${SERVICE_APP}
-
-[Service]
-Type=simple
-User=${PI_USER}
-Group=${PI_GROUP}
-Environment=DISPLAY=:0
-Environment=XAUTHORITY=/home/${PI_USER}/.Xauthority
-ExecStartPre=/bin/sleep 5
-ExecStart=${KIOSK_SCRIPT}
-Restart=on-failure
-RestartSec=10
-StartLimitIntervalSec=120
-StartLimitBurst=3
-
-[Install]
-WantedBy=graphical.target
-EOF
-
     systemctl daemon-reload
-    systemctl enable "${SERVICE_APP}" "${SERVICE_KIOSK}"
-    ok "systemd-Services erstellt und aktiviert"
+    systemctl enable "${SERVICE_APP}"
+    ok "Verteiler-App installiert und aktiviert (Port ${APP_PORT})"
 }
 
 configure_desktop() {
@@ -409,10 +506,9 @@ EOF
     <move>0</move>
   </resistance>
   <applications>
-    <application class="lhtpi-kiosk"><monitor>1</monitor><decor>no</decor><maximized>yes</maximized></application>
-    <application class="terminboard-kiosk"><monitor>2</monitor><decor>no</decor><maximized>yes</maximized></application>
+    <application class="kiosk-screen1"><monitor>1</monitor><decor>no</decor><maximized>yes</maximized></application>
+    <application class="kiosk-screen2"><monitor>2</monitor><decor>no</decor><maximized>yes</maximized></application>
     <application name="LHTPi*"><monitor>1</monitor><decor>no</decor><maximized>yes</maximized></application>
-    <application name="Terminboard*"><monitor>2</monitor><decor>no</decor><maximized>yes</maximized></application>
   </applications>
 </openbox_config>
 EOF
@@ -479,11 +575,13 @@ configure_firewall() {
     ufw default deny incoming
     ufw default allow outgoing
     ufw allow ssh
-    if [ "$INSTALL_LHTPI" = "1" ]; then
-        ufw allow "${APP_PORT}/tcp"
-    fi
-    if [ "$INSTALL_TERMIN" = "1" ]; then
+    # Verteiler-App trägt Dashboard + Anzeige-Router
+    ufw allow "${APP_PORT}/tcp"
+    if [ "$TOOL_TERMIN" = "1" ]; then
         ufw allow "${TERMIN_PORT}/tcp"
+    fi
+    if [ "$TOOL_SC" = "1" ]; then
+        ufw allow "${SC_PORT}/tcp"
     fi
     ufw --force enable
     ok "Firewall aktiv: SSH + freigegebene App-Ports"
@@ -599,12 +697,27 @@ print_summary() {
     echo "  ✅ ${PROJECT_NAME} Installation abgeschlossen!"
     echo "================================================"
     echo ""
+    echo "  🧩 Tools:         $(tools_file_content | tr '\n' ' ')"
+    echo "  📺 Bildschirme:   ${SCREEN_COUNT}"
+    echo "     Anzeige 1:     ${ROUTER_BASE_URL}/1"
+    if [ "${SCREEN_COUNT}" = "2" ]; then
+        echo "     Anzeige 2:     ${ROUTER_BASE_URL}/2"
+    fi
+    echo ""
     echo "  📡 Access Point:  ${AP_SSID} / ${AP_PASS}"
-    echo "  🌐 AP-Dashboard:  http://192.168.4.1:${APP_PORT}"
-    echo "  🌐 LAN-Dashboard: http://<LAN-IP>:${APP_PORT}"
+    echo "  🌐 Dashboard:     http://192.168.4.1:${APP_PORT}  (bzw. http://<LAN-IP>:${APP_PORT})"
+    echo "  🧭 Anzeigen:      http://<LAN-IP>:${APP_PORT}/display   ← hier einstellen:"
+    echo "                     welches Tool welchen Bildschirm nutzt, Dauer je Tool,"
+    echo "                     und ob mehrere Tools sich einen Bildschirm teilen."
     echo "  🔑 Login:         admin / admin"
     echo ""
-    echo "  📺 HDMI: Chromium-Kiosk mit ${KIOSK_URL}"
+    if [ "$TOOL_TERMIN" = "1" ]; then
+        echo "  🗓️  Terminboard:   http://<LAN-IP>:${TERMIN_PORT}  (admin / admin)"
+    fi
+    if [ "$TOOL_SC" = "1" ]; then
+        echo "  ⛑️  Safety Cross:  http://<LAN-IP>:${SC_PORT}  (admin / admin)"
+    fi
+    echo ""
     echo "  🔗 SSH (LAN): ssh pi@<LAN-IP>"
     echo ""
     echo "  💾 USB-Stick: Ordner 'slides/' im Stick-Root anlegen und einstecken –"
@@ -614,10 +727,6 @@ print_summary() {
     echo "     damit die LAN-IP stabil bleibt."
     echo "-----------------------------------------------"
     echo ""
-    if [ "$INSTALL_TERMIN" = "1" ]; then
-        echo "  🌐 Terminboard:  http://192.168.4.1:${TERMIN_PORT}  (admin / admin)"
-        echo "  📺 HDMI-1:       Terminboard-Kiosk"
-    fi
     if [ "$NO_REBOOT" = "1" ]; then
         echo ""
         echo "  ⚠️  --no-reboot gesetzt: kein automatischer Neustart."
@@ -633,21 +742,40 @@ print_summary() {
 # ── Auswahl ───────────────────────────────────────────────────────────
 
 select_components() {
-    local choice="${1:-}"
-    if [ -z "$choice" ]; then
+    local tools_arg="$1" screens_arg="${2:-}"
+
+    if [ -z "$tools_arg" ]; then
         echo ""
-        echo "  Was möchtest du installieren?"
-        echo "    1) Nur LHTPi (Präsentations-Player)"
-        echo "    2) Nur Terminboard (Anzeigetafel)"
-        echo "    3) Beides (LHTPi + Terminboard)"
-        printf "  Auswahl (1/2/3): "
-        read -r choice
+        echo "  Welche Tools soll dieses Gerät zeigen?"
+        echo "    1) Folien / Playlist   (Slideshow)"
+        echo "    2) Terminboard         (Termine, Kalibrierungen)"
+        echo "    3) Safety Cross        (Arbeitssicherheit)"
+        echo "    Mehrere möglich, z. B. 1,2 oder 1,2,3"
+        printf "  Auswahl: "
+        read -r tools_arg
     fi
-    case "$choice" in
-        1) INSTALL_LHTPI=1; INSTALL_TERMIN=0 ;;
-        2) INSTALL_LHTPI=0; INSTALL_TERMIN=1 ;;
-        3) INSTALL_LHTPI=1; INSTALL_TERMIN=1 ;;
-        *) fail "Ungültige Auswahl '$choice'. Erlaubt: 1, 2, 3" ;;
+
+    TOOL_SLIDESHOW=0; TOOL_TERMIN=0; TOOL_SC=0
+    local t
+    for t in ${tools_arg//,/ }; do
+        case "$t" in
+            1|slideshow|folien)                TOOL_SLIDESHOW=1 ;;
+            2|terminboard|termine)             TOOL_TERMIN=1 ;;
+            3|safetycross|safety-cross|safety) TOOL_SC=1 ;;
+            *) fail "Ungültige Tool-Auswahl '${t}'. Erlaubt: 1,2,3 (oder slideshow,terminboard,safetycross)" ;;
+        esac
+    done
+    if [ $((TOOL_SLIDESHOW + TOOL_TERMIN + TOOL_SC)) -eq 0 ]; then
+        fail "Kein Tool gewählt – mindestens eines angeben."
+    fi
+
+    if [ -z "$screens_arg" ]; then
+        printf "  Wie viele Bildschirme hat das Gerät? (1/2): "
+        read -r screens_arg
+    fi
+    case "${screens_arg:-1}" in
+        1|2) SCREEN_COUNT="$screens_arg" ;;
+        *) fail "Ungültige Bildschirm-Anzahl '${screens_arg}'. Erlaubt: 1 oder 2" ;;
     esac
 }
 
@@ -716,143 +844,162 @@ StartLimitBurst=5
 WantedBy=multi-user.target
 EOF
 
-    log "Erstelle Terminboard-Kiosk-Skript ${TERMIN_KIOSK_SCRIPT}"
-    cat > "${TERMIN_KIOSK_SCRIPT}" <<'EOF'
-#!/bin/bash
-set -u
+    systemctl daemon-reload
+    systemctl enable "${SERVICE_TERMIN_APP}"
+    ok "Terminboard installiert und aktiviert (Port ${TERMIN_PORT})"
+}
 
-# Feste Monitor-Zuordnung: HDMI-1 = primär (LHTPi), HDMI-2 rechts daneben (Terminboard)
-xrandr --output HDMI-1 --primary --mode 1920x1080 --pos 0x0 \
-       --output HDMI-2 --mode 1920x1080 --right-of HDMI-1 >/dev/null 2>&1 || true
+# ── Safety Cross (drittes Tool) ────────────────────────────────────────
 
-LOG="/home/pi/terminboard-kiosk.log"
-APP_URL="http://localhost:8001/board/kiosk"
-READY_URL="http://localhost:8001/login"
-# Position + Größe des zweiten Monitors dynamisch aus der xrandr-Geometrie ermitteln.
-SCREEN1_W=$(xrandr --current 2>/dev/null | awk '$1=="HDMI-1" && $2=="connected"{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+/){split($i,a,"[x+]"); print a[1]; exit}}')
-SCREEN2_W=$(xrandr --current 2>/dev/null | awk '$1=="HDMI-2" && $2=="connected"{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+/){split($i,a,"[x+]"); print a[1]; exit}}')
-SCREEN2_H=$(xrandr --current 2>/dev/null | awk '$1=="HDMI-2" && $2=="connected"{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+/){split($i,a,"[x+]"); print a[2]; exit}}')
-SCREEN2_X="${SCREEN1_W:-1920}"
-SCREEN2_Y="0"
-SCREEN2_W="${SCREEN2_W:-1920}"
-SCREEN2_H="${SCREEN2_H:-1080}"
-# Eigenes Chromium-Profil (NICHT mit LHTPi teilen!)
-PROFILE="/home/pi/.config/chromium-terminboard"
-
-mkdir -p "$(dirname "$LOG")"
-touch "$LOG"
-echo "$(date '+%F %T') - Terminboard-Kiosk gestartet, warte auf Flask-App" >> "$LOG"
-
-ready=0
-for i in $(seq 1 30); do
-    if curl -fsS --connect-timeout 2 --max-time 5 "$READY_URL" >/dev/null 2>&1; then
-        ready=1
-        echo "$(date '+%F %T') - Flask-App erreichbar, starte Chromium" >> "$LOG"
-        break
+prepare_safetycross() {
+    log "Richte Safety Cross unter ${SC_DIR} ein"
+    local src="${SCRIPT_DIR}/tools/safety-cross"
+    if [ ! -d "${src}" ]; then
+        fail "Safety-Cross-Code nicht gefunden: ${src}"
     fi
-    sleep 2
-done
-[ "$ready" -ne 1 ] && echo "$(date '+%F %T') - App nicht erreichbar, starte Chromium trotzdem" >> "$LOG"
+    mkdir -p "${SC_DIR}"
+    local f d
+    for f in app.py auth.py db.py license.py requirements.txt; do
+        [ -f "${src}/${f}" ] && cp "${src}/${f}" "${SC_DIR}/"
+    done
+    for d in templates static; do
+        if [ -d "${src}/${d}" ]; then
+            rm -rf "${SC_DIR:?}/${d}"
+            cp -r "${src}/${d}" "${SC_DIR}/"
+        fi
+    done
+    ok "Safety-Cross-Dateien bereit"
+}
 
-xset s off >/dev/null 2>&1 || true
-xset -dpms >/dev/null 2>&1 || true
-xset s noblank >/dev/null 2>&1 || true
+setup_safetycross_python() {
+    log "Erstelle Safety-Cross-Virtualenv"
+    python3 -m venv "${SC_DIR}/venv"
+    "${SC_DIR}/venv/bin/pip" install --upgrade pip -q
+    "${SC_DIR}/venv/bin/pip" install -q -r "${SC_DIR}/requirements.txt"
+    chown -R "${PI_USER}:${PI_GROUP}" "${SC_DIR}"
+    ok "Safety-Cross-Python-Umgebung fertig"
+}
 
-mkdir -p "$PROFILE"
-CHROMIUM="/usr/bin/chromium-browser"
-[ -x "$CHROMIUM" ] || CHROMIUM="/usr/bin/chromium"
+configure_safetycross_app() {
+    log "Richte Safety Cross ein (Datenbank, Login, Hardware-Lizenz)"
+    ( cd "${SC_DIR}" && "${SC_DIR}/venv/bin/python" -c \
+        "import db, auth; db.init_db(); auth.init_admin_password('admin'); print('DB ok')" )
 
-exec "$CHROMIUM" \
-    --app="$APP_URL" \
-    --class=terminboard-kiosk \
-    --user-data-dir="$PROFILE" \
-    --window-position="${SCREEN2_X},${SCREEN2_Y}" \
-    --window-size="${SCREEN2_W},${SCREEN2_H}" \
-    --noerrdialogs \
-    --disable-infobars \
-    --disable-session-crashed-bubble \
-    --disable-features=Translate,TranslateUI \
-    --no-first-run \
-    --check-for-update-interval=31536000 \
-    --autoplay-policy=no-user-gesture-required \
-    --disable-popup-blocking \
-    --disable-translate \
-    --disable-context-menu \
-    --password-store=basic \
-    --lang=de \
-    --disable-gpu \
-    --disable-gpu-compositing >> "$LOG" 2>&1
-EOF
-    chmod +x "${TERMIN_KIOSK_SCRIPT}"
-    chown "${PI_USER}:${PI_GROUP}" "${TERMIN_KIOSK_SCRIPT}"
+    if [ ! -f "${SC_DIR}/.secret" ]; then
+        tr -dc 'A-Za-z0-9' </dev/urandom | head -c 48 > "${SC_DIR}/.secret" || true
+        chmod 600 "${SC_DIR}/.secret"
+    fi
+    if ( cd "${SC_DIR}" && SAFETY_SECRET_FILE="${SC_DIR}/.secret" \
+         "${SC_DIR}/venv/bin/python" "${SC_DIR}/license.py" --make-key >/dev/null 2>&1 ); then
+        ok "Hardware-Lizenz für dieses Gerät erzeugt"
+    else
+        warn "Lizenz-Key konnte nicht erzeugt werden (kein Pi?) – App läuft im Entwicklungsmodus"
+    fi
 
-    log "Erstelle Terminboard-Kiosk-Service"
-    cat > "/etc/systemd/system/${SERVICE_TERMIN_KIOSK}" <<EOF
+    cat > "/etc/systemd/system/${SERVICE_SC_APP}" <<EOF
 [Unit]
-Description=Terminboard - HDMI Chromium Kiosk (zweiter Monitor)
-After=graphical.target ${SERVICE_TERMIN_APP}
-Requires=${SERVICE_TERMIN_APP}
+Description=Safety Cross - Flask Web-App
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
 User=${PI_USER}
 Group=${PI_GROUP}
-Environment=DISPLAY=:0
-Environment=XAUTHORITY=/home/${PI_USER}/.Xauthority
-ExecStartPre=/bin/sleep 5
-ExecStart=${TERMIN_KIOSK_SCRIPT}
-Restart=on-failure
-RestartSec=10
+WorkingDirectory=${SC_DIR}
+Environment=PYTHONUNBUFFERED=1
+Environment=PORT=${SC_PORT}
+Environment=SAFETY_SECRET_FILE=${SC_DIR}/.secret
+Environment=SAFETY_LICENSE=${SC_DIR}/license.key
+ExecStart=${SC_DIR}/venv/bin/python ${SC_DIR}/app.py
+Restart=always
+RestartSec=5
 StartLimitIntervalSec=120
-StartLimitBurst=3
+StartLimitBurst=5
 
 [Install]
-WantedBy=graphical.target
+WantedBy=multi-user.target
 EOF
 
-    systemctl enable "${SERVICE_TERMIN_APP}" "${SERVICE_TERMIN_KIOSK}"
-    ok "Terminboard-Services aktiviert"
+    chown -R "${PI_USER}:${PI_GROUP}" "${SC_DIR}"
+    systemctl daemon-reload
+    systemctl enable "${SERVICE_SC_APP}"
+    ok "Safety Cross installiert und aktiviert (Port ${SC_PORT})"
+}
+
+usage() {
+    cat <<'USAGE_EOF'
+Aufruf: sudo bash install.sh [Optionen]
+
+  --tools=1,2,3     Tools: 1=Folien   2=Terminboard   3=Safety Cross
+                    (auch Namen: slideshow,terminboard,safetycross)
+  --screens=1|2     Anzahl der Bildschirme (Standard: 1)
+  --no-reboot       nicht automatisch neu starten
+  -h, --help        diese Hilfe
+
+Ohne Optionen fragt das Skript interaktiv nach Tools und Bildschirmen.
+USAGE_EOF
 }
 
 # ── Hauptprogramm ──────────────────────────────────────────────────────
 main() {
     echo "================================================"
-    echo "  ${PROJECT_NAME} + Terminboard Installation"
+    echo "  ${PROJECT_NAME} - Multitool-Kiosk Installation"
     echo "  Raspberry Pi OS Desktop (Trixie)"
     echo "================================================"
+
+    local selection="" screens=""
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help)   usage; exit 0 ;;
+            --no-reboot) NO_REBOOT=1 ;;
+            --tools=*)   selection="${arg#--tools=}" ;;
+            --screens=*) screens="${arg#--screens=}" ;;
+            -*)          fail "Unbekannte Option '${arg}' (siehe --help)" ;;
+            *)           selection="$arg" ;;
+        esac
+    done
 
     require_root
     require_desktop_target
     ensure_pi_user
 
-    # Auswahl: 1) LHTPi  2) Terminboard  3) Beides  (optional als Argument)
-    local selection=""
-    for arg in "$@"; do
-        case "$arg" in
-            --no-reboot) NO_REBOOT=1 ;;
-            1|2|3) selection="$arg" ;;
-        esac
-    done
-    select_components "$selection"
+    select_components "$selection" "$screens"
+
+    echo ""
+    echo "  Gewählte Tools: $(tools_file_content | tr '\n' ' ')"
+    echo "  Bildschirme:    ${SCREEN_COUNT}"
+    echo ""
 
     install_packages
-    if [ "$INSTALL_LHTPI" = "1" ]; then
-        prepare_project
-        setup_python
-    fi
-    if [ "$INSTALL_TERMIN" = "1" ]; then
+
+    # Die Verteiler-App (Dashboard + Anzeige-Router + Lizenz) ist immer dabei,
+    # sie zeigt die gewählten Tools an.
+    prepare_project
+    setup_python
+    if [ "$TOOL_TERMIN" = "1" ]; then
         prepare_termin
         setup_termin_python
     fi
+    if [ "$TOOL_SC" = "1" ]; then
+        prepare_safetycross
+        setup_safetycross_python
+    fi
+
     backup_configs
     configure_network
-    if [ "$INSTALL_LHTPI" = "1" ]; then
-        configure_services
-    fi
-    if [ "$INSTALL_TERMIN" = "1" ]; then
+    configure_services
+    if [ "$TOOL_TERMIN" = "1" ]; then
         configure_terminboard
     fi
+    if [ "$TOOL_SC" = "1" ]; then
+        configure_safetycross_app
+    fi
+    configure_tools_file
+    configure_screens_file
+    cleanup_old_kiosks
     configure_desktop
+    configure_screens
     configure_policies
     configure_firewall
     configure_usb_automount
@@ -860,4 +1007,7 @@ main() {
     print_summary
 }
 
-main "$@"
+# Nur ausführen, wenn direkt gestartet (nicht beim Sourcen in Tests)
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+    main "$@"
+fi

@@ -60,6 +60,8 @@ for path in TARGETS:
 install = open(INSTALL).read()
 ok(not re.search(r'^\s*unclutter\b', install, re.M),
    'install.sh startet unclutter nicht mehr (blendet den Zeiger dauerhaft aus)')
+ok('unclutter-xfixes' not in install,
+   'unclutter-Paket wird auch nicht mehr installiert')
 ok('hidecursor' not in install, 'install.sh installiert keine Cursor-Hide-Extension mehr')
 ok('Transparent/cursors' not in install, 'install.sh legt kein transparentes Cursor-Thema mehr an')
 ok('XCURSOR_THEME=Transparent' not in install, 'install.sh setzt kein transparentes Cursor-Thema mehr')
