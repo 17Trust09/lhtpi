@@ -36,8 +36,13 @@ def verbinde(display_name: str | None):
     info = d.query_extension('XFIXES')
     if info is None:
         raise RuntimeError('XFIXES fehlt am X-Server')
-    # Erst damit haengt python-xlib die Aufrufe an die Fensterobjekte.
-    xfixes.init(d, info)
+    # Erst damit haengt python-xlib die Aufrufe an die Fensterobjekte. Ist die
+    # Erweiterung schon eingerichtet (macht python-xlib beim Verbinden selbst),
+    # meldet init() einen Fehler - dann sind die Methoden aber bereits da.
+    try:
+        xfixes.init(d, info)
+    except Exception:
+        pass
     root = d.screen().root
 
     def verstecken(fenster):
