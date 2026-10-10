@@ -524,6 +524,88 @@ ok('unclutter -idle' not in _inst and 'unclutter\\n' not in _inst,
 ok(os.path.exists(os.path.join(os.path.dirname(os.path.abspath(__file__)),
                               'tools', 'kiosk-cursor-x11.py')),
    'Helfer tools/kiosk-cursor-x11.py ist vorhanden')
+
+print('\n20) DS3231-Hardware-Uhr mit automatischem Fallback')
+ok('dtparam=i2c_arm=on' in text and 'dtoverlay=i2c-rtc,ds3231' in text,
+   'Installer aktiviert I2C und das DS3231-Overlay idempotent')
+ok('RTC_DEVICE=/dev/rtc0' in text and 'hwclock --hctosys --utc' in text,
+   'beim Boot wird eine erkannte Hardware-Uhr automatisch gelesen')
+ok('hwclock --systohc --utc' in text,
+   'korrekte Systemzeit wird in eine erkannte Hardware-Uhr geschrieben')
+ok('SAVE=/etc/fake-hwclock.data' in text and 'date -s' in text,
+   'ohne RTC bleibt die bisherige fake-hwclock-Rückfallebene erhalten')
+ok('rtc_plausibel' in text and 'minimum_epoch' in text and 'ersatz_epoch' in text,
+   'uninitialisierte oder unplausible RTC wird nicht blind übernommen')
+ok('DS3231 aus gespeicherter Ersatzzeit initialisiert' in text,
+   'eine uninitialisierte RTC wird aus der Ersatzzeit initialisiert')
+ok('RTC nicht bereit' in text or 'RTC nicht erkannt' in text,
+   'Uhr-Helfer protokolliert den Fallback verständlich')
+ok('After=systemd-modules-load.service systemd-udev-trigger.service' in text,
+   'Boot-Service wartet auf Modulladen und udev-Geräteerzeugung')
+ok('DefaultDependencies=no' in text and 'Before=shutdown.target' in text,
+   'Uhr wird beim Herunterfahren vor shutdown.target gesichert')
+
+# Den tatsächlich erzeugten Helfer mit einer simulierten RTC ausführen.
+rtc_match = re.search(
+    r"cat > /usr/local/sbin/lhtpi-hwclock <<'EOF'\n(.*?)\nEOF", text, re.S)
+ok(rtc_match is not None, 'RTC-Helfer lässt sich vollständig aus dem Installer extrahieren')
+if rtc_match:
+    RTC_TEST = tempfile.mkdtemp(prefix='lhtpi-rtc-')
+    RTC_DEV = os.path.join(RTC_TEST, 'rtc0')
+    RTC_SYS = os.path.join(RTC_TEST, 'sys-rtc0')
+    RTC_SAVE = os.path.join(RTC_TEST, 'fake-hwclock.data')
+    RTC_BIN = os.path.join(RTC_TEST, 'bin')
+    RTC_LOG = os.path.join(RTC_TEST, 'hwclock.log')
+    DATE_LOG = os.path.join(RTC_TEST, 'date-set.log')
+    os.makedirs(RTC_SYS)
+    os.makedirs(RTC_BIN)
+    open(RTC_DEV, 'w').close()
+    helper = rtc_match.group(1)
+    helper = helper.replace('/sys/class/rtc/rtc0', RTC_SYS)
+    helper = helper.replace('/etc/fake-hwclock.data', RTC_SAVE)
+    helper = helper.replace('/dev/rtc0', RTC_DEV)
+    helper_path = os.path.join(RTC_TEST, 'lhtpi-hwclock')
+    open(helper_path, 'w').write(helper + '\n')
+    os.chmod(helper_path, 0o755)
+    open(os.path.join(RTC_BIN, 'hwclock'), 'w').write(
+        '#!/bin/sh\nprintf "%s\\n" "$*" >> "$HWCLOCK_LOG"\nexit 0\n')
+    open(os.path.join(RTC_BIN, 'date'), 'w').write(
+        '#!/bin/sh\nif [ "${1:-}" = "-s" ]; then printf "%s\\n" "$*" >> "$DATE_SET_LOG"; exit 0; fi\n'
+        'exec /usr/bin/date "$@"\n')
+    for prog in ('hwclock', 'date'):
+        os.chmod(os.path.join(RTC_BIN, prog), 0o755)
+    rtc_env = dict(os.environ, PATH=RTC_BIN + os.pathsep + os.environ['PATH'],
+                   HWCLOCK_LOG=RTC_LOG, DATE_SET_LOG=DATE_LOG)
+
+    open(RTC_SAVE, 'w').write('2026-10-10 10:00:00\n')
+    open(os.path.join(RTC_SYS, 'date'), 'w').write('2026-10-11\n')
+    open(os.path.join(RTC_SYS, 'time'), 'w').write('11:00:00\n')
+    r = subprocess.run([helper_path, 'load'], env=rtc_env,
+                       capture_output=True, text=True)
+    hwlog = open(RTC_LOG).read() if os.path.exists(RTC_LOG) else ''
+    ok(r.returncode == 0 and '--hctosys --utc' in hwlog and '--systohc' not in hwlog,
+       'plausible RTC wird beim Boot tatsächlich als Systemzeit übernommen')
+
+    open(RTC_LOG, 'w').close()
+    open(os.path.join(RTC_SYS, 'date'), 'w').write('2000-01-01\n')
+    r = subprocess.run([helper_path, 'load'], env=rtc_env,
+                       capture_output=True, text=True)
+    hwlog = open(RTC_LOG).read()
+    ok(r.returncode == 0 and '--hctosys' not in hwlog and '--systohc --utc' in hwlog,
+       'uninitialisierte RTC wird abgelehnt und aus dem Fallback initialisiert')
+    datelog = open(DATE_LOG).read() if os.path.exists(DATE_LOG) else ''
+    ok('-s 2026-10-10 10:00:00' in datelog,
+       'Fallback-Pfad setzt vor der RTC-Initialisierung wirklich die Ersatzzeit')
+
+    open(RTC_LOG, 'w').close()
+    open(RTC_SAVE, 'w').write('ALT\n')
+    r = subprocess.run([helper_path, 'save'], env=rtc_env,
+                       capture_output=True, text=True)
+    hwlog = open(RTC_LOG).read()
+    ersatz = open(RTC_SAVE).read().strip()
+    ok(r.returncode == 0 and '--systohc --utc' in hwlog and ersatz != 'ALT',
+       'Speichern aktualisiert gleichzeitig DS3231 und SD-Fallback')
+
 print('\n%s%d Prüfungen bestanden, %d fehlgeschlagen'
       % ('OK – ' if failed == 0 else 'FEHLER – ', passed, failed))
 sys.exit(1 if failed else 0)

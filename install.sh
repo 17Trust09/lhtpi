@@ -1014,23 +1014,94 @@ EOF
 }
 
 configure_clock() {
-    log "Richte offline-fähige Uhr ein (mini fake-hwclock, kein RTC/NTP)"
+    log "Richte offline-fähige Uhr ein (DS3231 automatisch, sonst fake-hwclock)"
 
-    # Skript: Zeit bei 'load' wiederherstellen, bei 'save' auf Disk schreiben.
+    # I2C und DS3231-Kerneltreiber dauerhaft aktivieren. Das Overlay ist auch
+    # ohne angeschlossenes Modul harmlos; /dev/rtc0 erscheint nur mit RTC.
+    local boot_config
+    if [ -f /boot/firmware/config.txt ]; then
+        boot_config=/boot/firmware/config.txt
+    else
+        boot_config=/boot/config.txt
+    fi
+    touch "${boot_config}"
+    grep -qxF 'dtparam=i2c_arm=on' "${boot_config}" || echo 'dtparam=i2c_arm=on' >> "${boot_config}"
+    grep -qxF 'dtoverlay=i2c-rtc,ds3231' "${boot_config}" || echo 'dtoverlay=i2c-rtc,ds3231' >> "${boot_config}"
+
+    # Ein Helfer für beide Fälle: echte RTC lesen/schreiben, andernfalls die
+    # zuletzt gespeicherte Zeit von der SD-Karte verwenden. Beim Boot kurz auf
+    # udev warten, damit ein vorhandenes /dev/rtc0 nicht übersehen wird.
     cat > /usr/local/sbin/lhtpi-hwclock <<'EOF'
 #!/bin/bash
+set -u
 SAVE=/etc/fake-hwclock.data
+RTC_DEVICE=/dev/rtc0
+RTC_SYSFS=/sys/class/rtc/rtc0
+meldung() { logger -t lhtpi-clock -- "$*" 2>/dev/null || true; }
+
+rtc_plausibel() {
+  local rtc_epoch minimum_epoch ersatz_epoch
+  [ -r "$RTC_SYSFS/date" ] && [ -r "$RTC_SYSFS/time" ] || return 1
+  rtc_epoch=$(date -u -d "$(cat "$RTC_SYSFS/date") $(cat "$RTC_SYSFS/time")" +%s 2>/dev/null) || return 1
+  minimum_epoch=$(date -u -d '2024-01-01 00:00:00' +%s)
+  [ "$rtc_epoch" -ge "$minimum_epoch" ] || return 1
+
+  # Die beim Installieren gespeicherte Zeit ist der Vertrauensanker. Die RTC
+  # darf höchstens einen Tag hinter diesem Anker und bis zu fünf Jahre danach
+  # liegen – so bleiben lange Lagerzeiten erlaubt, typische 2000/2099-Werkswerte
+  # werden aber nicht blind übernommen.
+  if [ -f "$SAVE" ]; then
+    ersatz_epoch=$(date -d "$(cat "$SAVE")" +%s 2>/dev/null) || return 1
+    [ "$rtc_epoch" -ge "$((ersatz_epoch - 86400))" ] || return 1
+    [ "$rtc_epoch" -le "$((ersatz_epoch + 157788000))" ] || return 1
+  fi
+}
+
 case "${1:-}" in
-  save) date '+%Y-%m-%d %H:%M:%S' > "$SAVE" ;;
-  load) [ -f "$SAVE" ] && date -s "$(cat "$SAVE")" >/dev/null 2>&1 ;;
+  load)
+    for _ in $(seq 1 10); do
+      if [ -e "$RTC_DEVICE" ]; then
+        if rtc_plausibel && hwclock --hctosys --utc; then
+          meldung "DS3231 erkannt: plausible Systemzeit aus Hardware-Uhr geladen"
+          exit 0
+        fi
+        break
+      fi
+      sleep 0.5
+    done
+    meldung "RTC nicht bereit oder unplausibel: verwende gespeicherte Ersatzzeit"
+    if [ -f "$SAVE" ] && date -s "$(cat "$SAVE")" >/dev/null 2>&1; then
+      # Eine neue/uninitialisierte RTC sofort aus dem verlässlichen Fallback
+      # initialisieren, damit bereits der nächste Offline-Boot korrekt ist.
+      if [ -e "$RTC_DEVICE" ] && hwclock --systohc --utc; then
+        meldung "DS3231 aus gespeicherter Ersatzzeit initialisiert"
+      fi
+    fi
+    ;;
+  save)
+    # Die Ersatzdatei immer aktuell halten. So bleibt auch nach einem späteren
+    # Batterie-/RTC-Ausfall ein frischer Vertrauensanker erhalten.
+    date '+%Y-%m-%d %H:%M:%S' > "$SAVE"
+    if [ -e "$RTC_DEVICE" ] && hwclock --systohc --utc; then
+      meldung "Systemzeit in DS3231 gespeichert"
+    else
+      meldung "RTC nicht erkannt: Systemzeit als Ersatz auf SD-Karte gespeichert"
+    fi
+    ;;
+  *)
+    echo "Nutzung: $0 load|save" >&2
+    exit 2
+    ;;
 esac
 EOF
     chmod +x /usr/local/sbin/lhtpi-hwclock
 
-    # Boot: Zeit laden (vor time-sync.target, damit NTP sie nicht überschreibt)
+    # Boot: RTC bzw. Ersatzzeit vor time-sync.target laden. NTP darf sie danach
+    # korrigieren; der Timer schreibt die korrigierte Zeit später zurück.
     cat > /etc/systemd/system/lhtpi-fake-hwclock.service <<'EOF'
 [Unit]
-Description=Restore clock from disk (offline Pi, no RTC)
+Description=Restore clock from DS3231 or disk fallback
+After=systemd-modules-load.service systemd-udev-trigger.service
 Before=time-sync.target
 
 [Service]
@@ -1042,10 +1113,12 @@ RemainAfterExit=yes
 WantedBy=sysinit.target
 EOF
 
-    # Shutdown: Zeit speichern
+    # Shutdown: Zeit in RTC oder Ersatzdatei sichern.
     cat > /etc/systemd/system/lhtpi-fake-hwclock-save.service <<'EOF'
 [Unit]
-Description=Save clock to disk (offline Pi)
+Description=Save clock to DS3231 or disk fallback
+DefaultDependencies=no
+Before=shutdown.target
 
 [Service]
 Type=oneshot
@@ -1055,7 +1128,7 @@ ExecStart=/usr/local/sbin/lhtpi-hwclock save
 WantedBy=shutdown.target
 EOF
 
-    # Alle 15 Minuten speichern
+    # Alle 15 Minuten sichern; bei vorhandener RTC wird diese aktualisiert.
     cat > /etc/systemd/system/lhtpi-fake-hwclock-save.timer <<'EOF'
 [Unit]
 Description=Save clock every 15 min
@@ -1072,7 +1145,7 @@ EOF
     systemctl enable lhtpi-fake-hwclock.service lhtpi-fake-hwclock-save.service lhtpi-fake-hwclock-save.timer
     /usr/local/sbin/lhtpi-hwclock save
 
-    ok "Uhr-Speicherung eingerichtet (Boot=load, Shutdown+15min=save)"
+    ok "Uhr eingerichtet (DS3231 wird automatisch erkannt, sonst SD-Fallback)"
 }
 
 print_summary() {
