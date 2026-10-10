@@ -161,16 +161,23 @@ ok('wlan0: bleibt unangetastet' in text, 'WLAN bleibt unberührt')
 
 print('\n10) Ersteinrichtung auf dem Bildschirm')
 ok('lhtpi-setup.service' in text, 'Service für die Ersteinrichtung')
-ok('ConditionPathExists=!${MARKER_FILE}' not in text,
-   'Anzeigen-Seite erscheint beim Booten immer (Einstiegspunkt am Gerät)')
 ok('ConditionPathExists=${MARKER_FILE}' in text,
    'Kiosk-Fenster starten erst nach der Einrichtung')
-ok('systemctl disable "${service}"' in text,
-   'Kiosk-Fenster starten nicht beim Booten (sonst zwei Fenster übereinander)')
+ok('systemctl enable lhtpi-anzeige.service' in text,
+   'Boot-Steuerung ist für spätere Neustarts aktiviert')
+ok('systemctl disable lhtpi-setup.service' in text,
+   'Einrichtungsfenster startet nicht ungefragt bei jedem Boot')
+ok('if [ ! -f "${INSTALLED}" ]; then' in text
+   and 'systemctl start lhtpi-setup.service' in text,
+   'Boot-Steuerung öffnet die Einrichtung nur ohne Installationsmerkmal')
 ok('SCREEN2_FILE' in text and 'screen2' in text,
    'zweiter Bildschirm hat ein eigenes Merkmal')
-ok('lhtpi-anzeige.path' in text and 'PathChanged=${SCREENS_FILE}' in text,
-   'Pfad-Wächter reagiert auf Änderungen der Bildschirm-Anzahl')
+ok('lhtpi-anzeige.path' in text
+   and 'PathChanged=${MARKER_FILE}' in text
+   and 'PathChanged=${SCREENS_FILE}' in text,
+   'Pfad-Wächter reagiert flankengesteuert auf Abschluss und Bildschirm-Anzahl')
+ok('PathExists=${MARKER_FILE}' not in text.split('cat > /etc/systemd/system/lhtpi-anzeige.path', 1)[1],
+   'dauerhaft vorhandenes Merkmal löst keine systemd-Startschleife aus')
 ok('localhost:${APP_PORT}/display' in text or '/display' in text,
    'Ersteinrichtung zeigt die Anzeigen-Seite')
 ok('chmod 775' in text, 'Konfigurationsordner ist für die App schreibbar')
@@ -461,8 +468,8 @@ with open(os.path.join(LZ, 'screens'), 'w') as f:
     f.write('1\n')
 
 rufe = steuere(marker_da=False)
-ok('lhtpi-setup.service' not in rufe,
-   'ohne Abschluss bleibt die Anzeigen-Seite stehen (kein Schwarz)')
+ok('start lhtpi-setup.service' in rufe,
+   'ohne Abschluss startet die Ersteinrichtung statt eines schwarzen Bildschirms')
 ok('kiosk-screen1.service' not in rufe, 'und es wird kein Kiosk gestartet')
 
 rufe = steuere(marker_da=True)

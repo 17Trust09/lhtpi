@@ -415,10 +415,11 @@ case "$n" in
     *) n=1 ;;
 esac
 
-# Ohne abgeschlossene Einrichtung bleibt die Anzeigen-Seite stehen. Sonst
-# wäre der Bildschirm schwarz, weil kein Kiosk-Fenster übernimmt (Speichern
-# allein darf die Seite nicht wegnehmen).
+# Beim Booten entscheidet ausschließlich das dauerhafte Installationsmerkmal:
+# ohne Merkmal kommt die Ersteinrichtung, mit Merkmal sofort die gespeicherte
+# Anzeige. So braucht ein eingerichtetes Gerät nach Stromausfall keinen Klick.
 if [ ! -f "${INSTALLED}" ]; then
+    systemctl start lhtpi-setup.service 2>/dev/null || true
     exit 0
 fi
 
@@ -476,8 +477,8 @@ configure_setup_mode() {
 Description=Ersteinrichtung - Anzeigen-Seite auf dem Bildschirm
 After=${SERVICE_APP}
 Requires=${SERVICE_APP}
-# Immer beim Booten: das Gerät landet auf der Anzeigen-Seite. Ist es schon
-# eingerichtet, startet die Anzeige von dort automatisch (Knopf oder Countdown).
+# Wird nur von der Boot-Steuerung bzw. als Fehler-Fallback gestartet. Ist das
+# Gerät eingerichtet, startet die Steuerung direkt die gespeicherte Anzeige.
 
 [Service]
 Type=simple
@@ -501,10 +502,15 @@ EOF
     cat > /etc/systemd/system/lhtpi-anzeige.service <<EOF
 [Unit]
 Description=Anzeigen passend zur Einrichtung starten oder stoppen
+After=${SERVICE_APP}
+Requires=${SERVICE_APP}
 
 [Service]
 Type=oneshot
 ExecStart=${steuer}
+
+[Install]
+WantedBy=multi-user.target
 EOF
 
     cat > /etc/systemd/system/lhtpi-anzeige.path <<EOF
@@ -513,7 +519,9 @@ Description=Wacht ueber Einrichtung und Bildschirm-Anzahl
 After=${SERVICE_APP}
 
 [Path]
-PathExists=${MARKER_FILE}
+# Flankengesteuert: PathExists würde bei dauerhaft vorhandenem Merkmal das
+# oneshot-Service unmittelbar immer wieder starten (StartLimit-Hit).
+PathChanged=${MARKER_FILE}
 PathChanged=${SCREENS_FILE}
 Unit=lhtpi-anzeige.service
 
@@ -522,9 +530,13 @@ WantedBy=paths.target
 EOF
 
     systemctl daemon-reload
-    systemctl enable lhtpi-setup.service >/dev/null 2>&1 || true
+    # Nicht die Einstellungsseite selbst startet beim Boot, sondern die
+    # Steuerung oben. Sie prüft /etc/lhtpi/installed und wählt dann sicher
+    # zwischen Ersteinrichtung und gespeicherter Anzeige.
+    systemctl disable lhtpi-setup.service >/dev/null 2>&1 || true
+    systemctl enable lhtpi-anzeige.service >/dev/null 2>&1 || true
     systemctl enable --now lhtpi-anzeige.path >/dev/null 2>&1 || true
-    ok "Ersteinrichtung bereit: beim ersten Booten erscheint die Anzeigen-Seite"
+    ok "Boot-Steuerung bereit: Ersteinrichtung nur beim ersten Start"
 }
 
 # Kiosk-Services früherer Versionen (ein Kiosk je Tool) entfernen
