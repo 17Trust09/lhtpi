@@ -154,3 +154,5 @@ def test_admin_system_card_shows_device_bound_license_notice():
     assert "Lizenzhinweis" in html
     assert "an diesen Raspberry Pi gebunden" in html
     assert "neue Lizenz erforderlich" in html
+    assert "Tim Hölzer" in html
+    assert "T/AO 451" in html
