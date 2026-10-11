@@ -105,6 +105,8 @@ ok(guard.index('xset dpms force on') < guard.index('xset -dpms'),
    'DPMS wird erst aufgeweckt und danach deaktiviert')
 ok('while true' in guard and 'xrandr --query' in guard,
    'Waechter erkennt einen erst spaeter eingeschalteten Monitor')
+ok("{print $0}" in guard and "{print $1, $2, $3}" not in guard,
+   'Waechter erkennt auch einen verbundenen, aber deaktivierten Ausgang')
 ok('HDMI-1 HDMI-2' in guard and '--primary --auto --pos 0x0' in guard,
    'erster angeschlossener HDMI-Port wird automatisch als Hauptanzeige aktiviert')
 ok('configure_display_guard' in text.split('main()')[1],

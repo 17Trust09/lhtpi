@@ -49,7 +49,7 @@ while true; do
     xset -dpms >/dev/null 2>&1 || true
     xset s noblank >/dev/null 2>&1 || true
 
-    zustand="$(xrandr --query 2>/dev/null | awk '$1 ~ /^HDMI-[12]$/ {print $1, $2, $3}')"
+    zustand="$(xrandr --query 2>/dev/null | awk '$1 ~ /^HDMI-[12]$/ {print $0}')"
     if [ -n "${zustand}" ] && [ "${zustand}" != "${letzter_zustand}" ]; then
         angeschlossen=""
         for ausgang in HDMI-1 HDMI-2; do
