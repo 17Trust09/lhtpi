@@ -145,3 +145,12 @@ def test_admin_activity_keeps_session_open():
     assert '"input"' in html
     assert '"change"' in html
     assert '"focusin"' in html
+
+
+def test_admin_system_card_shows_device_bound_license_notice():
+    client = app.test_client()
+    client.post("/login", data={"password": "admin"})
+    html = client.get("/admin").get_data(as_text=True)
+    assert "Lizenzhinweis" in html
+    assert "an diesen Raspberry Pi gebunden" in html
+    assert "neue Lizenz erforderlich" in html

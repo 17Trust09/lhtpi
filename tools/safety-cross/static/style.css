@@ -262,6 +262,12 @@
     cursor:pointer;font-size:13px;line-height:1;
   }
   .hint{font-size:13px;color:var(--muted);margin-top:10px}
+  .license-note{
+    display:flex;align-items:flex-start;gap:10px;margin:0 0 16px;padding:12px 14px;
+    border:1px solid #e8d79a;border-radius:10px;background:#fff9df;color:var(--ink);
+    font-size:13px;line-height:1.45;
+  }
+  .license-note strong{color:var(--navy);white-space:nowrap}
 
   .admin-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;max-width:520px;margin:0 auto}
   .admin-grid .day{cursor:pointer;transition:transform .08s}

@@ -119,6 +119,10 @@
   <div class="card">
     <h3><span class="ico">⏻</span> System</h3>
     <p class="hint" style="margin:0 0 14px">Raspberry Pi sicher neu starten oder herunterfahren (statt Strom zu ziehen).</p>
+    <div class="license-note">
+      <strong>🔐 Lizenzhinweis</strong>
+      <span>Diese Installation ist an diesen Raspberry Pi gebunden. Bei einem Gerätewechsel oder einer kopierten SD-Karte ist eine neue Lizenz erforderlich.</span>
+    </div>
     <div class="field">
       <form method="post" action="{{ url_for('admin_reboot') }}" onsubmit="return confirm('Raspberry Pi wirklich neu starten?')">
         <button class="btn" type="submit">Neustart</button>
