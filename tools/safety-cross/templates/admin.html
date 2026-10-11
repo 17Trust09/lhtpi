@@ -17,7 +17,7 @@
       <p>Abteilung, Meister, Ersthelfer, Notruf &amp; Unfälle verwalten.</p>
     </div>
     <div class="admin-actions">
-      <span class="logout-timer" id="logout-timer">Logout in 60 s</span>
+      <span class="logout-timer" id="logout-timer">Logout in 300 s</span>
       <a class="btn ghost" href="{{ url_for('logout') }}">Abmelden</a>
     </div>
   </div>
@@ -139,9 +139,9 @@
 </div>
 
 <script>
-  // Auto-Logout nach 60 s Inaktivität — mit sichtbarem Countdown
+  // Auto-Logout nach 5 min echter Inaktivität — mit sichtbarem Countdown
   (function () {
-    var LOGOUT_MS = 60000, remaining = LOGOUT_MS / 1000, logoutTimer, tickTimer;
+    var LOGOUT_MS = 300000, remaining = LOGOUT_MS / 1000, logoutTimer, tickTimer;
     var el = document.getElementById('logout-timer');
     function render() {
       if (el) el.textContent = 'Logout in ' + Math.max(remaining, 0) + ' s';
@@ -161,7 +161,7 @@
       startTicker();
       logoutTimer = setTimeout(function () { window.location.href = "{{ url_for('logout') }}?next=/"; }, LOGOUT_MS);
     }
-    ["mousemove", "mousedown", "keydown", "touchstart", "click", "scroll", "wheel"].forEach(function (evt) {
+    ["mousemove", "mousedown", "keydown", "touchstart", "click", "scroll", "wheel", "input", "change", "focusin"].forEach(function (evt) {
       document.addEventListener(evt, reset, true);
     });
     reset();

@@ -549,8 +549,14 @@ ok('bottom:3.2rem' not in seite,
 ok("e.data.lhtpi === 'maus'" in seite,
    'der Knopf kommt bei Mausbewegung im Tool zurueck (postMessage)')
 ok('postMessage' in open(os.path.join(BASE, 'tools', 'kiosk-cursor.js'),
-                          encoding='utf-8').read(),
+                           encoding='utf-8').read(),
    'die Tools melden ihre Mausbewegung an die Anzeige')
+cursor_referenz = open(os.path.join(BASE, 'tools', 'kiosk-cursor.js'),
+                       encoding='utf-8').read()
+ok("lhtpi: 'aktiv'" in cursor_referenz and "'input'" in cursor_referenz and "'focusin'" in cursor_referenz,
+   'Maus, Tastatur und Formulare melden Aktivität an den Anzeige-Rahmen')
+ok("e.data.lhtpi === 'aktiv'" in seite and "window.addEventListener('message'" in seite,
+   'Aktivität im Tool setzt den Cursor-Timer des Anzeige-Rahmens zurück')
 ok('im Wartungsbetrieb dauerhaft sichtbar' in seite,
    'im Wartungsbetrieb bleibt er dauerhaft sichtbar '
    '(ueber bedienbaren Tools gibt es keine Mausbewegung mehr)')

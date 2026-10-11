@@ -151,7 +151,7 @@
      diese Seite selbst keine Bewegung mehr mit. Der Knopf kommt dann zurueck.
      (Kein Origin-Vergleich - die Tools laufen auf eigenen Ports.) */
   window.addEventListener('message', function (e) {
-    if (e.data && e.data.lhtpi === 'maus') zeigen();
+    if (e.data && (e.data.lhtpi === 'maus' || e.data.lhtpi === 'aktiv')) zeigen();
   });
   window.__lhtpiZeigenKnopf = zeigen;      /* fuer die Systemknoepfe */
   knopf.hidden = false;                    /* beim Laden kurz sichtbar */
@@ -199,6 +199,12 @@
   }
   ['mousemove', 'mousedown', 'wheel', 'keydown', 'touchstart'].forEach(function (e) {
     document.addEventListener(e, show, true);
+  });
+  /* Bedienung in einem Tool-iframe findet in einem anderen Origin statt und
+     erreicht dieses Dokument nicht direkt. Die Tools melden sie deshalb per
+     postMessage; auch Tippen/Formulareingaben halten so den Eltern-Timer wach. */
+  window.addEventListener('message', function (e) {
+    if (e.data && e.data.lhtpi === 'aktiv') show();
   });
   if (MS) timer = setTimeout(hide, MS);
 })();

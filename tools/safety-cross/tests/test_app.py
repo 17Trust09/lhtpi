@@ -135,3 +135,13 @@ def test_logout_protects_admin():
     lokal = client.get("/admin", environ_base={"REMOTE_ADDR": "127.0.0.1"})
     assert lokal.status_code == 302
     assert lokal.headers["Location"].endswith("/login")
+
+
+def test_admin_activity_keeps_session_open():
+    client = app.test_client()
+    client.post("/login", data={"password": "admin"})
+    html = client.get("/admin").get_data(as_text=True)
+    assert "var LOGOUT_MS = 300000" in html
+    assert '"input"' in html
+    assert '"change"' in html
+    assert '"focusin"' in html

@@ -36,19 +36,20 @@
     clearTimeout(timer);
     if (MS) timer = setTimeout(hide, MS);
   }
-  ['mousemove', 'mousedown', 'wheel', 'keydown', 'touchstart'].forEach(function (e) {
-    document.addEventListener(e, show, true);
+  /* Der Kiosk-Rahmen erfaehrt keine Ereignisse innerhalb eines bedienbaren
+     iframes. Deshalb jede echte Bedienung nach oben melden. Nur mousemove zu
+     melden reicht nicht: beim Tippen lief sonst der Eltern-Timer weiter und
+     sein synthetischer Cursor-Klick nahm dem Eingabefeld kurz den Fokus. */
+  ['mousemove', 'mousedown', 'wheel', 'keydown', 'touchstart', 'input', 'change', 'focusin'].forEach(function (e) {
+    document.addEventListener(e, function () {
+      show();
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ lhtpi: 'aktiv' }, '*');
+        }
+      } catch (err) {}
+    }, true);
   });
-  /* Der Kiosk-Rahmen erfaehrt nichts von Bewegungen im Tool, wenn der Rahmen
-     Eingaben annimmt (Wartungsbetrieb). Deshalb melden wir sie ihm - darauf
-     erscheint der Wartungs-Knopf. */
-  try {
-    if (window.parent && window.parent !== window) {
-      document.addEventListener('mousemove', function () {
-        window.parent.postMessage({ lhtpi: 'maus' }, '*');
-      }, true);
-    }
-  } catch (e) {}
   if (MS) timer = setTimeout(hide, MS);
 })();
 </script>
