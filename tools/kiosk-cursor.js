@@ -7,7 +7,7 @@
  * Änderungen hier UND dort machen (test_cursor_unified.py prüft das).
  *
  * Idle-Zeit:  ?cursor_idle=<Sekunden>  (der Anzeige-Router hängt das an)
- *             oder data-cursor-idle am <html>-Element, sonst 3 Sekunden.
+ *             oder data-cursor-idle am <html>-Element, sonst 30 Sekunden.
  *
  * Hinweis: Der Kiosk darf den Cursor NICHT dauerhaft unsichtbar machen
  * (kein transparentes X11-Cursor-Thema, kein `unclutter -idle 0`) — sonst
@@ -15,9 +15,9 @@
  */
 (function () {
   var q = new URLSearchParams(location.search).get('cursor_idle');
-  var n = parseInt(q || document.documentElement.dataset.cursorIdle || '3', 10);
+  var n = parseInt(q || document.documentElement.dataset.cursorIdle || '30', 10);
   /* 0 = Zeiger nie ausblenden (Wartungsbetrieb der Anzeige) */
-  var MS = (isNaN(n) ? 3 : n) * 1000;
+  var MS = (isNaN(n) ? 30 : n) * 1000;
   var timer;
   function hide() {
     if (!MS) return;

@@ -22,9 +22,9 @@ iframe[src*="translate"], div[class*="translate"], div[id*="translate"], div[ari
    Identisch in allen Tools – Referenz: tools/kiosk-cursor.js */
 (function () {
   var q = new URLSearchParams(location.search).get('cursor_idle');
-  var n = parseInt(q || document.documentElement.dataset.cursorIdle || '3', 10);
+  var n = parseInt(q || document.documentElement.dataset.cursorIdle || '30', 10);
   /* 0 = Zeiger nie ausblenden (Wartungsbetrieb der Anzeige) */
-  var MS = (isNaN(n) ? 3 : n) * 1000;
+  var MS = (isNaN(n) ? 30 : n) * 1000;
   var timer;
   function hide() {
     if (!MS) return;

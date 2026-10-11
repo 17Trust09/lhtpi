@@ -52,7 +52,7 @@ cfg = client.get('/api/screen/1').get_json()
 ok(cfg['mode'] == 'fixed', 'Bildschirm 1 startet als festes Tool')
 ok([t['tool'] for t in cfg['tools']] == ['slideshow'], 'Standard-Tool ist die Slideshow')
 ok(cfg['tools'][0]['dwell'] == 60, 'Standard-Anzeigedauer 60 s')
-ok(cfg['cursor_idle'] == 3, 'Cursor-Idle standardmäßig 3 s')
+ok(cfg['cursor_idle'] == 30, 'Cursor-Idle standardmäßig 30 s')
 
 # ── 2. Router-Seite: ohne Login erreichbar, mit Cursor- und Rotationslogik ───
 r = client.get('/screen/1')
@@ -587,9 +587,9 @@ ok('#einst{pointer-events:auto}' in seite_bedienbar,
    'die Verwaltung im eigenen Rahmen nimmt Eingaben an')
 ok('.frame.on{pointer-events:auto}' in seite_bedienbar,
    'im Wartungsbetrieb nehmen die Tools Klicks an (z. B. Reiter "Admin")')
-ok('isNaN(n) ? 3 : n' in open(os.path.join(BASE, 'tools', 'kiosk-cursor.js'),
-                              encoding='utf-8').read(),
-   'die Tools kennen cursor_idle=0 als "Zeiger nicht ausblenden"')
+ok('isNaN(n) ? 30 : n' in open(os.path.join(BASE, 'tools', 'kiosk-cursor.js'),
+                               encoding='utf-8').read(),
+   'die Tools nutzen ohne Vorgabe 30 s und kennen cursor_idle=0 als "nie ausblenden"')
 ok("fetch('/zeiger/klick'" in seite_bedienbar,
    'die Anzeige loest beim Ausblenden selbst einen Klick aus (sonst bliebe der Zeiger bis zum Klick sichtbar)')
 ok('window.__lhtpiEigenerKlick' in seite_bedienbar,

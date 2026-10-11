@@ -25,7 +25,7 @@ SETTING_LAYOUT_TOUCHED = 'kiosk_layout_touched'   # Admin hat die Belegung gespe
 SETTING_WARTUNG_KNOPF = 'kiosk_wartung_knopf'    # Wartungs-Knopf in der Ecke
 
 DEFAULT_SCREEN_COUNT = 1
-DEFAULT_CURSOR_IDLE = 3          # Sekunden ohne Mausbewegung -> Cursor aus
+DEFAULT_CURSOR_IDLE = 30         # Sekunden ohne Mausbewegung -> Cursor aus
 DEFAULT_IFRAME_RELOAD = 30       # Minuten bis ein Tool-Frame neu geladen wird
 MAX_SCREENS = 2
 HDMI_NAMES = ['HDMI-1', 'HDMI-2']
