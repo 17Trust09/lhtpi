@@ -44,6 +44,17 @@
     border:1px solid rgba(255,255,255,.28)}
   #wartung button{appearance:none;-webkit-appearance:none}
   #wartung button[data-ziel]{background:rgba(74,20,26,.92)}
+  #lizenz-popup{position:fixed;inset:0;z-index:2147483647;display:grid;place-items:center;
+    padding:1.5rem;background:rgba(0,0,0,.72);font-family:Inter,Arial,sans-serif}
+  #lizenz-popup[hidden]{display:none}
+  #lizenz-karte{box-sizing:border-box;width:min(42rem,100%);padding:1.6rem 1.8rem;
+    border:1px solid rgba(255,255,255,.25);border-radius:18px;background:#fff;color:#17213a;
+    box-shadow:0 20px 70px rgba(0,0,0,.5)}
+  #lizenz-karte h2{margin:0 0 .8rem;color:#05164d;font-size:1.55rem}
+  #lizenz-karte p{margin:.55rem 0;line-height:1.5;font-size:1rem}
+  #lizenz-karte .kontakt{font-weight:700;color:#05164d}
+  #lizenz-schliessen{margin-top:1rem;padding:.6rem 1.2rem;border:0;border-radius:999px;
+    background:#05164d;color:#fff;font:700 1rem Inter,Arial,sans-serif}
   #badge{position:fixed;right:.8rem;bottom:.6rem;z-index:10;padding:.2rem .6rem;
     border-radius:999px;background:rgba(255,255,255,.07);color:rgba(255,255,255,.45);
     font:600 .8rem Inter,Arial,sans-serif;letter-spacing:.03em}
@@ -56,8 +67,17 @@
 <div id="hint" hidden></div>
 <div id="badge" hidden></div>
 {% if cfg.wartung_knopf %}<div id="wartung"><a href="{{ url_for('display') }}">⚙ Anzeigen</a>
+<button id="lizenz-knopf" type="button">🔐 Lizenz</button>
 <button type="button" data-ziel="/system/neustart" data-ruhe="⟳ Neustart" data-frage="Wirklich neu starten?">⟳ Neustart</button>
 <button type="button" data-ziel="/system/herunterfahren" data-ruhe="⏻ Herunterfahren" data-frage="Wirklich herunterfahren?">⏻ Herunterfahren</button>
+</div>
+<div id="lizenz-popup" role="dialog" aria-modal="true" aria-labelledby="lizenz-titel" hidden>
+  <div id="lizenz-karte">
+    <h2 id="lizenz-titel">🔐 Lizenzhinweis</h2>
+    <p>Diese Installation ist an diesen Raspberry Pi gebunden. Bei einem Gerätewechsel oder einer kopierten SD-Karte ist eine neue Lizenz erforderlich.</p>
+    <p class="kontakt">Bei Fragen oder Hilfen bitte an Tim Hölzer T/AO 451 wenden.</p>
+    <button id="lizenz-schliessen" type="button">Schließen</button>
+  </div>
 </div>
 <iframe id="einst" src="{{ url_for('display') }}" title="Anzeigen-Einstellungen"></iframe>
 <script>
@@ -84,6 +104,31 @@
     for (var i = 0; i < fs.length; i++) fs[i].src = fs[i].src;   /* neu laden */
   }
   if (link) link.addEventListener('click', function (e) { e.preventDefault(); auf(); });
+  var lizenzKnopf = document.getElementById('lizenz-knopf');
+  var lizenzPopup = document.getElementById('lizenz-popup');
+  var lizenzSchliessen = document.getElementById('lizenz-schliessen');
+  function lizenzAuf() {
+    if (!lizenzPopup) return;
+    lizenzPopup.hidden = false;
+    knopf.hidden = true;
+    window.__lhtpiWartungOffen = true;
+  }
+  function lizenzZu() {
+    if (!lizenzPopup) return;
+    lizenzPopup.hidden = true;
+    window.__lhtpiWartungOffen = false;
+    knopf.hidden = false;
+  }
+  if (lizenzKnopf) lizenzKnopf.addEventListener('click', function (e) {
+    e.preventDefault(); e.stopPropagation(); lizenzAuf();
+  });
+  if (lizenzSchliessen) lizenzSchliessen.addEventListener('click', lizenzZu);
+  if (lizenzPopup) lizenzPopup.addEventListener('click', function (e) {
+    if (e.target === lizenzPopup) lizenzZu();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && lizenzPopup && !lizenzPopup.hidden) lizenzZu();
+  });
   /* Neustart / Herunterfahren: erst nachfragen, dann ausfuehren. */
   var sysknoepfe = knopf.querySelectorAll('button[data-ziel]');
   for (var si = 0; si < sysknoepfe.length; si++) {
@@ -143,6 +188,7 @@
   if (!knopf || !cfgW.wartung_knopf) return;
   var timer = null;
   function zeigen() {
+    if (window.__lhtpiWartungOffen) return;
     knopf.hidden = false;
     clearTimeout(timer);
     timer = setTimeout(function () { knopf.hidden = true; }, 6000);

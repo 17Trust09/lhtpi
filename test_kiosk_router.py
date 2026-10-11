@@ -586,6 +586,13 @@ ok('data-ziel="/system/neustart"' in seite_bedienbar,
    'Neustart-Knopf an der Anzeige')
 ok('data-ziel="/system/herunterfahren"' in seite_bedienbar,
    'Herunterfahren-Knopf an der Anzeige')
+ok('id="lizenz-knopf"' in seite_bedienbar,
+   'Lizenz-Knopf steht bei Anzeigen, Neustart und Herunterfahren')
+ok('id="lizenz-popup"' in seite_bedienbar and 'Lizenzhinweis' in seite_bedienbar,
+   'Lizenz-Knopf öffnet einen eigenen Hinweis')
+ok('an diesen Raspberry Pi gebunden' in seite_bedienbar and
+   'Tim Hölzer T/AO 451' in seite_bedienbar,
+   'Lizenz-Popup erklärt die Gerätebindung und nennt den Ansprechpartner')
 ok('pointer-events:none}' in seite_bedienbar,
    'Grundregel bleibt: ohne Wartung sind die eingebetteten Tools reine Anzeige'
    ' (sonst waere der Wartungs-Knopf nicht erreichbar)')
