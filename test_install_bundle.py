@@ -92,6 +92,24 @@ ok('MON="HDMI-1"' in s1 and 'chromium-screen1' in s1,
    'Bildschirm 1: HDMI-1, eigenes Chromium-Profil')
 ok('unclutter' not in s1, 'kein unclutter mehr (Cursor macht die Seite)')
 
+print('\n3b) Bildschirm bleibt wach und wird nach spaetem Einschalten aktiviert')
+r = sourced('render_display_guard > /tmp/lhtpi-display-guard.sh\n'
+            'bash -n /tmp/lhtpi-display-guard.sh\n'
+            'cat /tmp/lhtpi-display-guard.sh')
+guard = r.stdout
+ok(r.returncode == 0, 'Display-Waechter ist syntaktisch gueltig')
+ok('xset s off' in guard and 'xset -dpms' in guard and
+   'xset s noblank' in guard and 'xset dpms force on' in guard,
+   'Bildschirmschoner, Blanking und DPMS bleiben dauerhaft aus')
+ok('while true' in guard and 'xrandr --query' in guard,
+   'Waechter erkennt einen erst spaeter eingeschalteten Monitor')
+ok('HDMI-1 HDMI-2' in guard and '--primary --auto --pos 0x0' in guard,
+   'erster angeschlossener HDMI-Port wird automatisch als Hauptanzeige aktiviert')
+ok('configure_display_guard' in text.split('main()')[1],
+   'Display-Waechter wird vom Installer eingerichtet')
+ok('WantedBy=multi-user.target' in text and 'lhtpi-display-guard.service' in text,
+   'Display-Waechter startet bei jedem Boot')
+
 r = sourced('render_screen_kiosk_script 2 > /tmp/kiosk-screen2.sh\n'
             'bash -n /tmp/kiosk-screen2.sh\n'
             'cat /tmp/kiosk-screen2.sh')
@@ -397,7 +415,8 @@ print('\n16) Aufräumen lässt die eigenen Einheiten in Ruhe')
 UD3 = os.path.join(LZ, 'units3')
 os.makedirs(UD3, exist_ok=True)
 EIGENE = ['lhtpi.service', 'lhtpi-setup.service', 'lhtpi-anzeige.service',
-          'lhtpi-anzeige.path', 'kiosk-screen1.service', 'kiosk-screen2.service',
+          'lhtpi-anzeige.path', 'lhtpi-display-guard.service',
+          'kiosk-screen1.service', 'kiosk-screen2.service',
           'lhtpi-lizenz-import.service', 'lhtpi-fake-hwclock.service',
           'lhtpi-fake-hwclock-save.service', 'lhtpi-fake-hwclock-save.timer']
 FREMDE = ['sshd.service', 'display-manager.service', 'cups.service']

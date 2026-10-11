@@ -28,6 +28,83 @@ SERVICE_TERMIN_APP="terminboard.service"
 SC_DIR="/opt/safety-cross"
 SC_PORT="8002"
 SERVICE_SC_APP="safetycross.service"
+SERVICE_DISPLAY_GUARD="lhtpi-display-guard.service"
+
+# ── Bildschirm-Wächter: Dauerbetrieb + spätes Einschalten ─────────────
+
+render_display_guard() {
+    cat <<'DISPLAY_GUARD_EOF'
+#!/bin/bash
+set -u
+
+export DISPLAY="${DISPLAY:-:0}"
+export XAUTHORITY="${XAUTHORITY:-/home/pi/.Xauthority}"
+letzter_zustand=""
+
+while true; do
+    # Nicht nur einmal beim Start: Desktop-Komponenten oder ein Hotplug dürfen
+    # Bildschirmschoner/DPMS später nicht wieder einschalten.
+    xset s off >/dev/null 2>&1 || true
+    xset -dpms >/dev/null 2>&1 || true
+    xset s noblank >/dev/null 2>&1 || true
+    xset dpms force on >/dev/null 2>&1 || true
+
+    zustand="$(xrandr --query 2>/dev/null | awk '$1 ~ /^HDMI-[12]$/ {print $1, $2, $3}')"
+    if [ -n "${zustand}" ] && [ "${zustand}" != "${letzter_zustand}" ]; then
+        angeschlossen=""
+        for ausgang in HDMI-1 HDMI-2; do
+            if printf '%s\n' "${zustand}" | grep -q "^${ausgang} connected"; then
+                angeschlossen="${angeschlossen} ${ausgang}"
+            fi
+        done
+        # Bildschirm 1 ist der erste tatsächlich angeschlossene Port. So kommt
+        # das Bild auch dann, wenn beim Boot kein Monitor an war oder nur HDMI-2
+        # verwendet wird.
+        set -- ${angeschlossen}
+        if [ "$#" -eq 1 ]; then
+            xrandr --output "$1" --primary --auto --pos 0x0 >/dev/null 2>&1 || true
+            for ausgang in HDMI-1 HDMI-2; do
+                [ "${ausgang}" = "$1" ] || xrandr --output "${ausgang}" --off >/dev/null 2>&1 || true
+            done
+        elif [ "$#" -ge 2 ]; then
+            xrandr --output "$1" --primary --auto --pos 0x0 \
+                   --output "$2" --auto --right-of "$1" >/dev/null 2>&1 || true
+        fi
+        letzter_zustand="${zustand}"
+    fi
+    sleep 2
+done
+DISPLAY_GUARD_EOF
+}
+
+configure_display_guard() {
+    local script="/usr/local/bin/lhtpi-display-guard.sh"
+    log "Richte Bildschirm-Wächter ein (kein Standby, Hotplug-sicher)"
+    render_display_guard > "${script}"
+    chmod 755 "${script}"
+
+    cat > "${UNIT_DIR}/lhtpi-display-guard.service" <<EOF
+[Unit]
+Description=LHTPi Bildschirm dauerhaft wach halten und Hotplug aktivieren
+After=getty@tty1.service
+
+[Service]
+Type=simple
+User=${PI_USER}
+Group=${PI_GROUP}
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/${PI_USER}/.Xauthority
+ExecStart=${script}
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload
+    systemctl enable --now "${SERVICE_DISPLAY_GUARD}"
+    ok "Bildschirm-Wächter aktiv (DPMS/Schoner aus, spätes Einschalten erkannt)"
+}
 
 # ── Bundle: gemeinsame Anzeige – EIN Kiosk je Bildschirm ──────────────
 ROUTER_BASE_URL="http://localhost:${APP_PORT}/screen"
@@ -544,7 +621,7 @@ cleanup_old_kiosks() {
     # Namen früherer Fassungen (ein Kiosk je Tool, teils mit dem Dashboard)
     # Alles, was DIESE Fassung anlegt, muss bleiben - sonst räumt sich die
     # Einrichtung selbst weg (Lizenz-Import, Uhrzeit-Dienst, Anzeige-Einheiten).
-    local behalten=" lhtpi.service lhtpi-setup.service lhtpi-anzeige.service lhtpi-anzeige.path \
+    local behalten=" lhtpi.service lhtpi-setup.service lhtpi-anzeige.service lhtpi-anzeige.path lhtpi-display-guard.service \
 kiosk-screen1.service kiosk-screen2.service lhtpi-lizenz-import.service \
 lhtpi-fake-hwclock.service lhtpi-fake-hwclock-save.service lhtpi-fake-hwclock-save.timer "
     local unit name datei
@@ -1472,6 +1549,7 @@ main() {
     cleanup_old_kiosks
     configure_desktop
     configure_autologin
+    configure_display_guard
     configure_screens
     configure_policies
     configure_sudoers_kiosk
