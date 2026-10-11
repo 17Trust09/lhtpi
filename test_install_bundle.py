@@ -101,6 +101,8 @@ ok(r.returncode == 0, 'Display-Waechter ist syntaktisch gueltig')
 ok('xset s off' in guard and 'xset -dpms' in guard and
    'xset s noblank' in guard and 'xset dpms force on' in guard,
    'Bildschirmschoner, Blanking und DPMS bleiben dauerhaft aus')
+ok(guard.index('xset dpms force on') < guard.index('xset -dpms'),
+   'DPMS wird erst aufgeweckt und danach deaktiviert')
 ok('while true' in guard and 'xrandr --query' in guard,
    'Waechter erkennt einen erst spaeter eingeschalteten Monitor')
 ok('HDMI-1 HDMI-2' in guard and '--primary --auto --pos 0x0' in guard,

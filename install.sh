@@ -45,9 +45,9 @@ while true; do
     # Nicht nur einmal beim Start: Desktop-Komponenten oder ein Hotplug dürfen
     # Bildschirmschoner/DPMS später nicht wieder einschalten.
     xset s off >/dev/null 2>&1 || true
+    xset dpms force on >/dev/null 2>&1 || true
     xset -dpms >/dev/null 2>&1 || true
     xset s noblank >/dev/null 2>&1 || true
-    xset dpms force on >/dev/null 2>&1 || true
 
     zustand="$(xrandr --query 2>/dev/null | awk '$1 ~ /^HDMI-[12]$/ {print $1, $2, $3}')"
     if [ -n "${zustand}" ] && [ "${zustand}" != "${letzter_zustand}" ]; then
