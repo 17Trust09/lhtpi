@@ -67,13 +67,13 @@
 <div id="hint" hidden></div>
 <div id="badge" hidden></div>
 {% if cfg.wartung_knopf %}<div id="wartung"><a href="{{ url_for('display') }}">⚙ Anzeigen</a>
-<button id="lizenz-knopf" type="button">🔐 Lizenz</button>
+<button id="lizenz-knopf" type="button">Lizenz</button>
 <button type="button" data-ziel="/system/neustart" data-ruhe="⟳ Neustart" data-frage="Wirklich neu starten?">⟳ Neustart</button>
 <button type="button" data-ziel="/system/herunterfahren" data-ruhe="⏻ Herunterfahren" data-frage="Wirklich herunterfahren?">⏻ Herunterfahren</button>
 </div>
 <div id="lizenz-popup" role="dialog" aria-modal="true" aria-labelledby="lizenz-titel" hidden>
   <div id="lizenz-karte">
-    <h2 id="lizenz-titel">🔐 Lizenzhinweis</h2>
+    <h2 id="lizenz-titel">Lizenzhinweis</h2>
     <p>Diese Installation ist an diesen Raspberry Pi gebunden. Bei einem Gerätewechsel oder einer kopierten SD-Karte ist eine neue Lizenz erforderlich.</p>
     <p class="kontakt">Bei Fragen oder Hilfen bitte an Tim Hölzer T/AO 451 wenden.</p>
     <button id="lizenz-schliessen" type="button">Schließen</button>
