@@ -1,10 +1,11 @@
 import os, tempfile, sys
-sys.path.insert(0, '/opt/data/projects/lhtpi')
+BASE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, BASE)
 
-# Frische Test-DB sicherstellen (wird von app.py beim Import angelegt)
-dbpath = '/opt/data/projects/lhtpi/lhtpi.db'
-if os.path.exists(dbpath):
-    os.remove(dbpath)
+# Wegwerf-Datenbank für den Test — die echte lhtpi.db bleibt unberührt
+os.environ.setdefault('LHTPI_SECRET', 'test-secret-nur-fuer-diesen-test-32-zeichen')
+os.environ.setdefault('LHTPI_SETUP_TOKEN', 'test-einmal-token-nur-fuer-diesen-test')
+os.environ['LHTPI_DB'] = os.path.join(tempfile.mkdtemp(prefix='lhtpi-usb-test-'), 'test.db')
 
 # ── 1. Reine USB-Funktionen ────────────────────────────────────────────
 import usb_source
@@ -49,7 +50,8 @@ assert 'usb_slides_dir' not in d, 'usb_slides_dir darf nicht öffentlich sein'
 print('[OK] Status default (auto, web, kein USB, kein usb_slides_dir-Leak)')
 
 # ── 3. Login + Settings-Endpoint ───────────────────────────────────────
-r = client.post('/login', data={'username': 'admin', 'password': 'admin'})
+r = client.post('/login', data={'username': 'admin',
+                               'password': os.environ['LHTPI_SETUP_TOKEN']})
 assert r.status_code in (302, 200), r.status_code
 r = client.get('/settings/source')
 assert r.get_json() == {'mode': 'auto', 'manual_source': 'web'}, r.get_json()

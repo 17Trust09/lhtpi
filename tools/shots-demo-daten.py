@@ -58,6 +58,8 @@ print('Titelbilder:', ', '.join(f for f, _ in card_files))
 sys.path.insert(0, BASE)
 os.environ.update(
     LHTPI_DB=os.path.join(SHOTS, 'lhtpi.db'),
+    LHTPI_SECRET='demo-secret-nur-fuer-screenshots-32-zeichen',
+    LHTPI_SETUP_TOKEN='demo-einmal-token-nur-fuer-screenshots',
     LHTPI_TOOLS='slideshow,terminboard,safetycross',
     LHTPI_KIOSK_PROBE='0',
     LHTPI_HWID='piserial:10000000demo',
@@ -78,7 +80,7 @@ with app.app_context():
     db.create_all()
     from models import User
     u = User(username='admin')
-    u.set_password('admin')
+    u.set_password(os.environ['LHTPI_SETUP_TOKEN'])
     db.session.add(u)
 
     media = []

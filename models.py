@@ -9,6 +9,8 @@ class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(200), nullable=False)
+    # True, solange nur das Einmal-Token aus der Erstinbetriebnahme gilt
+    must_change_password = db.Column(db.Boolean, nullable=False, default=False)
 
     def set_password(self, password):
         from werkzeug.security import generate_password_hash

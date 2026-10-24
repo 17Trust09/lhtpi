@@ -19,7 +19,8 @@ from app import app
 import license_bundle as lic
 
 # Diese Pfade bleiben ohne gültige Lizenz erreichbar
-FREI = ('/lizenz', '/login', '/logout', '/static', '/favicon.ico')
+# (/passwort gehört dazu: ein offener Erstzugang darf nicht an der Lizenzsperre hängen)
+FREI = ('/lizenz', '/login', '/logout', '/passwort', '/static', '/favicon.ico')
 
 
 @app.before_request

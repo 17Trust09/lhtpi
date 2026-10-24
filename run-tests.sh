@@ -11,7 +11,7 @@ PY=./venv/bin/python
 [ -x "$PY" ] || PY=python3
 
 fehler=0
-for t in test_kiosk_router.py test_install_bundle.py test_license_bundle.py \
+for t in test_zugang.py test_kiosk_router.py test_install_bundle.py test_license_bundle.py \
          test_cursor_unified.py test_usb_source.py \
          tools/test-einbildschirm-live.py tools/test-anzeige-live.py \
          tools/test-anzeige-tools-live.py; do

@@ -220,9 +220,45 @@ def login():
         user = User.query.filter_by(username=request.form.get('username')).first()
         if user and user.check_password(request.form.get('password')):
             login_user(user)
+            if getattr(user, 'must_change_password', False):
+                # Erstinbetriebnahme: Einmal-Token gilt nur bis zum eigenen Passwort
+                return redirect(url_for('passwort_aendern'))
             return redirect(url_for('dashboard'))
         flash('Ungültige Anmeldedaten', 'error')
     return render_template('login.html')
+
+
+@app.route('/passwort', methods=['GET', 'POST'])
+@login_required
+def passwort_aendern():
+    """Passwort setzen — beim ersten Login Pflicht, danach freiwillig möglich."""
+    import auth_setup
+
+    if request.method == 'POST':
+        alt = request.form.get('alt') or ''
+        neu = request.form.get('neu') or ''
+        wieder = request.form.get('wieder') or ''
+        fehler = None
+        if not current_user.check_password(alt):
+            fehler = 'Das bisherige Passwort stimmt nicht'
+        elif neu != wieder:
+            fehler = 'Die beiden neuen Passwörter sind nicht identisch'
+        else:
+            fehler = auth_setup.passwort_pruefen(neu)
+        if fehler:
+            flash(fehler, 'error')
+        else:
+            current_user.set_password(neu)
+            current_user.must_change_password = False
+            db.session.commit()
+            # Einmal-Token ist verbraucht
+            auth_setup.token_entfernen()
+            flash('Passwort geändert', 'ok')
+            return redirect(url_for('dashboard'))
+
+    return render_template('passwort.html',
+                           wechsel_offen=bool(getattr(current_user,
+                                                      'must_change_password', False)))
 
 
 @app.route('/logout')

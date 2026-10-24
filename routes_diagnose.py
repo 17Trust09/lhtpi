@@ -1,6 +1,7 @@
 """Diagnose am Gerät: Zustand der Dienste, Anzeigen, Logs — als reiner Text.
 
-Aufruf: ``http://<IP>:8000/diagnose`` (mit Login, Standard admin/admin).
+Aufruf: ``http://<IP>:8000/diagnose`` (mit Login als ``admin``; das Passwort ist
+das Einmal-Token aus ``/etc/lhtpi/setup-token`` bzw. das eigene Passwort).
 
 Die Seite ist absichtlich schlicht (text/plain): sie ist der Blick in die
 Eingeweide des Geräts, kein Kiosk-Inhalt. Sie zeigt nur Zustände, ändert

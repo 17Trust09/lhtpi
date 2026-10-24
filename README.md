@@ -9,7 +9,9 @@ LHTPi verwandelt einen Raspberry Pi 4/5 in einen autarken Präsentations-Player:
 ## Funktionen
 
 - Web-Dashboard mit Login auf Port `8000`
-- Standard-Login: `admin` / `admin`
+- **Kein Standardpasswort**: Beim ersten Start gilt ein zufälliges Einmal-Token
+  (`/etc/lhtpi/setup-token`), danach verlangt die App ein eigenes Passwort
+  (siehe [Erstinbetriebnahme](#erstinbetriebnahme-und-zugang))
 - Upload von Bildern/Videos in `uploads/`
 - Playlist-Verwaltung und Endlos-Wiedergabe
 - **USB-Stick als Quelle**: Ordner `slides/` im Stick-Root wird automatisch abgespielt (Vorrang vor der Web-Playlist)
@@ -126,10 +128,14 @@ Installer fasst WLAN nicht mehr an.
    abschließen" — siehe [ERSTEINRICHTUNG.md](docs/multitool-kiosk/ERSTEINRICHTUNG.md).
 4. Danach Dashboard öffnen (auf dem Gerät oder über die LAN-IP):
    `http://localhost:8000` bzw. die IP aus `hostname -I`.
-4. Einloggen:
+5. Einloggen:
    - Benutzer: `admin`
-   - Passwort: `admin`
-5. Medien hochladen, Playlist erstellen, Playlist aktivieren.
+   - Passwort: das **Einmal-Token** aus der Datei `/etc/lhtpi/setup-token`
+     (gibt `install.sh` am Ende einmal aus, sonst auf dem Gerät nachsehen:
+     `cat /etc/lhtpi/setup-token`)
+   - Beim ersten Login wird sofort ein eigenes Passwort verlangt
+     (mindestens 12 Zeichen). Danach ist das Token ungültig.
+6. Medien hochladen, Playlist erstellen, Playlist aktivieren.
 
 Der Kiosk lädt automatisch:
 
@@ -211,6 +217,36 @@ Die Umschaltung erfolgt im Dashboard unter **„Wiedergabe-Quelle"**.
 - UFW-Regeln:
   - SSH erlaubt
   - `8000/tcp` erlaubt
+- `/etc/lhtpi/lhtpi.env` — Sitzungs-Secret (`LHTPI_SECRET`, Rechte `640`)
+- `/etc/lhtpi/setup-token` — Einmal-Token für den ersten Login (Rechte `600`)
+
+---
+
+## Erstinbetriebnahme und Zugang
+
+Ein festes Standardpasswort gibt es nicht mehr — es stand im öffentlichen Repo
+und war damit für jeden bekannt. Stattdessen:
+
+1. `install.sh` legt beim Einrichten ein zufälliges **Einmal-Token** unter
+   `/etc/lhtpi/setup-token` ab und zeigt es am Ende **einmal** an.
+2. Erster Login im Dashboard: Benutzer `admin`, Passwort = dieses Token
+   (auf dem Gerät nachlesbar mit `cat /etc/lhtpi/setup-token`).
+3. Die App verlangt sofort ein eigenes Passwort (mindestens 12 Zeichen, keine
+   Standardwerte). Danach ist das Token ungültig, die Datei wird gelöscht.
+4. Solange der Wechsel offen ist, leitet die App Zugriffe aus dem LAN auf
+   `/passwort` um. Am Gerät selbst (localhost/Anzeige) stört das nicht — der
+   Kiosk läuft ohne Tastatur weiter.
+
+Wichtig für bestehende Geräte: Steht in der Datenbank noch `admin` / `admin`,
+ersetzt die App dieses Passwort beim nächsten Start durch das Einmal-Token. Das
+ist gewollt, ändert aber den Zugang — deshalb erst nach Freigabe einspielen und
+das Token aus `/etc/lhtpi/setup-token` bereithalten.
+
+Passwort vergessen? Über SSH neu aufsetzen:
+
+```bash
+cd /home/pi/lhtpi && sudo -u pi ./venv/bin/python setup_token.py --neu
+```
 
 ---
 
@@ -352,7 +388,26 @@ sudo chown -R pi:pi /home/pi/lhtpi/uploads
 
 ## Sicherheitshinweis
 
-Der Standard-Login `admin` / `admin` ist nur für die Erstinstallation gedacht. Nach dem ersten Login sollte das Passwort geändert werden, wenn der Pi in einem nicht vertrauenswürdigen Netzwerk erreichbar ist.
+Es gibt kein Standardpasswort mehr. Beim ersten Start legt die App den Benutzer
+`admin` mit einem zufälligen **Einmal-Token** an (`/etc/lhtpi/setup-token`,
+Rechte `600`, gehört `pi`). Mit diesem Token meldet man sich einmal an und setzt
+dabei ein eigenes Passwort; danach ist das Token ungültig und die Datei wird
+gelöscht. Stand in einer älteren Installation noch `admin` / `admin`, ersetzt
+die App das Passwort beim Start durch das Token — der alte Zugang ist damit
+dicht.
+
+Das Sitzungs-Secret (`LHTPI_SECRET`) liegt in `/etc/lhtpi/lhtpi.env` (Rechte
+`640`). Fehlt es, startet die App **nicht** — statt eines öffentlich bekannten
+Ersatzwerts gibt es eine klare Fehlermeldung.
+
+Ist das Passwort unbekannt, lässt sich der Zugang über SSH neu aufsetzen:
+
+```bash
+cd /home/pi/lhtpi && sudo -u pi ./venv/bin/python setup_token.py --neu
+```
+
+Der Befehl ersetzt das Passwort durch ein neues Einmal-Token und gibt es einmal
+aus. Ohne diesen Schritt kommt niemand mehr hinein — auch nicht über das LAN.
 
 ---
 
