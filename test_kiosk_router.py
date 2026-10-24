@@ -16,6 +16,9 @@ sys.path.insert(0, BASE)
 
 TMP = tempfile.mkdtemp(prefix='lhtpi-kiosk-test-')
 os.environ['LHTPI_DB'] = os.path.join(TMP, 'test.db')
+# Kein Standardpasswort mehr: Test-Secret + Einmal-Token (feste Werte, keine Datei)
+os.environ.setdefault('LHTPI_SECRET', 'test-secret-nur-fuer-diesen-test-32-zeichen')
+os.environ.setdefault('LHTPI_SETUP_TOKEN', 'test-einmal-token-nur-fuer-diesen-test')
 os.environ['LHTPI_KIOSK_PROBE'] = '0'
 os.environ['LHTPI_TOOLS'] = 'slideshow,terminboard,safetycross'
 # Lizenz: künstliches Gerät, Lizenzen im Testordner, keine Zwangssperre
@@ -64,7 +67,8 @@ ok("'mousemove'" in html, 'Mausbewegung blendet den Cursor wieder ein')
 ok('screen' in html and 'iframe' in html.lower(), 'Router arbeitet mit iframes')
 
 # ── 3. Zweiter Bildschirm: aktivieren und prüfen ─────────────────────────────
-client.post('/login', data={'username': 'admin', 'password': 'admin'},
+client.post('/login', data={'username': 'admin',
+                            'password': os.environ['LHTPI_SETUP_TOKEN']},
             follow_redirects=True)
 with app.app_context():
     router.set_screen_count(2)
@@ -408,7 +412,8 @@ with app.app_context():
     os.remove(marker)
 
     # Sicher anmelden – frühere Abschnitte können die Sitzung verändert haben
-    client.post('/login', data={'username': 'admin', 'password': 'admin'})
+    client.post('/login', data={'username': 'admin',
+                                'password': os.environ['LHTPI_SETUP_TOKEN']})
 
     # Hinweis, wenn mehr Bildschirme eingestellt sind als angeschlossen
     _conf, _det = tools.configured_screen_count, tools.detected_screen_count
@@ -533,11 +538,13 @@ ok('def kiosk_fenster_schliessen' in _router_quelle and 'pkill -TERM' in _router
    'vor dem Systembefehl werden die Kiosk-Fenster sauber geschlossen (Profil sichern)')
 ok('def anzeige_neu_starten' in _router_quelle and 'os.utime' in _router_quelle,
    'nach einem Fehlversuch faehrt die App die Anzeige selbst wieder hoch')
-ok(anon.post('/system/neustart',
-             environ_base={'REMOTE_ADDR': '192.168.178.50'}).status_code == 403,
+# Unangemeldet aus dem Netzwerk: eigener Client, damit keine lokale Sitzung greift
+fremd_client = app.test_client()
+ok(fremd_client.post('/system/neustart',
+                    environ_base={'REMOTE_ADDR': '192.168.178.50'}).status_code == 403,
    'Neustart nur vom Geraet (Netzwerk bekommt 403)')
-ok(anon.post('/system/herunterfahren',
-             environ_base={'REMOTE_ADDR': '192.168.178.50'}).status_code == 403,
+ok(fremd_client.post('/system/herunterfahren',
+                    environ_base={'REMOTE_ADDR': '192.168.178.50'}).status_code == 403,
    'Herunterfahren nur vom Geraet (Netzwerk bekommt 403)')
 ok('mousemove' in seite, 'er erscheint bei Mausbewegung')
 ok('<div id="wartung" hidden>' not in seite,

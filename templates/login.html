@@ -15,6 +15,8 @@ input:focus{border-color:#e94560}
 button{width:100%;padding:12px;background:#e94560;color:#fff;border:none;border-radius:8px;font-size:1rem;cursor:pointer;font-weight:600}
 button:hover{background:#d63851}
 .flash{background:#ff4444;color:#fff;padding:10px;border-radius:8px;margin-bottom:1rem;text-align:center;font-size:.9rem}
+.hinweis{color:#8899aa;text-align:left;font-size:.75rem;line-height:1.4;margin-top:1rem;margin-bottom:0}
+.hinweis code{color:#c9d4e5}
 </style>
 </head>
 <body>
@@ -25,10 +27,12 @@ button:hover{background:#d63851}
 {% if messages %}{% for cat,msg in messages %}<div class="flash">{{ msg }}</div>{% endfor %}{% endif %}
 {% endwith %}
 <form method="post">
-<input type="text" name="username" placeholder="Benutzername" required autofocus>
-<input type="password" name="password" placeholder="Passwort" required>
+<input type="text" name="username" placeholder="Benutzername" required autofocus autocomplete="username">
+<input type="password" name="password" placeholder="Passwort" required autocomplete="current-password">
 <button type="submit">Anmelden</button>
 </form>
+<p class="hinweis">Erstinbetriebnahme: Das Einmal-Token steht auf dem Gerät in
+<code>/etc/lhtpi/setup-token</code>. Es gilt nur bis zum ersten Passwortwechsel.</p>
 </div>
 </body>
 </html>

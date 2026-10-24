@@ -120,6 +120,8 @@ print('3) Router-Seite bettet genau das eingestellte Tool ein')
 umgebung = dict(os.environ)
 umgebung.update({
     'LHTPI_DB': os.path.join(ORDNER, 'router.db'),
+    'LHTPI_SECRET': 'test-secret-nur-fuer-diesen-test-32-zeichen',
+    'LHTPI_SETUP_TOKEN': 'test-einmal-token-nur-fuer-diesen-test',
     'LHTPI_PORT': str(ROUTER_PORT),
     'LHTPI_HWID': 'piserial:10000000demo',
     'LHTPI_KIOSK_PROBE': '0',

@@ -17,6 +17,8 @@ sys.path.insert(0, BASE)
 TMP = tempfile.mkdtemp(prefix='lhtpi-1screen-')
 os.environ.update({
     'LHTPI_DB': os.path.join(TMP, 'app.db'),
+    'LHTPI_SECRET': 'test-secret-nur-fuer-diesen-test-32-zeichen',
+    'LHTPI_SETUP_TOKEN': 'test-einmal-token-nur-fuer-diesen-test',
     'LHTPI_TOOLS': 'slideshow,terminboard,safetycross',
     'LHTPI_LICENSE_FILE': os.path.join(TMP, 'license.key'),
     'LHTPI_INSTALLED_MARKER': os.path.join(TMP, 'installed'),
@@ -72,7 +74,8 @@ pruefe(open(tools.SCREENS_FILE).read().strip() == '1',
        'Datei "screens" steht nach dem Speichern auf 1')
 pruefe(not os.path.exists(marke2), 'auch nach dem Speichern kein zweiter Kiosk')
 
-client.post('/login', data={'username': 'admin', 'password': 'admin'})
+client.post('/login', data={'username': 'admin',
+                            'password': os.environ['LHTPI_SETUP_TOKEN']})
 seite = client.get('/display').get_data(as_text=True)
 pruefe('Erkannte Ausgänge: <b>1</b>' in seite, 'Seite nennt den einen Ausgang')
 pruefe('erkannt ist aber nur' not in seite, 'kein Warnhinweis nötig')

@@ -77,6 +77,8 @@ os.makedirs(ORDNER, exist_ok=True)
 umgebung = dict(os.environ)
 umgebung.update({
     'LHTPI_DB': os.path.join(ORDNER, 'anzeige.db'),
+    'LHTPI_SECRET': 'test-secret-nur-fuer-diesen-test-32-zeichen',
+    'LHTPI_SETUP_TOKEN': 'test-einmal-token-nur-fuer-diesen-test',
     'LHTPI_PORT': str(PORT),
     'LHTPI_HOST': '0.0.0.0',
     'LHTPI_HWID': 'piserial:10000000demo',

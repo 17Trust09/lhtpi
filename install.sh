@@ -118,6 +118,11 @@ TOOLS_FILE="${LHTPI_TOOLS_FILE:-/etc/lhtpi/tools}"
 SCREENS_FILE="${LHTPI_SCREENS_FILE:-/etc/lhtpi/screens}"
 LICENSE_FILE="${LHTPI_LICENSE_FILE:-/etc/lhtpi/license.key}"
 MARKER_FILE="${LHTPI_INSTALLED_MARKER:-/etc/lhtpi/installed}"
+# Erstzugang: Secret und Einmal-Token liegen dauerhaft in /etc/lhtpi
+SECRET_FILE="${LHTPI_SECRET_FILE:-/etc/lhtpi/lhtpi.env}"
+SETUP_TOKEN_FILE="${LHTPI_SETUP_TOKEN_FILE:-/etc/lhtpi/setup-token}"
+SETUP_TOKEN=""
+LHTPI_SECRET=""
 MAX_SCREENS="2"
 # Merkmal: Bildschirm 2 ist eingerichtet (steuert den zweiten Kiosk)
 SCREEN2_FILE="${LHTPI_SCREEN2_FILE:-/etc/lhtpi/screen2}"
@@ -794,12 +799,55 @@ configure_tools_file() {
     ok "Aktivierte Tools: $(tr '\n' ' ' < "${TOOLS_FILE}")"
 }
 
+# Zugang: Secret und Einmal-Token für den ersten Login
+#
+# Es gibt kein Standardpasswort mehr. Beim ersten Login gilt ein zufälliges
+# Einmal-Token (Datei ${SETUP_TOKEN_FILE}); danach verlangt die App ein eigenes
+# Passwort. Steht in einer bestehenden Datenbank noch "admin"/"admin", ersetzt
+# die App das beim Start durch dieses Token.
+configure_zugang() {
+    log "Zugang vorbereiten (Secret + Einmal-Token)"
+    install -d -m 750 /etc/lhtpi
+    chown "root:${PI_GROUP}" /etc/lhtpi 2>/dev/null || true
+
+    # Secret bleibt bestehen - ein neues würde alle Anmeldungen verwerfen.
+    if [ -f "${SECRET_FILE}" ]; then
+        LHTPI_SECRET="$(sed -n 's/^LHTPI_SECRET=//p' "${SECRET_FILE}" | head -1 || true)"
+    fi
+    if [ -z "${LHTPI_SECRET}" ]; then
+        LHTPI_SECRET="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 48 || true)"
+        [ -n "${LHTPI_SECRET}" ] || fail "Konnte kein Secret erzeugen"
+    fi
+    ( umask 027; printf 'LHTPI_SECRET=%s\n' "${LHTPI_SECRET}" > "${SECRET_FILE}" )
+    chown "root:${PI_GROUP}" "${SECRET_FILE}" 2>/dev/null || true
+    chmod 640 "${SECRET_FILE}"
+    ok "Sitzungs-Secret liegt in ${SECRET_FILE}"
+
+    # Einmal-Token nur anlegen, wenn noch keins hinterlegt ist
+    if [ ! -s "${SETUP_TOKEN_FILE}" ]; then
+        local token
+        token="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32 || true)"
+        [ -n "${token}" ] || fail "Konnte kein Einmal-Token erzeugen"
+        ( umask 077; printf '%s\n' "${token}" > "${SETUP_TOKEN_FILE}" )
+        chown "${PI_USER}:${PI_GROUP}" "${SETUP_TOKEN_FILE}" 2>/dev/null || true
+        chmod 600 "${SETUP_TOKEN_FILE}"
+        ok "Einmal-Token erzeugt (${SETUP_TOKEN_FILE})"
+    else
+        ok "Einmal-Token bereits vorhanden (${SETUP_TOKEN_FILE})"
+    fi
+    SETUP_TOKEN="$(tr -d '\n' < "${SETUP_TOKEN_FILE}" || true)"
+}
+
 configure_services() {
     log "Erstelle systemd-Service für Flask-App"
 
     local secret
-    secret="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 48 || true)"
-    [ -n "${secret}" ] || secret="lhtpi-change-me-$(date +%s)"
+    secret="${LHTPI_SECRET}"
+    if [ -z "${secret}" ] && [ -f "${SECRET_FILE}" ]; then
+        secret="$(sed -n 's/^LHTPI_SECRET=//p' "${SECRET_FILE}" | head -1 || true)"
+        LHTPI_SECRET="${secret}"
+    fi
+    [ -n "${secret}" ] || fail "Kein LHTPI_SECRET - configure_zugang wurde nicht ausgeführt"
 
     cat > "/etc/systemd/system/${SERVICE_APP}" <<EOF
 [Unit]
@@ -817,7 +865,8 @@ WorkingDirectory=${PROJECT_DIR}
 Environment=PYTHONUNBUFFERED=1
 Environment=LHTPI_HOST=0.0.0.0
 Environment=LHTPI_PORT=${APP_PORT}
-Environment=LHTPI_SECRET=${secret}
+Environment=LHTPI_SETUP_TOKEN_FILE=${SETUP_TOKEN_FILE}
+EnvironmentFile=${SECRET_FILE}
 ExecStart=${PROJECT_DIR}/venv/bin/python ${PROJECT_DIR}/app.py
 Restart=always
 RestartSec=5
@@ -1244,7 +1293,17 @@ print_summary() {
     echo "  🧭 Anzeigen:      http://<LAN-IP>:${APP_PORT}/display   ← hier einstellen:"
     echo "                     welches Tool welchen Bildschirm nutzt, Dauer je Tool,"
     echo "                     und ob mehrere Tools sich einen Bildschirm teilen."
-    echo "  🔑 Login:         admin / admin"
+    echo "  🔑 Login:         Benutzer 'admin', Passwort ist das Einmal-Token:"
+    if [ -n "${SETUP_TOKEN}" ]; then
+        echo "                    ${SETUP_TOKEN}"
+        echo "     Token-Datei:  ${SETUP_TOKEN_FILE} (auf dem Gerät, Rechte 600)"
+    else
+        echo "                    siehe ${SETUP_TOKEN_FILE} (nur root/pi lesbar)"
+    fi
+    echo "     Das Token gilt nur bis zum ersten Login - die App verlangt dort"
+    echo "     sofort ein eigenes Passwort (mind. 12 Zeichen)."
+    echo "     Neues Token, falls das Passwort unbekannt ist:"
+    echo "       cd ${PROJECT_DIR} && sudo -u ${PI_USER} ./venv/bin/python setup_token.py --neu"
     echo ""
     if [ "$TOOL_TERMIN" = "1" ]; then
         echo "  🗓️  Terminboard:   http://<LAN-IP>:${TERMIN_PORT}  (admin / admin)"
@@ -1535,6 +1594,7 @@ main() {
 
     backup_configs
     configure_network
+    configure_zugang
     configure_services
     if [ "$TOOL_TERMIN" = "1" ]; then
         configure_terminboard

@@ -6,6 +6,11 @@ test_venv/
 .env
 uploads/
 
+# Erstzugang: Secret und Einmal-Token gehören nie ins Repo
+.setup-token
+*.setup-token
+lhtpi.env
+
 # Lizenzdateien (signiert, gehören nicht ins Repo)
 lizenz.key
 *.lizenz.key

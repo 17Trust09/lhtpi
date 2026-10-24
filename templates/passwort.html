@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LHTPi - Passwort setzen</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#1a1a2e;display:flex;align-items:center;justify-content:center;min-height:100vh}
+.login-box{background:#16213e;padding:2.5rem;border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.4);width:100%;max-width:420px}
+.login-box h1{color:#e94560;text-align:center;margin-bottom:.5rem;font-size:1.6rem}
+.login-box p{color:#8899aa;text-align:center;margin-bottom:1.2rem;font-size:.9rem;line-height:1.4}
+label{display:block;color:#8899aa;font-size:.8rem;margin-bottom:.25rem}
+input{width:100%;padding:12px 16px;margin-bottom:1rem;border:1px solid #2a2a4a;border-radius:8px;background:#0f3460;color:#fff;font-size:1rem;outline:none}
+input:focus{border-color:#e94560}
+button{width:100%;padding:12px;background:#e94560;color:#fff;border:none;border-radius:8px;font-size:1rem;cursor:pointer;font-weight:600}
+button:hover{background:#d63851}
+.flash{background:#ff4444;color:#fff;padding:10px;border-radius:8px;margin-bottom:1rem;text-align:center;font-size:.9rem}
+.flash.ok{background:#2e8b57}
+.hinweis{color:#c9d4e5;font-size:.8rem;text-align:left;background:#0f3460;border-left:3px solid #e94560;padding:10px 12px;border-radius:6px;margin-bottom:1.2rem;line-height:1.4}
+</style>
+</head>
+<body>
+<div class="login-box">
+<h1>🔑 Passwort setzen</h1>
+
+{% if wechsel_offen %}
+<div class="hinweis">
+Erstinbetriebnahme: Das Einmal-Token aus <code>/etc/lhtpi/setup-token</code> ist
+nur für die erste Anmeldung gedacht. Bitte jetzt ein eigenes Passwort setzen —
+mindestens 12 Zeichen. Danach ist das Token ungültig.
+</div>
+{% else %}
+<p>Neues Passwort für den Zugang <b>admin</b></p>
+{% endif %}
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}{% for cat,msg in messages %}<div class="flash{% if cat == 'ok' %} ok{% endif %}">{{ msg }}</div>{% endfor %}{% endif %}
+{% endwith %}
+
+<form method="post">
+<label for="alt">Bisheriges Passwort</label>
+<input type="password" id="alt" name="alt" placeholder="Bisheriges Passwort" required autofocus autocomplete="current-password">
+<label for="neu">Neues Passwort</label>
+<input type="password" id="neu" name="neu" placeholder="Neues Passwort (min. 12 Zeichen)" required autocomplete="new-password">
+<label for="wieder">Neues Passwort wiederholen</label>
+<input type="password" id="wieder" name="wieder" placeholder="Neues Passwort wiederholen" required autocomplete="new-password">
+<button type="submit">Passwort speichern</button>
+</form>
+</div>
+</body>
+</html>
