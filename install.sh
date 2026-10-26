@@ -189,13 +189,21 @@ prepare_project() {
     mkdir -p "${PROJECT_DIR}" "${PROJECT_DIR}/uploads"
 
     if [ "${SCRIPT_DIR}" != "${PROJECT_DIR}" ]; then
-        # Dateien kopieren, aber venv/Caches ausschließen
+        # Nur Programmdateien kopieren – venv, Datenbanken und Uploads bleiben
+        # außen vor (sie liegen ohnehin inzwischen unter /var/lib/lhtpi).
         for f in "${SCRIPT_DIR}"/*; do
             [ -f "$f" ] && cp "$f" "${PROJECT_DIR}/" 2>/dev/null || true
         done
-        for d in templates static scripts; do
-            [ -d "${SCRIPT_DIR}/${d}" ] && cp -r "${SCRIPT_DIR}/${d}" "${PROJECT_DIR}/" 2>/dev/null || true
+        # Alle Programmordner mitnehmen. Fehlte terminboard/ und tools/, war die
+        # Installation aus einem anderen Verzeichnis unvollständig.
+        for d in templates static scripts terminboard tools; do
+            [ -d "${SCRIPT_DIR}/${d}" ] || continue
+            mkdir -p "${PROJECT_DIR}/${d}"
+            cp -a "${SCRIPT_DIR}/${d}/." "${PROJECT_DIR}/${d}/" 2>/dev/null || true
         done
+        # Nie mitkopieren: Datenbanken, Uploads, venv
+        find "${PROJECT_DIR}" -maxdepth 3 \( -name '*.db' -o -name '__pycache__' -o -name 'venv' \) \
+            -prune -exec rm -rf {} + 2>/dev/null || true
     fi
 
     if [ ! -f "${PROJECT_DIR}/requirements.txt" ]; then
