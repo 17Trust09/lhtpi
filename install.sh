@@ -652,6 +652,17 @@ configure_screens() {
     SCREEN_COUNT="${genutzt}"
     ok "Genutzte Bildschirme laut Gerät: ${SCREEN_COUNT}"
 
+    # Die Datei ist die Wahrheit für die Start-Steuerung: sie liest sie beim
+    # Booten und startet kiosk-screen2 nur, wenn dort 2 steht. Wurde --screens
+    # ausdrücklich angegeben, muss sie mitziehen – sonst bliebe Bildschirm 2
+    # schwarz, obwohl er eingerichtet ist.
+    if [ "${SCREENS_EXPLIZIT}" = "1" ] || [ ! -s "${SCREENS_FILE}" ]; then
+        mkdir -p "$(dirname "${SCREENS_FILE}")"
+        echo "${SCREEN_COUNT}" > "${SCREENS_FILE}"
+        chmod 644 "${SCREENS_FILE}"
+        ok "Bildschirmzahl gespeichert: ${SCREEN_COUNT} (${SCREENS_FILE})"
+    fi
+
     local i=1
     while [ "$i" -le "${SCREEN_COUNT}" ]; do
         configure_screen_kiosk "$i"
