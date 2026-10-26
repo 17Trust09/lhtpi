@@ -420,23 +420,32 @@ for i in $(seq 1 30); do
     sleep 2
 done
 
-# Geometrie dieses Ausgangs (Breite x Höhe +X+Y) – Fallback 1920x1080
-GEO=$(xrandr --current 2>/dev/null | awk -v m="$MON" \
-      '$1==m && $2=="connected"{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+/){print $i; exit}}')
-W=$(echo "$GEO" | cut -dx -f1)
-REST=$(echo "$GEO" | cut -dx -f2)
-H=$(echo "$REST" | cut -d+ -f1)
-X=$(echo "$GEO" | cut -d+ -f2)
-Y=$(echo "$GEO" | cut -d+ -f3)
-W=${W:-1920}; H=${H:-1080}
-case "${X:-}" in ''|*[!0-9]*) X=0 ;; esac
-case "${Y:-}" in ''|*[!0-9]*) Y=0 ;; esac
-# Zweiter Ausgang ohne Position -> rechts neben HDMI-1
-if [ "$MON" = "HDMI-2" ] && [ "$X" = "0" ]; then
-    X=$(xrandr --current 2>/dev/null | awk \
-        '$1=="HDMI-1" && $2=="connected"{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+/){split($i,a,"x"); print a[1]; exit}}')
-    X=${X:-1920}
-fi
+# Geometrie dieses Ausgangs (Breite x Höhe +X+Y). Wird bei JEDEM Start neu
+# ermittelt: Ein später gesteckter Bildschirm hat eine andere Auflösung als der
+# beim Booten angenommene Rückfall – sonst bleiben links und rechts Balken.
+W=1920      # Rückfall, falls beim Booten kein Bildschirm steckt
+H=1080
+X=0
+Y=0
+ermittle_geometrie() {
+    GEO=$(xrandr --current 2>/dev/null | awk -v m="$MON" \
+          '$1==m && $2=="connected"{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+/){print $i; exit}}')
+    W=$(echo "$GEO" | cut -dx -f1)
+    REST=$(echo "$GEO" | cut -dx -f2)
+    H=$(echo "$REST" | cut -d+ -f1)
+    X=$(echo "$GEO" | cut -d+ -f2)
+    Y=$(echo "$GEO" | cut -d+ -f3)
+    W=${W:-1920}; H=${H:-1080}
+    case "${X:-}" in ''|*[!0-9]*) X=0 ;; esac
+    case "${Y:-}" in ''|*[!0-9]*) Y=0 ;; esac
+    # Zweiter Ausgang ohne Position -> rechts neben HDMI-1
+    if [ "$MON" = "HDMI-2" ] && [ "$X" = "0" ]; then
+        X=$(xrandr --current 2>/dev/null | awk \
+            '$1=="HDMI-1" && $2=="connected"{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+/){split($i,a,"x"); print a[1]; exit}}')
+        X=${X:-1920}
+    fi
+}
+ermittle_geometrie
 
 ready=0
 for i in $(seq 1 30); do
@@ -471,6 +480,8 @@ rm -rf "$PROFILE/Default/Sessions" 2>/dev/null || true
 # Kabel gezogen wurde, beendet X das Fenster. Wird es wieder gesteckt, muss das
 # Fenster ohne Neustart des Pi zurückkommen.
 starte_chromium() {
+    ermittle_geometrie
+    echo "$(date '+%F %T') - starte Chromium auf ${MON} (${W}x${H}+${X}+${Y})" >> "$LOG"
     "$CHROMIUM" \
     --app="$APP_URL" \
     --class=kiosk-screen__IDX__ \
