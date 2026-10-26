@@ -1,15 +1,21 @@
 import os
 from flask import Flask
 from flask_login import LoginManager
+from config import daten_datei, daten_ordner
+
+_BASE = os.path.dirname(os.path.abspath(__file__))
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('LHTPI_SECRET', 'lhtpi-dev-secret-change-me')
 # DB-Pfad überschreibbar (Tests/mehrere Instanzen): LHTPI_DB=/pfad/datei.db
+# Standard: /var/lib/lhtpi/app/lhtpi.db – außerhalb des Programmverzeichnisses,
+# damit ein Update den Code ersetzen kann, ohne Daten zu verlieren.
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + os.environ.get(
-    'LHTPI_DB', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lhtpi.db')
+    'LHTPI_DB', daten_datei('app', 'lhtpi.db', os.path.join(_BASE, 'lhtpi.db'))
 )
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+app.config['UPLOAD_FOLDER'] = os.environ.get(
+    'LHTPI_UPLOADS', daten_ordner('uploads', os.path.join(_BASE, 'uploads')))
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500 MB
 app.config['ALLOWED_EXTENSIONS'] = {'png', 'jpg', 'jpeg', 'gif', 'mp4'}
 

@@ -11,3 +11,6 @@ lizenz.key
 *.lizenz.key
 privat*.json
 privatschluessel*
+
+# Update-Pakete gehören nicht ins Repo
+dist/

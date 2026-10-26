@@ -7,7 +7,29 @@ import os
 import sqlite3
 from datetime import date, timedelta
 
-DB_PATH = os.environ.get("SAFETY_DB", os.path.join(os.path.dirname(os.path.abspath(__file__)), "safetycross.db"))
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+_DATA_DIR = os.environ.get("LHTPI_DATA_DIR", "/var/lib/lhtpi")
+
+
+def _db_pfad():
+    """Datenbank außerhalb des Programmverzeichnisses (überlebt Updates)."""
+    env = os.environ.get("SAFETY_DB")
+    if env:
+        return env
+    neu = os.path.join(_DATA_DIR, "safety-cross", "safetycross.db")
+    alt = os.path.join(_BASE_DIR, "safetycross.db")
+    # Eine vorhandene, aber LEERE Datei am neuen Ort darf die echten Daten im
+    # Programmverzeichnis nicht verdecken - sonst sieht es aus, als wären alle
+    # Einstellungen weg.
+    if os.path.exists(neu) and (os.path.getsize(neu) > 0 or not os.path.exists(alt)):
+        return neu
+    if os.path.exists(alt):
+        return alt              # Migration noch nicht gelaufen
+    os.makedirs(os.path.dirname(neu), exist_ok=True)
+    return neu
+
+
+DB_PATH = _db_pfad()
 
 
 def _conn():
