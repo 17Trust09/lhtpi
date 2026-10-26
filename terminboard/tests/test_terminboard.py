@@ -132,14 +132,23 @@ def test_csv_quoted_semicolon():
 
 # ── XLSX-Parsing ─────────────────────────────────────────────────────
 
-def _write_xlsx(path, rows, header=("Art", "Prüfstand", "Von", "Bis", "Info")):
+def _write_xlsx(path, rows, header=("Nr", "Art", "Prüfstand", "Von", "Bis", "Info", "Status")):
+    """Schreibt eine Datei im aktuellen (Modell-2-)Format.
+
+    Die Zeilen werden in der alten Kurzform übergeben (Art, Prüfstand, Von,
+    Bis, Info) und hier um Nummer und Status ergänzt – so bleiben die Tests
+    lesbar und prüfen trotzdem das gültige Format.
+    """
     from openpyxl import Workbook
     wb = Workbook()
     ws = wb.active
     ws.title = "Termine"
     ws.append(list(header))
-    for r in rows:
-        ws.append(list(r))
+    for nummer, r in enumerate(rows, start=1):
+        werte = list(r)
+        if len(werte) == 5:
+            werte = [nummer] + werte + ["offen"]
+        ws.append(werte)
     wb.save(path)
 
 

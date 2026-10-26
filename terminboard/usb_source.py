@@ -89,6 +89,36 @@ def _cell_to_date(value):
     return parse_date(value)
 
 
+SPALTEN_ALIASE = {
+    'nr': 'nr', 'nummer': 'nr',
+    'art': 'art', 'typ': 'art',
+    'pruefstand': 'pruefstand', 'prüfstand': 'pruefstand',
+    'von': 'von', 'start': 'von',
+    'bis': 'bis', 'ende': 'bis',
+    'info': 'info', 'titel': 'info', 'bemerkung': 'info',
+    'status': 'status',
+}
+
+
+def _header_map(cells):
+    """Ordnet Spaltennamen ihrer Position zu.
+
+    Nötig, weil zwei Formate im Umlauf sind: das alte mit fünf Spalten
+    (Art, Prüfstand, Von, Bis, Info) und das neue mit Nummer und Status. Ohne
+    diese Erkennung würde das neue Format spaltenweise verrutschen.
+    """
+    if not cells:
+        return None
+    namen = {}
+    for position, zelle in enumerate(cells):
+        name = str(zelle or '').strip().lower()
+        if name in SPALTEN_ALIASE:
+            namen[SPALTEN_ALIASE[name]] = position
+    if 'pruefstand' in namen and 'von' in namen:
+        return namen
+    return None
+
+
 def _looks_like_header(cells):
     """True, wenn die erste Zelle eine Kopfzeilen-Spalte (Art) ist."""
     if not cells:
@@ -169,62 +199,38 @@ def parse_azubi_settings(text):
 
 
 def parse_termin_xlsx(file_path):
-    """Liest ``termine.xlsx`` (openpyxl) in Termin-Dicts.
+    """Liest ``termine.xlsx`` über den einheitlichen Excel-Leser.
 
-    Spalten positionell: Art, Prüfstand, Von, Bis, Info.
-    Die erste Datenzeile wird als Kopfzeile erkannt und übersprungen.
-    Datumszellen werden als ``date`` übernommen.
+    Es gibt nur noch **einen** Excel-Leser (``excel_modell2``). Diese Funktion
+    übersetzt dessen Ergebnis in die Dict-Form, die die Anzeige erwartet.
+    Dateien im alten Fünf-Spalten-Format werden abgelehnt.
 
-    Liefert bei Lesefehlern ``None`` (damit der Aufrufer auf ``termine.csv``
-    zurückfallen kann), sonst eine Liste (auch leer).
+    Liefert ``None``, wenn die Datei nicht gelesen werden kann.
     """
+    if not os.path.isfile(file_path):
+        return None
     try:
-        from openpyxl import load_workbook
+        from excel_modell2 import lies_datei
     except ImportError:
         return None
 
-    try:
-        wb = load_workbook(file_path, data_only=True, read_only=True)
-    except Exception:
+    daten = lies_datei(file_path)
+    if daten['fehler']:
         return None
 
     rows = []
-    try:
-        ws = wb['Termine'] if 'Termine' in wb.sheetnames else wb.worksheets[0]
-        header_seen = False
-        for row in ws.iter_rows(values_only=True):
-            if row is None or all(c is None or str(c).strip() == '' for c in row):
-                continue
-            if not header_seen and _looks_like_header(row):
-                header_seen = True
-                continue
-            header_seen = True
-            parts = list(row[:5])
-            while len(parts) < 5:
-                parts.append('')
-            typ = normalize_type(parts[0])
-            referenz = str(parts[1] or '').strip()
-            start = _cell_to_date(parts[2])
-            ende = _cell_to_date(parts[3])
-            titel = str(parts[4] or '').strip()
-            if not referenz:
-                continue
-            if not titel:
-                continue
-            if start is None:
-                continue
-            rows.append({
-                'typ': typ,
-                'titel': titel,
-                'referenz': referenz,
-                'start': start,
-                'ende': ende,
-                'text': None,
-            })
-    except Exception:
-        return None
-    finally:
-        wb.close()
+    for zeile in daten['zeilen']:
+        if not zeile['pruefstand'] or zeile['von'] is None:
+            continue
+        titel = zeile['info'] or f"{zeile['art']} {zeile['pruefstand']}".strip()
+        rows.append({
+            'typ': normalize_type(zeile['art']),
+            'titel': titel,
+            'referenz': zeile['pruefstand'],
+            'start': zeile['von'].date(),
+            'ende': zeile['bis'].date() if zeile['bis'] else None,
+            'text': None,
+        })
     return rows
 
 
