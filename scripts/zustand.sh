@@ -89,6 +89,26 @@ for datei in "${DATA_DIR}/safety-cross/safetycross.db" "${SC_DIR}/safetycross.db
     frage "${datei}" "SELECT '  ' || key || ' = ' || value FROM config WHERE key IN ('abteilung','meister','start_date')"
 done
 
+titel "Anzeigen-Belegung (im Dashboard eingestellt)"
+ANZEIGE_DB="${DATA_DIR}/app/lhtpi.db"
+[ -f "${ANZEIGE_DB}" ] || ANZEIGE_DB="${PROJEKT}/lhtpi.db"
+if [ -f "${ANZEIGE_DB}" ]; then
+    belegung=$(frage "${ANZEIGE_DB}" "SELECT s.idx || '|' || COALESCE(s.name,'') || '|' || COALESCE(s.hdmi,'') || '|' || s.enabled || '|' || COALESCE(t.tool,'') || '|' || COALESCE(t.dwell_seconds,'') FROM kiosk_screen s LEFT JOIN kiosk_screen_tool t ON t.screen_id = s.id ORDER BY s.idx, t.sort")
+    if [ -n "${belegung}" ]; then
+        printf '%s\n' "${belegung}" | while IFS='|' read -r idx name hdmi an tool dwell; do
+            if [ -n "${tool}" ]; then
+                sag "  Bildschirm ${idx} (${hdmi:-?}, ${name:-ohne Namen}): ${tool}${dwell:+, ${dwell}s}"
+            else
+                sag "  Bildschirm ${idx} (${hdmi:-?}, ${name:-ohne Namen}): nicht belegt"
+            fi
+        done
+    else
+        sag "  keine Einträge – das Gerät fragt beim ersten Start"
+    fi
+else
+    sag "  ${ANZEIGE_DB} fehlt (noch nie gestartet)"
+fi
+
 titel "Konfiguration"
 for datei in /etc/lhtpi/tools /etc/lhtpi/screens /etc/lhtpi/screen2 /etc/lhtpi/license.key; do
     if [ -e "${datei}" ]; then
