@@ -353,5 +353,46 @@ document.querySelectorAll('.card[data-screen]').forEach(function (karte) {
   } catch (err) {}
 })();
 </script>
+<script>
+/* Speichern ohne Wartezeit: Der Knopf schickt das Formular im Hintergrund und
+   meldet sofort zurück. Vorher lief die Seite komplett neu (Seite aufbauen,
+   alle Kacheln zeichnen) - das fühlte sich wie eine Ewigkeit an, obwohl das
+   Speichern selbst nur Millisekunden dauert. */
+(function () {
+  var form = document.querySelector('form');
+  if (!form) return;
+  var knopf = form.querySelector('button.save');
+  if (!knopf) return;
+
+  knopf.addEventListener('click', function (ereignis) {
+    if (ereignis.ctrlKey || ereignis.metaKey || ereignis.shiftKey) return;
+    ereignis.preventDefault();
+
+    var alt = knopf.textContent;
+    knopf.disabled = true;
+    knopf.textContent = 'Gespeichert';
+
+    var daten = new FormData(form);
+    fetch(form.action || location.href, {
+      method: 'POST',
+      body: daten,
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      credentials: 'same-origin'
+    }).then(function (antwort) {
+      if (!antwort.ok) throw new Error(antwort.status);
+      knopf.textContent = 'Gespeichert \u2713';
+      setTimeout(function () {
+        knopf.disabled = false;
+        knopf.textContent = alt;
+      }, 1200);
+    }).catch(function () {
+      /* Im Zweifel normal absenden - lieber langsam als verloren. */
+      knopf.disabled = false;
+      knopf.textContent = alt;
+      form.submit();
+    });
+  });
+})();
+</script>
 </body>
 </html>

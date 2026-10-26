@@ -29,6 +29,7 @@ SC_DIR="/opt/safety-cross"
 SC_PORT="8002"
 SERVICE_SC_APP="safetycross.service"
 SERVICE_DISPLAY_GUARD="lhtpi-display-guard.service"
+SERVICE_SCREEN2_WATCH="lhtpi-screen2-watch.service"
 
 # ── Bildschirm-Wächter: Dauerbetrieb + spätes Einschalten ─────────────
 
@@ -61,6 +62,8 @@ while true; do
         # das Bild auch dann, wenn beim Boot kein Monitor an war oder nur HDMI-2
         # verwendet wird.
         set -- ${angeschlossen}
+        # --auto: die Auflösung kommt aus dem EDID des Bildschirms. Eine feste
+        # 1920x1080 würde bei anderer Panel-Auflösung schwarze Balken erzeugen.
         if [ "$#" -eq 1 ]; then
             xrandr --output "$1" --primary --auto --pos 0x0 >/dev/null 2>&1 || true
             for ausgang in HDMI-1 HDMI-2; do
@@ -117,6 +120,7 @@ LIGHTDM_CONF="${LHTPI_LIGHTDM_CONF:-${LIGHTDM_DIR}/lightdm.conf}"
 TOOLS_FILE="${LHTPI_TOOLS_FILE:-/etc/lhtpi/tools}"
 SCREENS_FILE="${LHTPI_SCREENS_FILE:-/etc/lhtpi/screens}"
 LICENSE_FILE="${LHTPI_LICENSE_FILE:-/etc/lhtpi/license.key}"
+VERSION_FILE="${LHTPI_VERSION_FILE:-/etc/lhtpi/version}"
 MARKER_FILE="${LHTPI_INSTALLED_MARKER:-/etc/lhtpi/installed}"
 MAX_SCREENS="2"
 # Merkmal: Bildschirm 2 ist eingerichtet (steuert den zweiten Kiosk)
@@ -189,7 +193,7 @@ prepare_project() {
         for f in "${SCRIPT_DIR}"/*; do
             [ -f "$f" ] && cp "$f" "${PROJECT_DIR}/" 2>/dev/null || true
         done
-        for d in templates static; do
+        for d in templates static scripts; do
             [ -d "${SCRIPT_DIR}/${d}" ] && cp -r "${SCRIPT_DIR}/${d}" "${PROJECT_DIR}/" 2>/dev/null || true
         done
     fi
@@ -254,6 +258,92 @@ EOF
     ok "Netzwerk: kein Access Point, keine WLAN-Verbindungen verändert"
 }
 
+
+# ── Bildschirm 2: Erkennung, Aufwachen und Zuordnung ───────────────────
+# Zwei Dinge müssen auch ohne Neustart funktionieren:
+#   1. Ein nachträglich gestecktes HDMI-Kabel liefert Bild (DPMS an, Auflösung setzen).
+#   2. Der Kiosk für Bildschirm 2 startet dann – oder wird neu positioniert.
+#
+# Ein Wächter-Dienst prüft das dauerhaft. Die Kiosk-Skripte selbst überwachen
+# ihren Ausgang bereits; dieser Dienst ist die Rückfallebene für den Fall, dass
+# ein Fenster nicht mehr existiert.
+configure_screen2_watchdog() {
+    [ "${SCREEN_COUNT}" -ge 2 ] || return 0
+    log "Richte Wächter für Bildschirm 2 ein"
+
+    local skript="/home/${PI_USER}/lhtpi-screen2-watch.sh"
+    cat > "${skript}" <<'SCREEN2_EOF'
+#!/bin/bash
+# LHTPi: hält Bildschirm 2 am Leben.
+#
+# - erkennt ein nachträglich gestecktes HDMI-Kabel (kein Neustart nötig)
+# - schaltet den Ausgang ein, falls DPMS ihn abgeschaltet hat
+# - setzt die Position rechts neben HDMI-1 (oder primär, wenn 1 fehlt)
+# - startet den Kiosk-Dienst für Bildschirm 2, wenn er nicht läuft
+set -u
+export DISPLAY="${DISPLAY:-:0}"
+export XAUTHORITY="${XAUTHORITY:-/home/pi/.Xauthority}"
+DIENST="kiosk-screen2.service"
+LOG="/home/pi/lhtpi-screen2-watch.log"
+letzter_zustand=""
+
+sag() { echo "$(date '+%F %T') - $*" >> "$LOG"; }
+
+while true; do
+    zustand="$(xrandr --query 2>/dev/null | grep -E '^HDMI-[12] connected' | awk '{print $1}' | tr '\n' ' ')"
+
+    if [ "${zustand}" != "${letzter_zustand}" ]; then
+        sag "angeschlossen: ${zustand:-keiner}"
+        letzter_zustand="${zustand}"
+    fi
+
+    if printf '%s' "${zustand}" | grep -q 'HDMI-2'; then
+        # Ausgang wecken und Position setzen
+        if printf '%s' "${zustand}" | grep -q 'HDMI-1'; then
+            xrandr --output HDMI-1 --primary --auto --pos 0x0 \
+                   --output HDMI-2 --auto --right-of HDMI-1 >/dev/null 2>&1 || true
+        else
+            xrandr --output HDMI-2 --primary --auto --pos 0x0 >/dev/null 2>&1 || true
+        fi
+        xset dpms force on >/dev/null 2>&1 || true
+
+        # Kiosk starten, falls nicht aktiv
+        if ! systemctl is-active --quiet "${DIENST}"; then
+            sag "starte ${DIENST}"
+            systemctl start "${DIENST}" >/dev/null 2>&1 || true
+        fi
+    fi
+
+    sleep 5
+done
+SCREEN2_EOF
+    chmod +x "${skript}"
+    chown "${PI_USER}:${PI_GROUP}" "${skript}"
+
+    cat > "/etc/systemd/system/${SERVICE_SCREEN2_WATCH}" <<EOF
+[Unit]
+Description=LHTPi Waechter Bildschirm 2
+After=lightdm.service
+ConditionPathExists=${SCREEN2_FILE}
+
+[Service]
+Type=simple
+User=${PI_USER}
+Group=${PI_GROUP}
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/${PI_USER}/.Xauthority
+ExecStart=${skript}
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload
+    systemctl enable --now "${SERVICE_SCREEN2_WATCH}" >/dev/null 2>&1 || true
+    ok "Bildschirm 2: Wächter aktiv (${SERVICE_SCREEN2_WATCH})"
+}
+
 # ── Gemeinsame Anzeige: EIN Chromium-Kiosk je Bildschirm ───────────────
 # Jeder Bildschirm zeigt den Anzeige-Router der Verteiler-App
 # (http://localhost:8000/screen/<n>). Welche Tools dort laufen und wie lange
@@ -276,9 +366,15 @@ render_screen_kiosk_script() {
 set -u
 
 # Kiosk Bildschirm __IDX__ – Anzeige-Router der Verteiler-App
-# Monitor-Zuordnung: HDMI-1 primär links, HDMI-2 rechts daneben
-xrandr --output HDMI-1 --primary --mode 1920x1080 --pos 0x0 \
-       --output HDMI-2 --mode 1920x1080 --right-of HDMI-1 >/dev/null 2>&1 || true
+# Monitor-Zuordnung: HDMI-1 primär links, HDMI-2 rechts daneben.
+# --auto statt fester Auflösung: sonst entstehen bei abweichender Panel-Auflösung
+# schwarze Balken links und rechts.
+if xrandr --query 2>/dev/null | grep -q '^HDMI-2 connected'; then
+    xrandr --output HDMI-1 --primary --auto --pos 0x0 \
+           --output HDMI-2 --auto --right-of HDMI-1 >/dev/null 2>&1 || true
+else
+    xrandr --output HDMI-1 --primary --auto --pos 0x0 >/dev/null 2>&1 || true
+fi
 
 LOG="__LOG__"
 APP_URL="__APP_URL__"
@@ -294,6 +390,24 @@ echo "$(date '+%F %T') - Kiosk Bildschirm __IDX__ gestartet, warte auf den Bilds
 for i in $(seq 1 60); do
     xset q >/dev/null 2>&1 && break
     sleep 1
+done
+
+# Läuft ein Skript für Bildschirm 2, und Bildschirm 1 fehlt: dann ist 2 der
+# erste (und einzige) Ausgang und wird primär.
+[ "__IDX__" = "2" ] && ! xrandr --query 2>/dev/null | grep -q '^HDMI-1 connected' \
+    && xrandr --output HDMI-2 --primary --auto --pos 0x0 >/dev/null 2>&1 || true
+
+# Warten, bis der zugeordnete Ausgang wirklich da ist. Ein nachträglich
+# gestecktes Kabel liefert seine Auflösung erst nach der Erkennung – ohne diese
+# Wartezeit öffnet Chromium ein Fenster mit falscher Größe.
+for i in $(seq 1 30); do
+    if xrandr --query 2>/dev/null | grep -q "^__MON__ connected"; then
+        break
+    fi
+    # Außerdem: Bildschirm einschalten, falls DPMS ihn hatte ausschalten lassen
+    xrandr --output __MON__ --auto >/dev/null 2>&1 || true
+    echo "$(date '+%F %T') - warte auf __MON__" >> "$LOG"
+    sleep 2
 done
 
 # Geometrie dieses Ausgangs (Breite x Höhe +X+Y) – Fallback 1920x1080
@@ -343,12 +457,18 @@ rm -f "$PROFILE/Default/Current Session" "$PROFILE/Default/Current Tabs" \
       "$PROFILE/Default/Last Session" "$PROFILE/Default/Last Tabs" 2>/dev/null || true
 rm -rf "$PROFILE/Default/Sessions" 2>/dev/null || true
 
-exec "$CHROMIUM" \
+# Chromium im Hintergrund starten und überwachen: Fällt der Ausgang weg, weil das
+# Kabel gezogen wurde, beendet X das Fenster. Wird es wieder gesteckt, muss das
+# Fenster ohne Neustart des Pi zurückkommen.
+starte_chromium() {
+    "$CHROMIUM" \
     --app="$APP_URL" \
     --class=kiosk-screen__IDX__ \
     --user-data-dir="$PROFILE" \
     --window-position="${X},${Y}" \
     --window-size="${W},${H}" \
+    --start-fullscreen \
+    --force-device-scale-factor=1 \
     --noerrdialogs \
     --disable-infobars \
     --disable-session-crashed-bubble \
@@ -370,7 +490,97 @@ exec "$CHROMIUM" \
     --force-fieldtrials="*Translate/Disabled/" \
     --disable-gpu \
     --disable-gpu-compositing >> "$LOG" 2>&1
+}
+
+starte_chromium &
+PID=$!
+
+# Nachführung: Solange Bildschirm 2 aktiv ist, prüfen wir, ob der Ausgang noch
+# da ist. Verschwindet er, beenden wir Chromium; kommt er zurück, starten wir neu.
+while true; do
+    sleep 5
+    if ! kill -0 "$PID" 2>/dev/null; then
+        echo "$(date '+%F %T') - Chromium beendet, starte neu" >> "$LOG"
+        sleep 3
+        starte_chromium &
+        PID=$!
+        continue
+    fi
+
+    if [ "__IDX__" = "2" ] && ! xrandr --query 2>/dev/null | grep -q '^__MON__ connected'; then
+        echo "$(date '+%F %T') - __MON__ getrennt, warte auf erneutes Anstecken" >> "$LOG"
+        kill "$PID" 2>/dev/null || true
+        wait "$PID" 2>/dev/null || true
+        # Warten, bis das Kabel wieder steckt
+        for i in $(seq 1 120); do
+            if xrandr --query 2>/dev/null | grep -q '^__MON__ connected'; then
+                break
+            fi
+            sleep 5
+        done
+        # Position und Auflösung neu setzen
+        if xrandr --query 2>/dev/null | grep -q '^HDMI-1 connected'; then
+            xrandr --output HDMI-1 --primary --auto --pos 0x0 \
+                   --output HDMI-2 --auto --right-of HDMI-1 >/dev/null 2>&1 || true
+        else
+            xrandr --output HDMI-2 --primary --auto --pos 0x0 >/dev/null 2>&1 || true
+        fi
+        sleep 3
+        starte_chromium &
+        PID=$!
+    fi
+done
 KIOSK_EOF
+}
+
+# ── HDMI: echter Vollbild-Modus statt Letterbox ───────────────────────────
+# Der alte Kiosk lief über den Legacy-Videotreiber mit fest erzwungener
+# Auflösung (hdmi_group/hdmi_mode). Auf dem Pi 4/5 mit KMS ist das falsch:
+# Der Bildschirm meldet seine Auflösung selbst, und die alten Zeilen erzeugen
+# links/rechts schwarze Balken (Letterbox). Hier wird auf KMS umgestellt.
+configure_hdmi_modus() {
+    log "Prüfe HDMI-Videomodus"
+    local config
+    if [ -f /boot/firmware/config.txt ]; then
+        config=/boot/firmware/config.txt
+    else
+        warn "/boot/firmware/config.txt nicht gefunden – HDMI nicht angepasst"
+        return 0
+    fi
+
+    # Sicherung nur einmal je Tag anlegen, damit die Datei nicht zumuellt
+    local sicherung="/boot/firmware/config.txt.vor-lhtpi"
+    [ -f "${sicherung}" ] || cp -a "${config}" "${sicherung}" 2>/dev/null || true
+
+    # Alte Zeilen entfernen, die die Auflösung erzwingen
+    local geaendert=0
+    for zeile in hdmi_group hdmi_mode hdmi_force_hotplug hdmi_drive; do
+        if grep -qE "^[[:space:]]*#?[[:space:]]*${zeile}=" "${config}"; then
+            sed -i -E "/^[[:space:]]*#?[[:space:]]*${zeile}=/d" "${config}"
+            geaendert=1
+        fi
+    done
+    [ "${geaendert}" = "1" ] && ok "Alte Auflösungs-Zwangszeilen entfernt (KMS übernimmt)"
+
+    # KMS sicherstellen (Standard bei Pi 4/5, bei Pi 3 nachziehen)
+    if ! grep -qE '^[[:space:]]*dtoverlay=vc4-kms-v3d' "${config}"; then
+        printf '\n# LHTPi: KMS-Treiber – Auflösung kommt vom Bildschirm (kein Letterbox)\ndtoverlay=vc4-kms-v3d\n' >> "${config}"
+        ok "KMS-Treiber eingetragen"
+    fi
+
+    # HDMI-Erkennung erzwingen: Der Kiosk zeigt auch dann ein Bild, wenn beim
+    # Booten kein Kabel steckt. Die Auflösung wählt der Treiber aus dem EDID.
+    if ! grep -qE '^[[:space:]]*hdmi_force_hotplug=1[[:space:]]*$' "${config}"; then
+        printf 'hdmi_force_hotplug=1\n' >> "${config}"
+        ok "HDMI-Erkennung erzwungen (Bild auch ohne Kabel beim Boot)"
+    fi
+
+    # Kein Overscan-Beschneiden – der Kiosk soll die volle Fläche nutzen
+    if ! grep -qE '^[[:space:]]*disable_overscan=1' "${config}"; then
+        printf 'disable_overscan=1\n' >> "${config}"
+    fi
+
+    ok "HDMI auf KMS umgestellt (Vollbild, kein Letterbox)"
 }
 
 configure_screen_kiosk() {
@@ -420,11 +630,30 @@ EOF
 }
 
 configure_screens() {
+    # Wie viele Bildschirme werden tatsächlich genutzt? Das entscheidet das
+    # Gerät (/etc/lhtpi/screens), nicht die Lizenz. Sonst würde ein Update die
+    # Kiosk-Einheiten für beide Ausgänge anlegen, obwohl nur einer gewählt ist.
+    local genutzt="${SCREEN_COUNT}"
+    if [ -s "${SCREENS_FILE}" ]; then
+        genutzt="$(tr -dc '0-9' < "${SCREENS_FILE}")"
+        [ -n "${genutzt}" ] || genutzt=1
+        [ "${genutzt}" -ge 2 ] || genutzt=1
+    fi
+    SCREEN_COUNT="${genutzt}"
+    ok "Genutzte Bildschirme laut Gerät: ${SCREEN_COUNT}"
+
     local i=1
     while [ "$i" -le "${SCREEN_COUNT}" ]; do
         configure_screen_kiosk "$i"
         i=$((i + 1))
     done
+
+    # Zweiter Bildschirm muss auch die Marke haben, sonst startet er nie
+    if [ "${SCREEN_COUNT}" -ge 2 ]; then
+        mkdir -p "$(dirname "${SCREEN2_FILE}")"
+        : > "${SCREEN2_FILE}"
+        ok "Bildschirm 2 als aktiv markiert (${SCREEN2_FILE})"
+    fi
 }
 
 # ── Ersteinrichtung: das Gerät fragt beim ersten Booten selbst ─────────────
@@ -539,6 +768,13 @@ configure_setup_mode() {
     mkdir -p "${cfg_dir}"
     chown "root:${PI_GROUP}" "${cfg_dir}"
     chmod 775 "${cfg_dir}"
+    if [ -f "${SCRIPT_DIR}/VERSION" ]; then
+        mkdir -p "$(dirname "${VERSION_FILE}")"
+        tr -d '[:space:]' < "${SCRIPT_DIR}/VERSION" > "${VERSION_FILE}"
+        chmod 644 "${VERSION_FILE}"
+        ok "Version $(cat "${VERSION_FILE}") vermerkt"
+    fi
+
     if [ -f "${TOOLS_FILE}" ]; then
         chown "root:${PI_GROUP}" "${TOOLS_FILE}"
         chmod 664 "${TOOLS_FILE}"
@@ -623,7 +859,8 @@ cleanup_old_kiosks() {
     # Einrichtung selbst weg (Lizenz-Import, Uhrzeit-Dienst, Anzeige-Einheiten).
     local behalten=" lhtpi.service lhtpi-setup.service lhtpi-anzeige.service lhtpi-anzeige.path lhtpi-display-guard.service \
 kiosk-screen1.service kiosk-screen2.service lhtpi-lizenz-import.service \
-lhtpi-fake-hwclock.service lhtpi-fake-hwclock-save.service lhtpi-fake-hwclock-save.timer "
+lhtpi-fake-hwclock.service lhtpi-fake-hwclock-save.service lhtpi-fake-hwclock-save.timer \
+lhtpi-update.service lhtpi-screen2-watch.service "
     local unit name datei
     for unit in lhtpi-kiosk.service terminboard-kiosk.service safety-cross-kiosk.service; do
         if [ -f "${UNIT_DIR}/${unit}" ]; then
@@ -674,6 +911,10 @@ tools_file_content() {
 # Wie viele Bildschirme hat dieses Gerät? (Startwert für die Anzeige-Einstellungen)
 configure_screens_file() {
     mkdir -p "$(dirname "${SCREENS_FILE}")"
+    if [ -s "${SCREENS_FILE}" ] && [ "${LHTPI_FORCE_SCREENS:-0}" != "1" ]; then
+        ok "Bildschirmzahl bleibt erhalten: $(cat "${SCREENS_FILE}")"
+        return 0
+    fi
     echo "${SCREEN_COUNT}" > "${SCREENS_FILE}"
     chmod 644 "${SCREENS_FILE}"
     ok "Bildschirme: bis ${SCREEN_COUNT} möglich (Auswahl beim ersten Start)"
@@ -789,6 +1030,12 @@ EOF
 
 configure_tools_file() {
     mkdir -p "$(dirname "${TOOLS_FILE}")"
+    # Bei einer erneuten Installation bleibt die Auswahl am Gerät erhalten –
+    # sonst wären nach jedem Lauf wieder alle Tools aktiv.
+    if [ -s "${TOOLS_FILE}" ] && [ "${LHTPI_FORCE_TOOLS:-0}" != "1" ]; then
+        ok "Aktivierte Tools bleiben erhalten: $(tr '\n' ' ' < "${TOOLS_FILE}")"
+        return 0
+    fi
     tools_file_content > "${TOOLS_FILE}"
     chmod 644 "${TOOLS_FILE}"
     ok "Aktivierte Tools: $(tr '\n' ' ' < "${TOOLS_FILE}")"
@@ -989,14 +1236,7 @@ xset s noblank
 EOF
     chown -R "${PI_USER}:${PI_GROUP}" "/home/${PI_USER}/.config"
 
-    # HDMI-Fallback in config.txt
-    if [ -f /boot/firmware/config.txt ]; then
-        grep -qxF 'hdmi_force_hotplug=1' /boot/firmware/config.txt || echo 'hdmi_force_hotplug=1' >> /boot/firmware/config.txt
-        grep -qxF 'hdmi_group=2' /boot/firmware/config.txt || echo 'hdmi_group=2' >> /boot/firmware/config.txt
-        grep -qxF 'hdmi_mode=82' /boot/firmware/config.txt || echo 'hdmi_mode=82' >> /boot/firmware/config.txt
-    else
-        warn "/boot/firmware/config.txt nicht gefunden – HDMI-Fallback nicht gesetzt"
-    fi
+    configure_hdmi_modus
 
     systemctl set-default multi-user.target >/dev/null 2>&1 || true
     ok "Autostart ohne Anmeldebildschirm konfiguriert"
@@ -1048,6 +1288,47 @@ configure_firewall() {
     ok "Firewall aktiv: SSH + freigegebene App-Ports"
 }
 
+installiere_update_mechanismus() {
+    # Update-Skript und Dienst: ersetzt ausschließlich Programmdateien.
+    # Einstellungen (/etc/lhtpi) und Daten (/var/lib/lhtpi) bleiben unberührt.
+    log "Richte Update-Mechanismus ein"
+
+    if [ -f "${SCRIPT_DIR}/scripts/lhtpi-update.sh" ]; then
+        install -m 0755 "${SCRIPT_DIR}/scripts/lhtpi-update.sh" /usr/local/bin/lhtpi-update.sh
+    else
+        warn "scripts/lhtpi-update.sh fehlt – Update über den Stick nicht verfügbar."
+        return 0
+    fi
+
+    cat > /etc/systemd/system/lhtpi-update.service <<'EOF'
+[Unit]
+Description=LHTPi Update von USB-Stick
+After=local-fs.target
+ConditionPathExists=/mnt/lhtpi-usb
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/lhtpi-update.sh
+TimeoutStartSec=600
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload 2>/dev/null || true
+    # Der Dienst wird beim Einstecken gestartet, nicht beim Booten – kein enable.
+    ok "Update-Dienst eingerichtet (lhtpi-update.service)"
+
+    # udev: nach dem Mounten das Update anstoßen
+    cat > /etc/udev/rules.d/98-lhtpi-update.rules <<'EOF'
+ACTION=="add", SUBSYSTEM=="block", ENV{ID_FS_USAGE}=="filesystem", ENV{ID_BUS}=="usb", RUN+="/usr/bin/systemd-run --no-block --on-active=6 systemctl start lhtpi-update.service"
+EOF
+    udevadm control --reload-rules 2>/dev/null || true
+    ok "Update-Start beim Einstecken aktiviert"
+}
+
 configure_usb_automount() {
     log "Richte gemeinsamen USB-Auto-Mount ein (slides/ + termine.csv)"
 
@@ -1077,6 +1358,22 @@ exit 0
 EOF
     chmod +x /usr/local/bin/lhtpi-usb-mount.sh
 
+    # Umschalter: Stick für das Schreiben von Berichten kurz auf rw, danach
+    # sofort zurück auf ro. Wird nur über sudo für genau dieses Skript erlaubt.
+    cat > /usr/local/bin/lhtpi-usb-rw.sh <<'EOF'
+#!/bin/sh
+# LHTPi: /mnt/lhtpi-usb kurz beschreibbar schalten (nur für Berichte).
+# Aufruf: lhtpi-usb-rw.sh rw|ro
+ZIEL=/mnt/lhtpi-usb
+[ -d "$ZIEL" ] || exit 0
+case "$1" in
+    rw) mountpoint -q "$ZIEL" || exit 0; exec mount -o remount,rw "$ZIEL" ;;
+    ro) mountpoint -q "$ZIEL" || exit 0; sync; exec mount -o remount,ro "$ZIEL" ;;
+    *)  echo "Aufruf: $0 rw|ro" >&2; exit 2 ;;
+esac
+EOF
+    chmod 0755 /usr/local/bin/lhtpi-usb-rw.sh
+
     # udev-Regel: bei eingestecktem USB-Laufwerk den Helfer per systemd-run starten.
     # systemd-run verlässt die udev-Sandbox, damit `mount` zuverlässig funktioniert.
     cat > /etc/udev/rules.d/99-lhtpi-usb.rules <<'EOF'
@@ -1088,6 +1385,8 @@ EOF
     udevadm trigger --subsystem-match=block 2>/dev/null || true
 
     ok "USB-Auto-Mount eingerichtet (exFAT/FAT32/NTFS, read-only nach /mnt/lhtpi-usb)"
+
+    installiere_update_mechanismus
 }
 
 configure_clock() {
@@ -1487,6 +1786,55 @@ USAGE_EOF
 }
 
 # ── Hauptprogramm ──────────────────────────────────────────────────────
+# ── Daten aus dem Programmverzeichnis herausziehen ───────────────────────────
+# Datenbanken und Uploads liegen danach unter /var/lib/lhtpi. Ein Update kann
+# damit den Programmstand austauschen, ohne Termine, Einstellungen oder Folien
+# zu verlieren. Die Originale bleiben als Sicherung liegen (es wird kopiert).
+migrate_data_dir() {
+    local skript="${SCRIPT_DIR}/scripts/migrate_data_dir.sh"
+    [ -f "$skript" ] || skript="${PROJECT_DIR}/scripts/migrate_data_dir.sh"
+    if [ ! -f "$skript" ]; then
+        log "  WARNUNG: migrate_data_dir.sh nicht gefunden - Daten bleiben im Projektverzeichnis"
+        return 0
+    fi
+    log "Trenne Daten vom Programmstand"
+    # Dienste anhalten, damit die SQLite-Dateien in Ruhe kopiert werden
+    systemctl stop lhtpi terminboard safetycross 2>/dev/null || true
+    if LHTPI_DATA_DIR=/var/lib/lhtpi \
+       PROJECT_DIR="${PROJECT_DIR}" \
+       SC_DIR="${SC_DIR}" \
+       OWNER="${PI_USER}:${PI_GROUP}" \
+       bash "$skript"; then
+        ok "Daten liegen unter /var/lib/lhtpi"
+    else
+        log "  WARNUNG: Migration mit Fehler beendet - bitte Ausgabe prüfen"
+    fi
+}
+
+# ── Installationsskript aus dem Projektverzeichnis entfernen ────────────────
+# Wunsch: Nach der Installation soll install.sh nicht mehr im Projekt liegen,
+# damit der Aufbau nicht auf den ersten Blick nachvollziehbar ist.
+# Nicht löschen, sondern nach /root verschieben (Rechte 700) - so bleibt sie
+# für eine Wiederherstellung erhalten, ist aber für den pi-Benutzer unsichtbar.
+entferne_installer() {
+    local quelle="${PROJECT_DIR}/install.sh"
+    local ziel
+    ziel="/root/lhtpi-install-$(date +%Y%m%d-%H%M).sh"
+
+    if [ ! -f "$quelle" ]; then
+        log "Kein install.sh im Projektverzeichnis - nichts zu tun"
+        return 0
+    fi
+
+    if install -m 0700 -o root -g root "$quelle" "$ziel" 2>/dev/null; then
+        rm -f "$quelle"
+        log "install.sh aus dem Projekt entfernt"
+        log "  Sicherung: ${ziel} (nur root lesbar)"
+    else
+        log "  WARNUNG: install.sh konnte nicht gesichert werden - bleibt liegen"
+    fi
+}
+
 main() {
     echo "================================================"
     echo "  ${PROJECT_NAME} - Multitool-Kiosk Installation"
@@ -1534,6 +1882,7 @@ main() {
     fi
 
     backup_configs
+    migrate_data_dir
     configure_network
     configure_services
     if [ "$TOOL_TERMIN" = "1" ]; then
@@ -1549,13 +1898,16 @@ main() {
     cleanup_old_kiosks
     configure_desktop
     configure_autologin
+    configure_hdmi_modus
     configure_display_guard
     configure_screens
+    configure_screen2_watchdog
     configure_policies
     configure_sudoers_kiosk
     configure_firewall
     configure_usb_automount
     configure_clock
+    entferne_installer
     print_summary
 }
 
@@ -1570,6 +1922,7 @@ configure_sudoers_kiosk() {
     tmp="$(mktemp)"
     cat >"${tmp}" <<SUDOEOF
 ${PI_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /sbin/reboot, /sbin/poweroff
+${PI_USER} ALL=(root) NOPASSWD: /usr/local/bin/lhtpi-usb-rw.sh
 SUDOEOF
     if [ ! -s "${tmp}" ]; then
         log "  WARNUNG: Freigabe leer geblieben - Knöpfe gehen nicht"

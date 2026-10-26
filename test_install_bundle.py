@@ -536,8 +536,13 @@ ok('Alte Sitzung verwerfen' in kiosk_skript,
    'Kiosk-Skript verwirft die alte Chromium-Sitzung')
 ok('Current Session' in kiosk_skript and 'Last Tabs' in kiosk_skript,
    'und zwar die Sitzungsdateien selbst')
-ok(kiosk_skript.index('Current Session') < kiosk_skript.index('exec "$CHROMIUM"'),
-   'das passiert vor dem Start von Chromium')
+# Seit der Überwachung startet Chromium in einer Funktion (starte_chromium)
+# statt per exec – die Reihenfolge bleibt dieselbe.
+_ces = kiosk_skript.index('Current Session')
+# Der Aufruf steht in der Funktion starte_chromium – gesucht ist die Stelle,
+# an der Chromium zum ersten Mal gestartet wird (nicht die Pfadprüfung oben).
+_start = kiosk_skript.index('starte_chromium() {')
+ok(_ces < _start, 'das passiert vor dem Start von Chromium')
 ok('--hide-crash-restore-bubble' in kiosk_skript,
    'Restore-Hinweis ist zusätzlich abgeschaltet')
 
