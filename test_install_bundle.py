@@ -245,6 +245,34 @@ def schritt(stmts, env=None):
 
 # Das war der Fehler auf dem echten Pi: ohne --license= brach der Schritt mit
 # "LICENSE_ARG: unbound variable" ab und die Installation endete vorzeitig.
+print('\n18) Bildschirmzahl: --screens gewinnt, sonst bleibt die Geräte-Wahl')
+_scr = os.path.join(LZ, 'screens-arg')
+for _expl, _vorher, _erwartet in ((1, '1', '2'), (0, '1', '1')):
+    with open(_scr, 'w') as f:
+        f.write(_vorher)
+    _env = dict(UMG)
+    _env['LHTPI_SCREENS_FILE'] = _scr
+    _r = schritt(
+        'SCREENS_EXPLIZIT=%d; SCREEN_COUNT=2; LHTPI_FORCE_SCREENS=0; configure_screens_file'
+        % _expl, env=_env)
+    _ist = open(_scr).read().strip()
+    ok(_ist == _erwartet,
+       '--screens ausdrücklich=%d, Datei %s -> %s' % (_expl, _vorher, _ist))
+
+# Mit --screens=2 muss die Marke für Bildschirm 2 entstehen
+_scr2 = os.path.join(LZ, 'screens-arg2')
+_s2 = os.path.join(LZ, 'screen2-arg2')
+for _p in (_scr2, _s2):
+    if os.path.exists(_p):
+        os.remove(_p)
+with open(_scr2, 'w') as f:
+    f.write('1')
+_env = dict(UMG)
+_env['LHTPI_SCREENS_FILE'] = _scr2
+_env['LHTPI_SCREEN2_FILE'] = _s2
+_r = schritt('configure_screen_kiosk() { :; }; SCREENS_EXPLIZIT=1; SCREEN_COUNT=2; configure_screens', env=_env)
+ok(os.path.exists(_s2), 'Marke fuer Bildschirm 2 wird angelegt')
+
 r = schritt('configure_license')
 ok(r.returncode == 0, 'configure_license ohne --license bricht nicht ab')
 ok('unbound variable' not in r.stderr, 'keine ungebundene Variable (set -u)')

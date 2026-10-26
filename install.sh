@@ -134,6 +134,8 @@ TOOL_SLIDESHOW=0     # Folien / Playlist  (Teil der Verteiler-App)
 TOOL_TERMIN=0        # Terminboard          (Port 8001)
 TOOL_SC=0            # Safety Cross         (Port 8002)
 SCREEN_COUNT="1"     # 1 oder 2 HDMI-Ausgänge
+SCREENS_EXPLIZIT=0   # 1, wenn --screens=... angegeben wurde
+TOOLS_EXPLIZIT=0     # 1, wenn --tools=... angegeben wurde
 NO_REBOOT=0
 
 # ── Hilfsfunktionen ────────────────────────────────────────────────────
@@ -642,7 +644,7 @@ configure_screens() {
     # Gerät (/etc/lhtpi/screens), nicht die Lizenz. Sonst würde ein Update die
     # Kiosk-Einheiten für beide Ausgänge anlegen, obwohl nur einer gewählt ist.
     local genutzt="${SCREEN_COUNT}"
-    if [ -s "${SCREENS_FILE}" ]; then
+    if [ "${SCREENS_EXPLIZIT}" != "1" ] && [ -s "${SCREENS_FILE}" ]; then
         genutzt="$(tr -dc '0-9' < "${SCREENS_FILE}")"
         [ -n "${genutzt}" ] || genutzt=1
         [ "${genutzt}" -ge 2 ] || genutzt=1
@@ -919,7 +921,10 @@ tools_file_content() {
 # Wie viele Bildschirme hat dieses Gerät? (Startwert für die Anzeige-Einstellungen)
 configure_screens_file() {
     mkdir -p "$(dirname "${SCREENS_FILE}")"
-    if [ -s "${SCREENS_FILE}" ] && [ "${LHTPI_FORCE_SCREENS:-0}" != "1" ]; then
+    # Wurde --screens=... ausdrücklich angegeben, gilt das. Sonst bleibt die am
+    # Gerät gewählte Zahl erhalten.
+    if [ -s "${SCREENS_FILE}" ] && [ "${LHTPI_FORCE_SCREENS:-0}" != "1" ] \
+       && [ "${SCREENS_EXPLIZIT}" != "1" ]; then
         ok "Bildschirmzahl bleibt erhalten: $(cat "${SCREENS_FILE}")"
         return 0
     fi
@@ -1039,8 +1044,10 @@ EOF
 configure_tools_file() {
     mkdir -p "$(dirname "${TOOLS_FILE}")"
     # Bei einer erneuten Installation bleibt die Auswahl am Gerät erhalten –
-    # sonst wären nach jedem Lauf wieder alle Tools aktiv.
-    if [ -s "${TOOLS_FILE}" ] && [ "${LHTPI_FORCE_TOOLS:-0}" != "1" ]; then
+    # sonst wären nach jedem Lauf wieder alle Tools aktiv. Ausdrücklich
+    # angegebene Tools (--tools=...) gewinnen jedoch.
+    if [ -s "${TOOLS_FILE}" ] && [ "${LHTPI_FORCE_TOOLS:-0}" != "1" ] \
+       && [ "${TOOLS_EXPLIZIT}" != "1" ]; then
         ok "Aktivierte Tools bleiben erhalten: $(tr '\n' ' ' < "${TOOLS_FILE}")"
         return 0
     fi
@@ -1854,8 +1861,8 @@ main() {
         case "$arg" in
             -h|--help)   usage; exit 0 ;;
             --no-reboot) NO_REBOOT=1 ;;
-            --tools=*)   selection="${arg#--tools=}" ;;
-            --screens=*) screens="${arg#--screens=}" ;;
+            --tools=*)   selection="${arg#--tools=}"; TOOLS_EXPLIZIT=1 ;;
+            --screens=*) screens="${arg#--screens=}"; SCREENS_EXPLIZIT=1 ;;
             --license=*) LICENSE_ARG="${arg#--license=}" ;;
             --sign-key=*) export LHTPI_SIGN_KEY_FILE="${arg#--sign-key=}" ;;
             -*)          fail "Unbekannte Option '${arg}' (siehe --help)" ;;
