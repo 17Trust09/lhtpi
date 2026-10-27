@@ -40,6 +40,14 @@ if [ -x scripts/kiosk-neu.sh ]; then
     sudo -n bash scripts/kiosk-neu.sh || \
         echo "LHTPi: Nachziehen nicht möglich (kein sudo ohne Passwort). Bitte: sudo bash scripts/kiosk-neu.sh"
 fi
+
+# Läuft ein Bildschirm nicht, direkt die Diagnose zeigen - dann muss niemand
+# Befehle abtippen, um den Zustand zu melden.
+if ! systemctl is-active --quiet kiosk-screen2 2>/dev/null; then
+    echo
+    echo "LHTPi: Bildschirm 2 läuft nicht - hier der Zustand:"
+    [ -x scripts/diagnose.sh ] && bash scripts/diagnose.sh
+fi
 HOOK_EOF
 
 chmod 0755 "${HOOK}"
