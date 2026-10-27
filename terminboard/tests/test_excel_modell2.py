@@ -51,9 +51,30 @@ class TestVorlage:
         assert z['bis'] == datetime(2026, 11, 2, 23, 59)
         assert z['status'] == 'abgeschlossen'
 
-    def test_bloecke_der_kalibrierung(self, daten):
+    def test_bloecke_der_vorlage_sind_leer(self, daten):
+        # Das Blatt „Zeiten“ ist bewusst leer - Beispielblöcke würden als
+        # echte Ausfallzeiten importiert.
+        assert daten['bloecke'] == {}
+
+    def test_bloecke_werden_gelesen(self, tmp_path):
+        # Die Blocklogik wird an einer eigenen Datei geprüft, nicht an der
+        # Vorlage: die bleibt leer, damit nichts Falsches importiert wird.
+        pfad = tmp_path / 'mit_bloecken.xlsx'
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'Termine'
+        ws.append(['Nr', 'Art', 'Prüfstand', 'Von', 'Bis', 'Info', 'Status'])
+        ws.append([2, 'Kalibrierung', 'P10 PTU TESTFUCHS', '16.11.2026',
+                   '21.11.2026', 'unterbrochen', 'offen'])
+        zeiten = wb.create_sheet('Zeiten')
+        zeiten.append(['Termin (Nr)', 'Von', 'Bis', 'Notiz'])
+        zeiten.append([2, datetime(2026, 11, 16, 8, 0), datetime(2026, 11, 16, 12, 0), 'Tag 1'])
+        zeiten.append([2, datetime(2026, 11, 17, 8, 0), datetime(2026, 11, 17, 16, 0), 'Tag 2'])
+        wb.save(pfad)
+
+        daten = lies_datei(str(pfad))
         assert 2 in daten['bloecke']
-        assert len(daten['bloecke'][2]) == 4
+        assert len(daten['bloecke'][2]) == 2
         assert daten['bloecke'][2][0] == (datetime(2026, 11, 16, 8, 0),
                                           datetime(2026, 11, 16, 12, 0))
 

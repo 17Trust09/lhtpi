@@ -74,16 +74,10 @@ TERMINE = [
 # Blatt „Zeiten“: hier stehen die Uhrzeiten. Ein Block je Zeitraum, in dem
 # tatsaechlich gearbeitet wurde. Fehlt ein Block, gilt der Termin als
 # durchgehend ausser Betrieb.
-ZEITEN = [
-    # Ein halber Tag: der Termin steht im Blatt „Termine“ als ganzer Tag,
-    # die tatsaechliche Arbeitszeit steht hier.
-    (4, datetime(2026, 11, 24, 9, 0), datetime(2026, 11, 24, 13, 0),
-     'Halbtag, Rest des Tages freigegeben'),
-    (2, datetime(2026, 11, 16, 8, 0), datetime(2026, 11, 16, 12, 0), 'Tag 1, vormittags'),
-    (2, datetime(2026, 11, 17, 8, 0), datetime(2026, 11, 17, 16, 0), 'Tag 2, ganztags'),
-    (2, datetime(2026, 11, 19, 7, 0), datetime(2026, 11, 19, 11, 0), 'Tag 4, vormittags'),
-    (2, datetime(2026, 11, 20, 8, 0), datetime(2026, 11, 20, 14, 0), 'Tag 5, 6 Stunden'),
-]
+#
+# Bewusst leer: das Blatt wird spaeter ausgebaut. Beispielzeilen hier waeren
+# gefaehrlich - sie wuerden als echte Zeitbloecke importiert.
+ZEITEN = []
 
 ARCHIV = [
     (7, 'Ausfall', 'P02 NRA', date(2026, 10, 5), date(2026, 10, 7),
@@ -191,17 +185,7 @@ def baue_vorlage(pfad=VORLAGE):
     _datumsformat(ws, (2, 3))
     _auswahl(ws, '=Termine!$A$2:$A$%d' % LETZTE_ZEILE, 'A2:A%d' % LETZTE_ZEILE,
              'Nummer des Termins aus dem Blatt „Termine“.', 'Termin')
-    _legende(ws, [
-        ('4', 'Halbtag: 09:00–13:00'),
-        ('2', 'erster Block einer mehrtägigen'),
-        ('', 'Kalibrierung'),
-        ('', ''),
-        ('Uhrzeiten', 'gehören ausschließlich'),
-        ('', 'in dieses Blatt'),
-        ('', ''),
-        ('Kein Eintrag', 'Prüfstand war durchgehend'),
-        ('', 'außer Betrieb'),
-    ], 'Beispiel')
+
 
     # ── Blatt „Prüfstände" ─────────────────────────────────────────────────
     ws = wb.create_sheet('Prüfstände')

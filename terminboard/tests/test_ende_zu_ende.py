@@ -57,12 +57,13 @@ class TestVorlageEndeZuEnde:
         assert p03['stunden'] == pytest.approx(16.75)
         assert p03['tage'] == 1
 
-    def test_kalibrierung_p10_aus_bloecken(self, report):
+    def test_kalibrierung_p10_ohne_bloecke_ganze_tage(self, report):
+        # Das Blatt „Zeiten“ der Vorlage ist leer: 16.–20.11. sind fünf
+        # Werktage (der 21.11. ist Samstag), also 5 x 16,75 h Betriebszeit.
         statistik = ausfall_je_pruefstand(2026)
         p10 = statistik['P10 PTU TESTFUCHS']
-        # 4 + 8 + 4 + 6 Stunden an vier Tagen
-        assert p10['stunden'] == pytest.approx(22.0)
-        assert p10['tage'] == 4
+        assert p10['stunden'] == pytest.approx(83.75)
+        assert p10['tage'] == 5
 
     def test_ausfall_p21_stunden(self, report):
         statistik = ausfall_je_pruefstand(2026)
@@ -72,11 +73,35 @@ class TestVorlageEndeZuEnde:
         assert p21['stunden'] == pytest.approx(33.5)
         assert p21['tage'] == 2
 
-    def test_halbtag_p31_aus_zeitenblatt(self, report):
-        # Ein halber Tag entsteht nur ueber einen Block im Blatt „Zeiten“:
-        # der Termin steht dort als ganzer Tag, die Arbeitszeit hier.
+    def test_halbtag_p31_ohne_zeitenblatt_ganzer_tag(self, report):
+        # Ohne Block im Blatt „Zeiten“ gilt der Termin als durchgehend
+        # ausser Betrieb - der 24.11. ist ein ganzer Tag.
         statistik = ausfall_je_pruefstand(2026)
         p31 = statistik['P31 THSA']
+        assert p31['stunden'] == pytest.approx(16.75)
+        assert p31['tage'] == 1
+
+    def test_halbtag_entsteht_durch_zeitblock(self, app, tmp_path):
+        # Die Verkürzung durch Blöcke wird an eigener Datei geprüft.
+        import openpyxl
+        from datetime import datetime
+        pfad = tmp_path / 'halbtag.xlsx'
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'Termine'
+        ws.append(['Nr', 'Art', 'Prüfstand', 'Von', 'Bis', 'Info', 'Status'])
+        ws.append([1, 'Kalibrierung', 'P31 THSA', '24.11.2026', '24.11.2026',
+                   'Halbtag', 'offen'])
+        zeiten = wb.create_sheet('Zeiten')
+        zeiten.append(['Termin (Nr)', 'Von', 'Bis', 'Notiz'])
+        zeiten.append([1, datetime(2026, 11, 24, 9, 0),
+                       datetime(2026, 11, 24, 13, 0), 'vormittags'])
+        wb.save(pfad)
+
+        daten = lies_datei(str(pfad))
+        importiere(daten['zeilen'], bloecke=daten['bloecke'],
+                   dateiname=daten['dateiname'])
+        p31 = ausfall_je_pruefstand(2026)['P31 THSA']
         assert p31['stunden'] == pytest.approx(4.0)
         assert p31['tage'] == 1
 
