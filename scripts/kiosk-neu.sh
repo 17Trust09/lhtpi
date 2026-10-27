@@ -7,6 +7,7 @@
 # werden von install.sh erzeugt und liegen deshalb nicht im Programmordner.
 # Dieses Skript macht nur diesen Teil – keine Pakete, keine Diensteinrichtung.
 set -uo pipefail
+NEUSTART_NOETIG=0
 
 [ "$(id -u)" = "0" ] || { echo "Bitte mit sudo starten: sudo bash $0"; exit 1; }
 
@@ -66,6 +67,26 @@ for idx in 1 2; do
     sag "Kiosk-Skript ${idx} erneuert: ${ziel}"
 done
 
+# ── 2b. HDMI-Audio abschalten ──────────────────────────────────────────────
+# Manche Bildschirme können die Audio-Kanäle nicht zuordnen. Der Treiber
+# schreibt dann endlos Fehler ins Log und bremst dabei den Grafiktreiber aus –
+# ein Ausgang bleibt schwarz, die Maus läuft weiter. Der Kiosk braucht keinen
+# Ton, deshalb wird die Audio-Fähigkeit gar nicht erst ausgelesen.
+CONFIG="/boot/firmware/config.txt"
+[ -f "${CONFIG}" ] || CONFIG="/boot/config.txt"
+if [ -f "${CONFIG}" ]; then
+    if grep -qE '^[[:space:]]*hdmi_ignore_edid_audio=1' "${CONFIG}"; then
+        sag "HDMI-Audio ist bereits abgeschaltet."
+    else
+        [ -f "${CONFIG}.vor-lhtpi-audio" ] || cp -a "${CONFIG}" "${CONFIG}.vor-lhtpi-audio" 2>/dev/null || true
+        printf '\n# LHTPi: kein HDMI-Ton - verhindert die Endlosschleife des Audio-Codecs\nhdmi_ignore_edid_audio=1\n' >> "${CONFIG}"
+        sag "HDMI-Audio abgeschaltet (${CONFIG}) - wirkt nach einem Neustart."
+        NEUSTART_NOETIG=1
+    fi
+else
+    sag "config.txt nicht gefunden - HDMI-Audio nicht angepasst."
+fi
+
 # ── 3. Dienste neu starten ─────────────────────────────────────────────────
 if command -v systemctl >/dev/null 2>&1; then
     for dienst in kiosk-screen1 kiosk-screen2; do
@@ -80,6 +101,12 @@ echo
 echo "Bildschirme jetzt:"
 DISPLAY=:0 XAUTHORITY="/home/${PI_USER}/.Xauthority" \
     xrandr --query 2>/dev/null | grep -E "^HDMI-[12] connected" || echo "  (nicht abfragbar – kein X oder kein Bildschirm)"
+echo
+if [ "${NEUSTART_NOETIG:-0}" = "1" ]; then
+    echo
+    echo "Bitte einmal neu starten, damit die HDMI-Einstellung greift:"
+    echo "  sudo reboot"
+fi
 echo
 echo "Fertig. Steht bei beiden dieselbe Position, hat der Treiber es nicht "
 echo "akzeptiert – dann steht der Grund in /home/${PI_USER}/kiosk-screen2.log"

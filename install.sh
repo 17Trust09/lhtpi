@@ -498,8 +498,6 @@ rm -rf "$PROFILE/Default/Sessions" 2>/dev/null || true
 # Kabel gezogen wurde, beendet X das Fenster. Wird es wieder gesteckt, muss das
 # Fenster ohne Neustart des Pi zurückkommen.
 starte_chromium() {
-    entkopple_ausgaenge
-    ermittle_geometrie
     echo "$(date '+%F %T') - starte Chromium auf ${MON} (${W}x${H}+${X}+${Y})" >> "$LOG"
     "$CHROMIUM" \
     --app="$APP_URL" \
@@ -532,6 +530,9 @@ starte_chromium() {
     --disable-gpu-compositing >> "$LOG" 2>&1
 }
 
+entkopple_ausgaenge
+ermittle_geometrie
+LETZTE_GEO="${W}x${H}+${X}+${Y}"
 starte_chromium &
 PID=$!
 
@@ -542,6 +543,26 @@ while true; do
     if ! kill -0 "$PID" 2>/dev/null; then
         echo "$(date '+%F %T') - Chromium beendet, starte neu" >> "$LOG"
         sleep 3
+        entkopple_ausgaenge
+        ermittle_geometrie
+        LETZTE_GEO="${W}x${H}+${X}+${Y}"
+        starte_chromium &
+        PID=$!
+        continue
+    fi
+
+    # Auflösung oder Position geändert? Dann passt das Fenster nicht mehr.
+    # Passiert, wenn die Bildschirme neu getrennt werden (oder beim Sperren der
+    # Anzeige-Einstellungen) - ohne Neustart bliebe ein schwarzer Bildschirm.
+    ermittle_geometrie
+    if [ "${W}x${H}+${X}+${Y}" != "${LETZTE_GEO}" ]; then
+        echo "$(date '+%F %T') - Geometrie geändert: ${LETZTE_GEO} -> ${W}x${H}+${X}+${Y}, Neustart" >> "$LOG"
+        kill "$PID" 2>/dev/null || true
+        wait "$PID" 2>/dev/null || true
+        sleep 2
+        entkopple_ausgaenge
+        ermittle_geometrie
+        LETZTE_GEO="${W}x${H}+${X}+${Y}"
         starte_chromium &
         PID=$!
         continue
@@ -566,6 +587,9 @@ while true; do
             xrandr --output HDMI-2 --primary --auto --pos 0x0 >/dev/null 2>&1 || true
         fi
         sleep 3
+        entkopple_ausgaenge
+        ermittle_geometrie
+        LETZTE_GEO="${W}x${H}+${X}+${Y}"
         starte_chromium &
         PID=$!
     fi
@@ -618,6 +642,18 @@ configure_hdmi_modus() {
     # Kein Overscan-Beschneiden – der Kiosk soll die volle Fläche nutzen
     if ! grep -qE '^[[:space:]]*disable_overscan=1' "${config}"; then
         printf 'disable_overscan=1\n' >> "${config}"
+    fi
+
+    # HDMI-Audio abschalten. Der Kiosk braucht keinen Ton, aber manche
+    # Bildschirme können die Kanäle nicht zuordnen – dann schreibt der
+    # Audio-Treiber endlos "Not able to map channels to speakers (-22)" und
+    # "ASoC error (-22)" ins Log. Diese Schleife kostet Rechenzeit, während der
+    # Grafiktreiber dieselbe Hardware anspricht; ein Ausgang bleibt dann schwarz,
+    # obwohl die Maus weiterläuft. Mit dieser Zeile wird die Audio-Fähigkeit des
+    # Bildschirms gar nicht erst ausgelesen.
+    if ! grep -qE '^[[:space:]]*hdmi_ignore_edid_audio=1' "${config}"; then
+        printf '\n# LHTPi: kein HDMI-Ton – verhindert die Endlosschleife des Audio-Codecs\nhdmi_ignore_edid_audio=1\n' >> "${config}"
+        ok "HDMI-Audio abgeschaltet (Kiosk braucht keinen Ton)"
     fi
 
     ok "HDMI auf KMS umgestellt (Vollbild, kein Letterbox)"
