@@ -12,6 +12,39 @@ set -u
 PI_USER="${LHTPI_USER:-pi}"
 HOME_DIR="/home/${PI_USER}"
 
+# ── Kurzbericht ────────────────────────────────────────────────────────────
+# Nur die Werte, an denen die Fehlersuche haengt, gross und knapp. Gedacht zum
+# Abfotografieren - der lange Bericht ist auf einem Foto nicht lesbar.
+if [ "${1:-}" = "--kurz" ]; then
+    echo
+    echo "===== LHTPi Kurzbericht ====="
+    echo "Geraet : $(hostname)   $(date '+%F %H:%M')"
+    echo "Version: $(cat /etc/lhtpi/version 2>/dev/null || echo '?')"
+    echo
+
+    xp="$(pgrep -c Xorg 2>/dev/null)"; case "${xp}" in ''|*[!0-9]*) xp=0 ;; esac
+    echo "X-Server   : ${xp} Prozess(e), Socket $([ -S /tmp/.X11-unix/X0 ] && echo da || echo FEHLT)"
+    DISPLAY=:0 xrandr --query 2>/dev/null | grep -E '^HDMI-[12]' | cut -c1-52 | sed 's/^/  /'
+
+    an="$(cat /etc/lhtpi/screens 2>/dev/null)"
+    echo "Bildschirme: screens='${an:-leer}'  Marke2=$([ -f /etc/lhtpi/screen2 ] && echo da || echo FEHLT)"
+
+    for idx in 1 2; do
+        da="$(pgrep -af "class=kiosk-screen${idx}" 2>/dev/null | head -1 | grep -oE '\-\-window-position=[^ ]+' || true)"
+        echo "Kiosk ${idx}    : $([ -n "${da}" ] && echo "laeuft  ${da}" || echo 'laeuft NICHT')"
+    done
+
+    echo "Dienst 2   : $(systemctl is-active kiosk-screen2 2>/dev/null) / $(systemctl show kiosk-screen2 -p Result --value 2>/dev/null)"
+    echo "Seite /2   : $(curl -s -o /dev/null -w '%{http_code}' --max-time 3 http://127.0.0.1:8000/screen/2 2>/dev/null || echo '---')"
+    echo "Ausgaenge  : $(cat /sys/class/drm/card*-HDMI-*/status 2>/dev/null | grep -c '^connected$') verbunden (Kernel)"
+    verb="$(cat /sys/class/drm/card*-HDMI-*/status 2>/dev/null | grep -c '^connected$')"
+    echo "DB-Zahl    : $("${LHTPI_PYTHON:-python3}" -c "import sqlite3;print((sqlite3.connect('/var/lib/lhtpi/app/lhtpi.db').execute(\"SELECT value FROM setting WHERE key='kiosk_screen_count'\").fetchone() or ['?'])[0])" 2>/dev/null || echo '?')"
+    echo "Audio-Fehler: $(dmesg 2>/dev/null | grep -c 'hdmi-audio\|ASoC error')"
+    echo "============================="
+    echo
+    exit 0
+fi
+
 strich() { printf '%s\n' "----------------------------------------"; }
 titel() { echo; strich; echo "  $*"; strich; }
 

@@ -49,7 +49,7 @@ fi
 if [ -x scripts/diagnose.sh ]; then
     echo
     echo "LHTPi: Zustand der Anzeige nach dem Nachziehen:"
-    bash scripts/diagnose.sh
+    bash scripts/diagnose.sh --kurz
 fi
 HOOK_EOF
 
