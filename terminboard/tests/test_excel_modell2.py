@@ -76,10 +76,10 @@ class TestVorlage:
         for z in daten['zeilen']:
             assert z['art'] and z['pruefstand'] and z['von'] is not None
 
-    def test_bloecke_der_vorlage_sind_leer(self, daten):
-        # Das Blatt „Zeiten“ ist bewusst leer - Beispielblöcke würden als
-        # echte Ausfallzeiten importiert.
-        assert daten['bloecke'] == {}
+    def test_bloecke_der_vorlage_stimmen(self, daten):
+        # Die Vorlage enthaelt die echten Zeitbloecke der vier Termine.
+        # Ohne sie rechnete das System ganze Tage statt der Arbeitszeit.
+        assert daten['bloecke'] == {1: 6, 2: 2, 3: 1, 4: 10} or             {k: len(v) for k, v in daten['bloecke'].items()} == {1: 6, 2: 2, 3: 1, 4: 10}
 
     def test_bloecke_werden_gelesen(self, tmp_path):
         # Die Blocklogik wird an einer eigenen Datei geprüft, nicht an der

@@ -12,11 +12,13 @@ Beides ist unschädlich, wenn kein Stick steckt.
 """
 import hashlib
 import os
+import subprocess
 import threading
 import time
 
 from models import db
 from historie import ImportLauf, importiere
+from archiv import verschiebe_abgeschlossene
 from excel_modell2 import lies_datei
 from usb_source import find_usb_termin_dir, USB_XLSX_FILENAME
 from bericht import pruefe_stick_befehl
@@ -46,6 +48,33 @@ def _zuletzt_importiert(dateiname, hashwert):
     return treffer is not None
 
 
+def _usb_schreibrecht(schalten):
+    """Schaltet den Stick beschreibbar bzw. wieder nur lesend.
+
+    Liegt als Helfer in /usr/local/bin, weil das Mounten root braucht.
+    """
+    helfer = '/usr/local/bin/lhtpi-usb-rw.sh'
+    if not os.path.exists(helfer):
+        return False
+    try:
+        lauf = subprocess.run(['sudo', '-n', helfer, schalten],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                              timeout=30)
+        return lauf.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def _archiviere(mount, pfad):
+    """Verschiebt abgeschlossene Zeilen, wenn der Stick schreibbar ist."""
+    if not _usb_schreibrecht('rw'):
+        return {'verschoben': [], 'fehler': 'Stick nicht beschreibbar', 'sicherung': None}
+    try:
+        return verschiebe_abgeschlossene(pfad)
+    finally:
+        _usb_schreibrecht('ro')
+
+
 def verarbeite_stick(mount_dir=None, erzwinge=False):
     """Ein Durchlauf: importieren und Bericht auslösen.
 
@@ -72,6 +101,11 @@ def verarbeite_stick(mount_dir=None, erzwinge=False):
             )
             # Parser-Fehler (z. B. kaputte Zeile im Blatt „Zeiten") mitgeben
             report['parser_fehler'] = daten['fehler']
+
+            # Abgeschlossene Zeilen wandern ins Archiv. Das braucht Schreibrecht
+            # auf dem Stick; schlaegt es fehl, bleibt der Import trotzdem gueltig.
+            report['archiv'] = _archiviere(mount, xlsx)
+
             ergebnis['importiert'] = True
             ergebnis['report'] = report
 

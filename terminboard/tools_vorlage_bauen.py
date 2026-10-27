@@ -62,22 +62,31 @@ PRUEFSTAENDE = [
 # Angabe, und niemand wüsste, welcher gilt.
 TERMINE = [
     (1, 'Kalibrierung', 'P11 PUMO HYCOM', date(2026, 10, 19), date(2026, 10, 26),
-     'Kalibrierung Hycom (Kristin + Glen) 07:00 - 14:00', 'offen'),
+     'Hycom, Kristin + Glen', 'offen'),
     (2, 'Kalibrierung', 'Belastungsbank AHH', date(2026, 10, 26), date(2026, 10, 27),
-     'Kalibrierung (Sven + Glen) 15:00 - 22:00', 'offen'),
+     'Belastungsbank, Sven + Glen', 'offen'),
     (3, 'Kalibrierung', 'P43 LOW-PRESSURE', date(2026, 11, 5), None,
-     'Kalibrierung (Kristin) 07:00 - 13:00', 'offen'),
+     'Low-Pressure, Kristin', 'offen'),
     (4, 'Kalibrierung', 'P31 THSA', date(2026, 11, 9), date(2026, 11, 20),
-     'Kalibrierung (Bernd + Tommy) 08:00 - 15:00', 'offen'),
+     'THSA, Bernd + Tommy', 'offen'),
 ]
 
-# Blatt „Zeiten“: hier stehen die Uhrzeiten. Ein Block je Zeitraum, in dem
+# Blatt „Zeiten“: hier stehen die Uhrzeiten. Ein Block je Tag, an dem
 # tatsaechlich gearbeitet wurde. Fehlt ein Block, gilt der Termin als
-# durchgehend ausser Betrieb.
-#
-# Bewusst leer: das Blatt wird spaeter ausgebaut. Beispielzeilen hier waeren
-# gefaehrlich - sie wuerden als echte Zeitbloecke importiert.
-ZEITEN = []
+# durchgehend ausser Betrieb - das waere die hoechste denkbare Ausfallzeit.
+ZEITEN = [
+    # Nr 1 P11 PUMO HYCOM, 19.–26.10., taeglich 07:00–14:00
+    *[(1, datetime(2026, 10, t, 7, 0), datetime(2026, 10, t, 14, 0), '')
+      for t in (19, 20, 21, 22, 23, 26)],
+    # Nr 2 Belastungsbank AHH, 26.–27.10., 15:00–22:00
+    *[(2, datetime(2026, 10, t, 15, 0), datetime(2026, 10, t, 22, 0), '')
+      for t in (26, 27)],
+    # Nr 3 P43 LOW-PRESSURE, 05.11., 07:00–13:00
+    (3, datetime(2026, 11, 5, 7, 0), datetime(2026, 11, 5, 13, 0), ''),
+    # Nr 4 P31 THSA, 09.–20.11., werktags 08:00–15:00
+    *[(4, datetime(2026, 11, t, 8, 0), datetime(2026, 11, t, 15, 0), '')
+      for t in (9, 10, 11, 12, 13, 16, 17, 18, 19, 20)],
+]
 
 # Bewusst leer: das Archiv fuellt das Geraet selbst, sobald Termine
 # abgeschlossen sind. Beispielzeilen wuerden als echte Historie importiert.
