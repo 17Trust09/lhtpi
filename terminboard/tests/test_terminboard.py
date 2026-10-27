@@ -177,7 +177,9 @@ def test_xlsx_deutsche_art(tmp_path):
     ])
     rows = usb_source.parse_termin_xlsx(str(xlsx))
     assert [r['typ'] for r in rows] == ['audit', 'wartung', 'info']
-    assert rows[0]['ende'] is None
+    # Ein Termin mit "Von" ohne "Bis" ist eintaegig und endet am selben Tag.
+    # Frueher blieb "ende" leer - dann rechnete die Statistik 0,0 Stunden.
+    assert rows[0]['ende'] == date(2026, 9, 14)
 
 
 def test_xlsx_skips_header_and_invalid(tmp_path):

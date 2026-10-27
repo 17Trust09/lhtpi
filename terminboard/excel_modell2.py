@@ -119,12 +119,21 @@ def lies_terminblatt(ws):
         if nr is None:
             nr = index          # fehlende Nummer → Zeilennummer als Bezug
 
+        von = _zu_datetime(zelle(SPALTE_VON))
+        bis = _zu_datetime(zelle(SPALTE_BIS), als_ende=True)
+        # Ein leerer Bis-Wert heisst "endet am selben Tag", nicht "null Stunden".
+        # Ohne diese Zeile rechnete ein eintaegiger Termin mit 0,0 h.
+        # Ausnahme "Info": ein Hinweis hat kein Ende und soll auch keins bekommen.
+        art = _text(zelle(SPALTE_ART))
+        if von is not None and bis is None and art.lower() != 'info':
+            bis = datetime.combine(von.date(), TAGESENDE)
+
         zeilen.append({
             'nr': nr,
-            'art': _text(zelle(SPALTE_ART)),
+            'art': art,
             'pruefstand': _text(zelle(SPALTE_PRUEFSTAND)),
-            'von': _zu_datetime(zelle(SPALTE_VON)),
-            'bis': _zu_datetime(zelle(SPALTE_BIS), als_ende=True),
+            'von': von,
+            'bis': bis,
             'info': _text(zelle(SPALTE_INFO)),
             'status': _text(zelle(SPALTE_STATUS)) or 'offen',
             'excel_zeile': index,

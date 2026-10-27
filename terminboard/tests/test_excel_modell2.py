@@ -54,6 +54,20 @@ class TestVorlage:
         assert z['bis'].hour == 23 and z['bis'].minute == 59
         assert z['status'] in ('offen', 'abgeschlossen', 'storniert')
 
+    def test_leeres_bis_wird_tagesende(self, tmp_path):
+        # Ein eintägiger Termin mit leerem "Bis" endet am selben Tag um 23:59,
+        # nicht um 00:00 - sonst rechnet die Statistik 0,0 Stunden.
+        pfad = tmp_path / 'ohne_bis.xlsx'
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = 'Termine'
+        ws.append(['Nr', 'Art', 'Prüfstand', 'Von', 'Bis', 'Info', 'Status'])
+        ws.append([1, 'Kalibrierung', 'P43 LOW-PRESSURE', '05.11.2026', None, 'eintägig', 'offen'])
+        wb.save(pfad)
+
+        z = lies_datei(str(pfad))['zeilen'][0]
+        assert z['bis'] == datetime(2026, 11, 5, 23, 59)
+
     def test_bloecke_der_vorlage_sind_leer(self, daten):
         # Das Blatt „Zeiten“ ist bewusst leer - Beispielblöcke würden als
         # echte Ausfallzeiten importiert.
