@@ -104,7 +104,9 @@ def _ist_kopfzeile(zeile):
 def lies_terminblatt(ws):
     """Liest das Blatt ``Termine``."""
     zeilen = []
-    for index, row in enumerate(ws.iter_rows(values_only=True), start=1):
+    for index, row in enumerate(
+            ws.iter_rows(min_col=1, max_col=SPALTEN_TERMINE, values_only=True),
+            start=1):
         if _ist_leer(row):
             continue
         if index == 1 and _ist_kopfzeile(row):
@@ -130,11 +132,19 @@ def lies_terminblatt(ws):
     return zeilen
 
 
+# Nur diese Spalten gehören zu den Daten. Rechts daneben steht die Legende -
+# sie darf nie als Datensatz gelesen werden.
+SPALTEN_TERMINE = 7          # A-G
+SPALTEN_ZEITEN = 4           # A-D
+
+
 def lies_zeitenblatt(ws):
     """Liest das Blatt ``Zeiten`` → ``({nr: [(von, bis), ...]}, [fehler])``."""
     bloecke = {}
     fehler = []
-    for index, row in enumerate(ws.iter_rows(values_only=True), start=1):
+    for index, row in enumerate(
+            ws.iter_rows(min_col=1, max_col=SPALTEN_ZEITEN, values_only=True),
+            start=1):
         if _ist_leer(row):
             continue
         if index == 1 and _text(row[0]).lower() in ('termin', 'termin (nr)', 'nr'):

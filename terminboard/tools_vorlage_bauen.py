@@ -94,6 +94,32 @@ ARCHIV = [
 
 LETZTE_ZEILE = 500
 
+# ── Legende ─────────────────────────────────────────────────────────────────
+# Zwei Spalten Luft, dann eine Legende ausserhalb der Datenspalten. Der Parser
+# liest nur die festen Datenspalten (A-F bzw. A-D), die Legende wird also nie
+# als Datensatz gelesen - auch dann nicht, wenn jemand die Zeilen verschiebt.
+LEGENDE_SPALTE = 8          # Spalte H
+LEGENDE_START = 2           # ab Zeile 2
+
+
+def _legende(ws, eintraege, beschriftung):
+    """Schreibt eine Legende rechts neben die Datenspalten."""
+    trennspalte = LEGENDE_SPALTE - 1
+    ws.column_dimensions[chr(64 + trennspalte)].width = 3
+    ws.column_dimensions[chr(64 + LEGENDE_SPALTE)].width = 13
+    ws.column_dimensions[chr(65 + LEGENDE_SPALTE)].width = 34
+
+    zelle = ws.cell(row=1, column=LEGENDE_SPALTE, value=beschriftung)
+    zelle.font = Font(bold=True, italic=True, color='808080')
+
+    for nummer, (beispiel, bedeutung) in enumerate(eintraege):
+        zeile = LEGENDE_START + nummer
+        zelle = ws.cell(row=zeile, column=LEGENDE_SPALTE, value=beispiel)
+        zelle.font = Font(italic=True, color='808080')
+        zelle.alignment = Alignment(horizontal='right')
+        ws.cell(row=zeile, column=LEGENDE_SPALTE + 1,
+                value=bedeutung).font = Font(color='808080')
+
 
 def _kopf(ws, titel, breiten):
     ws.append(titel)
@@ -141,6 +167,21 @@ def baue_vorlage(pfad=VORLAGE):
              'Prüfstand aus dem Blatt „Prüfstände“ wählen.', 'Prüfstand')
     _auswahl(ws, '"%s"' % ','.join(STATUS), 'G2:G%d' % LETZTE_ZEILE,
              'offen / abgeschlossen / storniert.', 'Status')
+    _legende(ws, [
+        ('1', 'Wartung, erledigt'),
+        ('2', 'Kalibrierung über mehrere Tage –'),
+        ('', 'Zeitblöcke im Blatt „Zeiten“'),
+        ('6', 'Info – „Bis“ darf leer bleiben'),
+        ('', ''),
+        ('Von / Bis', 'nur Datum, keine Uhrzeit'),
+        ('', ''),
+        ('Art', 'Kalibrierung / Wartung /'),
+        ('', 'Ausfall / Audit / Info'),
+        ('Prüfstand', 'Reihenfolge: erst mit'),
+        ('', 'Dropdown wählen – falsche'),
+        ('', 'Namen zählen nicht'),
+    ], 'Beispiel')
+    ws.sheet_view.showGridLines = True
 
     # ── Blatt „Zeiten" ─────────────────────────────────────────────────────
     ws = wb.create_sheet('Zeiten')
@@ -150,6 +191,17 @@ def baue_vorlage(pfad=VORLAGE):
     _datumsformat(ws, (2, 3))
     _auswahl(ws, '=Termine!$A$2:$A$%d' % LETZTE_ZEILE, 'A2:A%d' % LETZTE_ZEILE,
              'Nummer des Termins aus dem Blatt „Termine“.', 'Termin')
+    _legende(ws, [
+        ('4', 'Halbtag: 09:00–13:00'),
+        ('2', 'erster Block einer mehrtägigen'),
+        ('', 'Kalibrierung'),
+        ('', ''),
+        ('Uhrzeiten', 'gehören ausschließlich'),
+        ('', 'in dieses Blatt'),
+        ('', ''),
+        ('Kein Eintrag', 'Prüfstand war durchgehend'),
+        ('', 'außer Betrieb'),
+    ], 'Beispiel')
 
     # ── Blatt „Prüfstände" ─────────────────────────────────────────────────
     ws = wb.create_sheet('Prüfstände')
