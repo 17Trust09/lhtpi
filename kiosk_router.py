@@ -93,6 +93,25 @@ def screen_count():
     return max(1, n)
 
 
+BILDSCHIRM_HELFER = '/usr/local/bin/lhtpi-screens.sh'
+
+
+def _setze_bildschirmzahl(count):
+    """Bildschirmzahl über den Helfer setzen. True, wenn es geklappt hat."""
+    if not os.path.exists(BILDSCHIRM_HELFER):
+        return False
+    befehle = ([BILDSCHIRM_HELFER, str(count)],
+               ['sudo', '-n', BILDSCHIRM_HELFER, str(count)])
+    for befehl in befehle:
+        try:
+            ergebnis = subprocess.run(befehl, capture_output=True, timeout=10)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if ergebnis.returncode == 0:
+            return True
+    return False
+
+
 def _schreibe_screen_dateien(count):
     """Bildschirm-Anzahl für die Anzeige-Steuerung (systemd) hinterlegen.
 
@@ -102,6 +121,13 @@ def _schreibe_screen_dateien(count):
     """
     # Alte Sitzung wegwerfen, damit kein fremder Tab über der Anzeige landet
     sitzungen_verwerfen()
+
+    # Zuerst über den Helfer: die App läuft als pi und darf /etc/lhtpi nicht
+    # schreiben. Ohne ihn scheiterte das Speichern still, und die Marke für
+    # Bildschirm 2 entstand nie – der Dienst startete dann nicht.
+    if _setze_bildschirmzahl(count):
+        return
+
     pfad = tools.SCREENS_FILE
     ordner = os.path.dirname(pfad)
     try:

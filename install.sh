@@ -45,7 +45,17 @@ letzter_zustand=""
 while true; do
     # Nicht nur einmal beim Start: Desktop-Komponenten oder ein Hotplug dürfen
     # Bildschirmschoner/DPMS später nicht wieder einschalten.
-    xset s off >/dev/null 2>&1 || true
+    # Bildschirm 2 läuft nur, wenn er laut Einstellung genutzt wird. Die Zahl steht
+# in /etc/lhtpi/screens. Der Dienst hat bewusst keine Pfad-Bedingung mehr –
+# sonst startet er wortlos nicht, wenn die Marke fehlt.
+anzahl="$(cat /etc/lhtpi/screens 2>/dev/null || echo 2)"
+case "${anzahl}" in ''|*[!0-9]*) anzahl=2 ;; esac
+if [ "__IDX__" = "2" ] && [ "${anzahl}" -lt 2 ]; then
+    echo "$(date '+%F %T') - Bildschirm 2 ist ausgeschaltet (screens=${anzahl}) - Ende" >> "$LOG"
+    exit 0
+fi
+
+xset s off >/dev/null 2>&1 || true
     xset dpms force on >/dev/null 2>&1 || true
     xset -dpms >/dev/null 2>&1 || true
     xset s noblank >/dev/null 2>&1 || true
@@ -300,6 +310,14 @@ letzter_zustand=""
 sag() { echo "$(date '+%F %T') - $*" >> "$LOG"; }
 
 while true; do
+    # Bildschirm 2 nur, wenn er laut Einstellung genutzt wird
+    anzahl="$(cat /etc/lhtpi/screens 2>/dev/null || echo 1)"
+    case "${anzahl}" in ''|*[!0-9]*) anzahl=1 ;; esac
+    if [ "${anzahl}" -lt 2 ]; then
+        sleep 10
+        continue
+    fi
+
     zustand="$(xrandr --query 2>/dev/null | grep -E '^HDMI-[12] connected' | awk '{print $1}' | tr '\n' ' ')"
 
     geaendert=0
@@ -341,7 +359,6 @@ SCREEN2_EOF
 [Unit]
 Description=LHTPi Waechter Bildschirm 2
 After=lightdm.service
-ConditionPathExists=${SCREEN2_FILE}
 
 [Service]
 Type=simple
@@ -672,10 +689,11 @@ configure_screen_kiosk() {
 
     # Bildschirm 1 startet nach der Ersteinrichtung, Bildschirm 2 nur,
     # wenn er bei der Einrichtung gewählt wurde.
+    # Bildschirm 2 startet immer und prueft die Bildschirmzahl selbst. Eine
+    # ConditionPathExists auf die Marke fuehrte dazu, dass der Dienst nach dem
+    # Loeschen der Datei wortlos nicht mehr startete - der Bildschirm blieb
+    # schwarz, waehrend die Maus weiterlief.
     local cond="ConditionPathExists=${MARKER_FILE}"
-    if [ "$idx" = "2" ]; then
-        cond="ConditionPathExists=${SCREEN2_FILE}"
-    fi
 
     log "Kiosk für Bildschirm ${idx}: ${ROUTER_BASE_URL}/${idx}"
     render_screen_kiosk_script "$idx" > "$script"
@@ -2048,6 +2066,7 @@ main() {
     configure_screens
     configure_screen2_watchdog
     configure_policies
+    installiere_bildschirm_helfer
     configure_sudoers_kiosk
     configure_firewall
     configure_usb_automount
@@ -2060,6 +2079,55 @@ main() {
 # WICHTIG: Das muss im Hauptteil stehen. Steht der Block im erzeugten
 # Steuer-Skript (render_anzeige_steuerung), dann schreibt JEDER Anzeigen-Start
 # die Datei wieder leer - die Knöpfe gehen dann still nicht.
+installiere_bildschirm_helfer() {
+    log "Richte Helfer zum Setzen der Bildschirmzahl ein"
+    cat > /usr/local/bin/lhtpi-screens.sh <<'SCR_EOF'
+#!/bin/bash
+# LHTPi: Bildschirmzahl setzen (1 oder 2).
+#
+# Die Web-App laeuft als pi und darf /etc/lhtpi nicht schreiben. Ohne diesen
+# Helfer scheiterte das Speichern der Anzeige-Einstellungen still, und die
+# Marke fuer Bildschirm 2 entstand nie - der Dienst startete dann nicht.
+#
+# Aufruf: lhtpi-screens.sh <1|2>
+set -u
+anzahl="${1:-}"
+case "${anzahl}" in
+    1|2) ;;
+    *) echo "Aufruf: $0 <1|2>" >&2; exit 2 ;;
+esac
+
+ordner=/etc/lhtpi
+mkdir -p "${ordner}"
+printf '%s\n' "${anzahl}" > "${ordner}/screens"
+chmod 644 "${ordner}/screens"
+
+marke="${ordner}/screen2"
+if [ "${anzahl}" -ge 2 ]; then
+    : > "${marke}"
+    chmod 644 "${marke}"
+elif [ -e "${marke}" ]; then
+    rm -f "${marke}"
+fi
+echo "Bildschirmzahl: ${anzahl}"
+SCR_EOF
+    chmod 0755 /usr/local/bin/lhtpi-screens.sh
+
+    local datei=/etc/sudoers.d/021_lhtpi-screens
+    local tmp
+    tmp="$(mktemp)"
+    cat >"${tmp}" <<SUDOEOF2
+${PI_USER} ALL=(root) NOPASSWD: /usr/local/bin/lhtpi-screens.sh
+SUDOEOF2
+    if visudo -c -f "${tmp}" >/dev/null 2>&1; then
+        install -m 0440 -o root -g root "${tmp}" "${datei}"
+        ok "Bildschirmzahl darf ohne Passwort gesetzt werden (${datei})"
+    else
+        warn "Freigabe für lhtpi-screens.sh nicht gesetzt"
+    fi
+    rm -f "${tmp}"
+}
+
 configure_sudoers_kiosk() {
     log "Erlaube Neustart und Herunterfahren vom Bildschirm"
     local datei=/etc/sudoers.d/020_lhtpi-kiosk

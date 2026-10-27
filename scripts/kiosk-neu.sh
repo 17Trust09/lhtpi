@@ -67,6 +67,59 @@ for idx in 1 2; do
     sag "Kiosk-Skript ${idx} erneuert: ${ziel}"
 done
 
+# ── 2a. Bildschirmzahl-Helfer und Marke ────────────────────────────────────
+# Ohne den Helfer kann die Web-App die Bildschirmzahl nicht setzen (sie läuft
+# als pi, /etc/lhtpi gehört root). Und ohne die Marke startete der Dienst für
+# Bildschirm 2 bisher gar nicht.
+SCREENS_HELFER="/usr/local/bin/lhtpi-screens.sh"
+if [ ! -x "${SCREENS_HELFER}" ] && grep -q "lhtpi-screens.sh <<'SCR_EOF'" "${REPO}/install.sh"; then
+    python3 - "${REPO}/install.sh" "${SCREENS_HELFER}" <<'PYSCR'
+import pathlib, sys
+quelle, ziel = sys.argv[1], sys.argv[2]
+s = pathlib.Path(quelle).read_text()
+marker = "cat > /usr/local/bin/lhtpi-screens.sh <<'SCR_EOF'"
+a = s.index(marker)
+a = s.index("\n", a) + 1
+b = s.index("SCR_EOF", a)
+pathlib.Path(ziel).write_text(s[a:b])
+PYSCR
+    chmod 0755 "${SCREENS_HELFER}"
+    bash -n "${SCREENS_HELFER}" && sag "Helfer eingerichtet: ${SCREENS_HELFER}"
+fi
+
+if [ -x "${SCREENS_HELFER}" ] && [ ! -f /etc/sudoers.d/021_lhtpi-screens ]; then
+    tmp="$(mktemp)"
+    printf '%s ALL=(root) NOPASSWD: %s\n' "${PI_USER}" "${SCREENS_HELFER}" > "${tmp}"
+    if visudo -c -f "${tmp}" >/dev/null 2>&1; then
+        install -m 0440 -o root -g root "${tmp}" /etc/sudoers.d/021_lhtpi-screens
+        sag "Bildschirmzahl darf ohne Passwort gesetzt werden."
+    fi
+    rm -f "${tmp}"
+fi
+
+# Marke für Bildschirm 2 sicherstellen
+mkdir -p /etc/lhtpi
+ANZAHL="$(cat /etc/lhtpi/screens 2>/dev/null || echo 1)"
+case "${ANZAHL}" in ''|*[!0-9]*) ANZAHL=1 ;; esac
+if [ "${ANZAHL}" -ge 2 ]; then
+    [ -f /etc/lhtpi/screen2 ] || { : > /etc/lhtpi/screen2; chmod 644 /etc/lhtpi/screen2; sag "Marke /etc/lhtpi/screen2 angelegt."; }
+else
+    sag "Nur ${ANZAHL} Bildschirm eingestellt - Bildschirm 2 bleibt aus."
+fi
+
+# Pfad-Bedingung aus den Diensten nehmen: sie verhinderte den Start, sobald die
+# Marke fehlte - der Bildschirm blieb schwarz, die Maus lief weiter.
+NEU_LADEN=0
+for unit in /etc/systemd/system/kiosk-screen2.service /etc/systemd/system/lhtpi-screen2-watch.service; do
+    [ -f "${unit}" ] || continue
+    if grep -qE '^ConditionPathExists=/etc/lhtpi/screen2[[:space:]]*$' "${unit}"; then
+        sed -i -E '/^ConditionPathExists=\/etc\/lhtpi\/screen2[[:space:]]*$/d' "${unit}"
+        sag "Pfad-Bedingung aus $(basename "${unit}") entfernt."
+        NEU_LADEN=1
+    fi
+done
+[ "${NEU_LADEN}" = "1" ] && systemctl daemon-reload
+
 # ── 2b. HDMI-Audio abschalten ──────────────────────────────────────────────
 # Manche Bildschirme können die Audio-Kanäle nicht zuordnen. Der Treiber
 # schreibt dann endlos Fehler ins Log und bremst dabei den Grafiktreiber aus –
