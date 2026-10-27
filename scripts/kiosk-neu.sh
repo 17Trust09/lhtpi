@@ -104,8 +104,26 @@ ANZAHL="$(cat /etc/lhtpi/screens 2>/dev/null || echo 2)"
 # eingerichtet, und ein leerer Wert haette Bildschirm 2 stillschweigend
 # abgeschaltet.
 case "${ANZAHL}" in ''|*[!0-9]*) ANZAHL=2 ;; esac
+# Selbstheilung: Steht die Zahl auf 1, obwohl zwei Ausgänge verbunden sind,
+# wurde sie irgendwo falsch gesetzt (die App schrieb frueher still ins Leere).
+# Dann gilt der tatsaechliche Aufbau - sonst bleibt ein Bildschirm schwarz,
+# ohne dass jemand versteht warum.
+verbunden="$(DISPLAY=:0 XAUTHORITY="/home/${PI_USER}/.Xauthority" \
+    xrandr --query 2>/dev/null | grep -cE '^HDMI-[12] connected')"
+case "${verbunden}" in ''|*[!0-9]*) verbunden=0 ;; esac
+if [ "${verbunden}" -ge 2 ] && [ "${ANZAHL}" -lt 2 ]; then
+    sag "Zwei Ausgänge verbunden, Bildschirmzahl stand auf ${ANZAHL} - korrigiere auf 2."
+    ANZAHL=2
+    if [ -x "${SCREENS_HELFER}" ]; then
+        "${SCREENS_HELFER}" 2 >/dev/null 2>&1 || printf '2\n' > /etc/lhtpi/screens
+    else
+        printf '2\n' > /etc/lhtpi/screens
+    fi
+fi
+
 if [ "${ANZAHL}" -ge 2 ]; then
     [ -f /etc/lhtpi/screen2 ] || { : > /etc/lhtpi/screen2; chmod 644 /etc/lhtpi/screen2; sag "Marke /etc/lhtpi/screen2 angelegt."; }
+    sag "Bildschirmzahl: ${ANZAHL} (zwei Anzeigen aktiv)"
 else
     sag "Nur ${ANZAHL} Bildschirm eingestellt - Bildschirm 2 bleibt aus."
 fi

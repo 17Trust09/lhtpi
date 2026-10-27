@@ -83,9 +83,14 @@ def screen_count():
     KLEINERE Wert aus Installation und Erkennung: hängt nur ein Monitor am
     Gerät, soll kein zweiter Kiosk auf demselben Schirm aufgehen.
     """
-    werte = [w for w in (tools.configured_screen_count(),
-                         tools.detected_screen_count()) if w]
-    default = min(werte) if werte else DEFAULT_SCREEN_COUNT
+    # Reihenfolge: erst was wirklich angeschlossen ist, dann was der Installer
+    # eingetragen hat. Die Datei kann veraltet sein - stand sie auf 1, während
+    # zwei Monitore hängen, blieb Bildschirm 2 dauerhaft schwarz, und weil die
+    # Einstellungsseite den kleineren Wert als Vorgabe zeigte, schrieb jedes
+    # Speichern die 1 erneut fest.
+    werte = [w for w in (tools.detected_screen_count(),
+                         tools.configured_screen_count()) if w]
+    default = werte[0] if werte else DEFAULT_SCREEN_COUNT
     n = _as_int(get_setting(SETTING_SCREEN_COUNT, default), default, 1, MAX_SCREENS)
     grenze = tools.licensed_screen_limit()
     if grenze is not None:
