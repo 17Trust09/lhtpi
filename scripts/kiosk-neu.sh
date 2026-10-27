@@ -89,15 +89,22 @@ PYSCR
     bash -n "${SCREENS_HELFER}" && sag "Helfer eingerichtet: ${SCREENS_HELFER}"
 fi
 
-if [ -x "${SCREENS_HELFER}" ] && [ ! -f /etc/sudoers.d/021_lhtpi-screens ]; then
-    tmp="$(mktemp)"
-    printf '%s ALL=(root) NOPASSWD: %s\n' "${PI_USER}" "${SCREENS_HELFER}" > "${tmp}"
-    if visudo -c -f "${tmp}" >/dev/null 2>&1; then
-        install -m 0440 -o root -g root "${tmp}" /etc/sudoers.d/021_lhtpi-screens
-        sag "Bildschirmzahl darf ohne Passwort gesetzt werden."
-    fi
-    rm -f "${tmp}"
+# Freigaben: Bildschirmzahl setzen und die Kiosk-Dienste neu starten. Ohne die
+# zweite Regel scheiterte das Neustarten nach dem Speichern still - die Anzeige
+# behielt dann die alte Belegung.
+tmp="$(mktemp)"
+printf '%s ALL=(root) NOPASSWD: %s, %s restart kiosk-screen1, %s restart kiosk-screen2\n' \
+    "${PI_USER}" "${SCREENS_HELFER}" \
+    "$(command -v systemctl || echo /usr/bin/systemctl)" \
+    "$(command -v systemctl || echo /usr/bin/systemctl)" > "${tmp}"
+if visudo -c -f "${tmp}" >/dev/null 2>&1; then
+    install -m 0440 -o root -g root "${tmp}" /etc/sudoers.d/021_lhtpi-screens
+    sag "Bildschirmzahl und Kiosk-Neustart ohne Passwort erlaubt."
+else
+    warn_freigabe=1
+    sag "WARNUNG: Freigabe nicht gesetzt - Speichern startet die Anzeige nicht neu."
 fi
+rm -f "${tmp}"
 
 # Marke für Bildschirm 2 sicherstellen
 mkdir -p /etc/lhtpi

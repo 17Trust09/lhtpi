@@ -462,14 +462,22 @@ def anzeige_neu_starten():
     # Bildschirm behaelt die alte Seite. Deshalb die Dienste hier direkt neu
     # starten; das ist genau der Weg, der beim Booten funktioniert.
     if not SYSTEM_DRYRUN:
+        # Die App laeuft als pi und darf systemctl nicht ohne weiteres rufen -
+        # ohne die sudo-Freigabe (021_screens in install.sh) scheiterte der
+        # Neustart still, und die Anzeige behielt die alte Belegung.
+        sudo = shutil.which('sudo') or '/usr/bin/sudo'
+        systemctl = shutil.which('systemctl') or '/usr/bin/systemctl'
         for dienst in ('kiosk-screen1', 'kiosk-screen2'):
-            try:
-                subprocess.run(['systemctl', 'restart', dienst],
-                               stdin=subprocess.DEVNULL,
-                               stdout=subprocess.DEVNULL,
-                               stderr=subprocess.DEVNULL, timeout=25)
-            except (OSError, subprocess.SubprocessError):
-                pass
+            for befehl in ([sudo, '-n', systemctl, 'restart', dienst],
+                           [systemctl, 'restart', dienst]):
+                try:
+                    lauf = subprocess.run(befehl, stdin=subprocess.DEVNULL,
+                                          stdout=subprocess.DEVNULL,
+                                          stderr=subprocess.DEVNULL, timeout=25)
+                except (OSError, subprocess.SubprocessError):
+                    continue
+                if lauf.returncode == 0:
+                    break
     return True
 
 
