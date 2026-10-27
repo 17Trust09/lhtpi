@@ -49,6 +49,24 @@ done
 echo "  Prozess des ersten Chromium:"
 pgrep -a chromium 2>/dev/null | head -1 | cut -c1-120 | sed 's/^/    /'
 
+titel "3b. Fenster und Chromium-Aufrufe"
+echo "  Chromium-Prozesse: $(pgrep -c chromium 2>/dev/null || echo 0)"
+echo "  Startargumente je Prozess (Position und Groesse):"
+pgrep -a chromium 2>/dev/null | grep -oE '\-\-class=[^ ]+|\-\-window-position=[^ ]+|\-\-window-size=[^ ]+|\-\-app=[^ ]+' \
+    | sed 's/^/    /' | head -12
+echo "  Bekannte Fenster laut X:"
+if command -v xwininfo >/dev/null 2>&1; then
+    xwininfo -root -children 2>/dev/null | grep -iE 'kiosk|chromium' | head -6 | cut -c1-100 | sed 's/^/    /' \
+        || echo "    (keine passenden Fenster gefunden)"
+else
+    echo "    (xwininfo nicht installiert)"
+fi
+echo "  Seitenabruf auf dem Gerät:"
+for port in 8000 8001; do
+    code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 "http://127.0.0.1:${port}/screen/2" 2>/dev/null || echo '---')"
+    echo "    /screen/2 auf Port ${port}: ${code}"
+done
+
 titel "4. Dienst Bildschirm 2"
 echo "  Zustand: $(systemctl is-active kiosk-screen2 2>/dev/null)"
 echo "  Ergebnis des letzten Starts:"

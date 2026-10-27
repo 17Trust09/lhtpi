@@ -43,10 +43,13 @@ fi
 
 # Läuft ein Bildschirm nicht, direkt die Diagnose zeigen - dann muss niemand
 # Befehle abtippen, um den Zustand zu melden.
-if ! systemctl is-active --quiet kiosk-screen2 2>/dev/null; then
+# Diagnose immer zeigen: ob ein Fenster da ist, sieht man am Dienst allein
+# nicht - der Dienst kann laufen, waehrend Chromium auf dem falschen Ausgang
+# sitzt.
+if [ -x scripts/diagnose.sh ]; then
     echo
-    echo "LHTPi: Bildschirm 2 läuft nicht - hier der Zustand:"
-    [ -x scripts/diagnose.sh ] && bash scripts/diagnose.sh
+    echo "LHTPi: Zustand der Anzeige nach dem Nachziehen:"
+    bash scripts/diagnose.sh
 fi
 HOOK_EOF
 
