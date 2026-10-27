@@ -903,6 +903,9 @@ for i in $(seq 1 "${LHTPI_STEUER_WARTE:-20}"); do
     esac
     sleep 1
 done
+# Nur Bildschirm 1: faellt das Fenster aus, kommt die Anzeigen-Seite zurueck.
+# Bildschirm 2 hat keine Anzeigen-Seite - ein Neustart waere dort das falsche
+# Mittel und liess den Schirm schwarz.
 echo "$(date '+%F %T') - Kiosk-Fenster kam nicht hoch, versuche es erneut" >> /home/pi/anzeige-steuerung.log
 systemctl restart kiosk-screen1.service 2>/dev/null || true
 sleep "${LHTPI_STEUER_WARTE2:-8}"

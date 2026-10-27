@@ -128,6 +128,10 @@ def display_save():
     belegung_speichern()
 
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        # Die Anzeige soll die neue Belegung sofort zeigen: Fenster sauber
+        # neu starten. Vorher blieb der Bildschirm nach dem Speichern schwarz
+        # oder zeigte weiter die alte Seite.
+        router.anzeige_neu_starten()
         return jsonify({'ok': True})
 
     # Knopf "Vorschau": die Auswahl wird zuerst gespeichert, damit man genau

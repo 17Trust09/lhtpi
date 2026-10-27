@@ -371,6 +371,38 @@ SYSTEM_DRYRUN = False       # Tests koennen das auf True setzen
 
 # Fehlversuche der Systemknoepfe - dauerhaft, ueberlebt einen Neustart.
 PROTOKOLL_DATEI = '/home/pi/lhtpi-system.log'
+STEUERDATEIEN = 'lhtpi-anzeige.path'
+
+
+def _pfad_waechter_zaehmen():
+    """Den Pfad-Waechter fuer einen Moment anhalten.
+
+    Er reagiert auf Aenderungen an ``/etc/lhtpi/screens`` und startet dann
+    sofort die Kiosk-Dienste. Waehrend des Speicherns stoert das: die Dienste
+    werden mitten in der Umstellung neu gestartet und ein Bildschirm bleibt
+    schwarz. Deshalb erst alle Werte schreiben, dann den Waechter einmal
+    ausloesen.
+    """
+    if SYSTEM_DRYRUN:
+        return None
+    try:
+        subprocess.run(['systemctl', 'stop', STEUERDATEIEN],
+                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, timeout=10)
+        return True
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def _pfad_waechter_freigeben():
+    if SYSTEM_DRYRUN:
+        return
+    try:
+        subprocess.run(['systemctl', 'start', STEUERDATEIEN],
+                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        pass
 
 # Kiosk-Fenster erkennt man am eigenen Chromium-Profil je Bildschirm.
 FENSTER_MUSTER = 'chromium-screen'
@@ -424,6 +456,20 @@ def anzeige_neu_starten():
         os.utime(ziel, None)
     except OSError:
         return False
+
+    # Der Waechter greift nur, wenn die Datei sich aendert. Aendert sich der
+    # Inhalt nicht (z. B. nur die Belegung), passiert sonst nichts - und der
+    # Bildschirm behaelt die alte Seite. Deshalb die Dienste hier direkt neu
+    # starten; das ist genau der Weg, der beim Booten funktioniert.
+    if not SYSTEM_DRYRUN:
+        for dienst in ('kiosk-screen1', 'kiosk-screen2'):
+            try:
+                subprocess.run(['systemctl', 'restart', dienst],
+                               stdin=subprocess.DEVNULL,
+                               stdout=subprocess.DEVNULL,
+                               stderr=subprocess.DEVNULL, timeout=25)
+            except (OSError, subprocess.SubprocessError):
+                pass
     return True
 
 
