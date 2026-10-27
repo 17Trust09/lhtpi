@@ -99,8 +99,11 @@ fi
 
 # Marke für Bildschirm 2 sicherstellen
 mkdir -p /etc/lhtpi
-ANZAHL="$(cat /etc/lhtpi/screens 2>/dev/null || echo 1)"
-case "${ANZAHL}" in ''|*[!0-9]*) ANZAHL=1 ;; esac
+ANZAHL="$(cat /etc/lhtpi/screens 2>/dev/null || echo 2)"
+# Leere oder kaputte Datei heisst NICHT "ein Bildschirm": das Geraet ist mit zwei
+# eingerichtet, und ein leerer Wert haette Bildschirm 2 stillschweigend
+# abgeschaltet.
+case "${ANZAHL}" in ''|*[!0-9]*) ANZAHL=2 ;; esac
 if [ "${ANZAHL}" -ge 2 ]; then
     [ -f /etc/lhtpi/screen2 ] || { : > /etc/lhtpi/screen2; chmod 644 /etc/lhtpi/screen2; sag "Marke /etc/lhtpi/screen2 angelegt."; }
 else

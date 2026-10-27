@@ -2067,6 +2067,7 @@ main() {
     configure_screen2_watchdog
     configure_policies
     installiere_bildschirm_helfer
+    installiere_pull_haken
     configure_sudoers_kiosk
     configure_firewall
     configure_usb_automount
@@ -2079,6 +2080,17 @@ main() {
 # WICHTIG: Das muss im Hauptteil stehen. Steht der Block im erzeugten
 # Steuer-Skript (render_anzeige_steuerung), dann schreibt JEDER Anzeigen-Start
 # die Datei wieder leer - die Knöpfe gehen dann still nicht.
+installiere_pull_haken() {
+    # Nach jedem git pull sollen Kiosk-Skripte und Systemeinstellungen
+    # nachgezogen werden - dann genuegt am Geraet ein "git pull".
+    local repo="${PROJECT_DIR:-/home/${PI_USER}/lhtpi}"
+    if [ -f "${repo}/scripts/hook-installieren.sh" ]; then
+        bash "${repo}/scripts/hook-installieren.sh" >/dev/null 2>&1 \
+            && ok "git pull zieht Aenderungen selbst nach" \
+            || warn "git-Haken nicht eingerichtet"
+    fi
+}
+
 installiere_bildschirm_helfer() {
     log "Richte Helfer zum Setzen der Bildschirmzahl ein"
     cat > /usr/local/bin/lhtpi-screens.sh <<'SCR_EOF'
