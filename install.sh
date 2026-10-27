@@ -302,19 +302,26 @@ sag() { echo "$(date '+%F %T') - $*" >> "$LOG"; }
 while true; do
     zustand="$(xrandr --query 2>/dev/null | grep -E '^HDMI-[12] connected' | awk '{print $1}' | tr '\n' ' ')"
 
+    geaendert=0
     if [ "${zustand}" != "${letzter_zustand}" ]; then
         sag "angeschlossen: ${zustand:-keiner}"
         letzter_zustand="${zustand}"
+        geaendert=1
     fi
 
     if printf '%s' "${zustand}" | grep -q 'HDMI-2'; then
-        # Ausgang wecken und Position setzen
-        if printf '%s' "${zustand}" | grep -q 'HDMI-1'; then
-            xrandr --output HDMI-1 --primary --auto --pos 0x0 \
-                   --output HDMI-2 --auto --right-of HDMI-1 >/dev/null 2>&1 || true
-        else
-            xrandr --output HDMI-2 --primary --auto --pos 0x0 >/dev/null 2>&1 || true
+        # Ausgang nur bei Aenderung neu setzen - sonst wuerde die Aufloesung
+        # alle 5 Sekunden zurueckgesetzt und das Bild flackert.
+        if [ "${geaendert}" = "1" ]; then
+            if printf '%s' "${zustand}" | grep -q 'HDMI-1'; then
+                xrandr --output HDMI-1 --primary --auto --pos 0x0 \
+                       --output HDMI-2 --auto --right-of HDMI-1 >/dev/null 2>&1 || true
+            else
+                xrandr --output HDMI-2 --primary --auto --pos 0x0 >/dev/null 2>&1 || true
+            fi
         fi
+        # Spiegeln aufloesen, falls der Treiber beide gleich setzt
+        [ -x /usr/local/bin/lhtpi-entkoppeln.sh ] && /usr/local/bin/lhtpi-entkoppeln.sh >> "$LOG" 2>&1 || true
         xset dpms force on >/dev/null 2>&1 || true
 
         # Kiosk starten, falls nicht aktiv
@@ -427,6 +434,17 @@ W=1920      # Rückfall, falls beim Booten kein Bildschirm steckt
 H=1080
 X=0
 Y=0
+# Stehen beide Ausgaenge auf derselben Position, spiegelt der Treiber sie:
+# beide Bildschirme zeigen dasselbe Bild und der Mauszeiger ist doppelt zu
+# sehen. Beim Pi 4 passiert das bei zwei 4K-Bildschirmen, weil er die
+# Aufloesungen nicht getrennt fahren kann. Vor dem Fensterstart wird der
+# zweite Ausgang deshalb nach rechts geschoben.
+entkopple_ausgaenge() {
+    # Gemeinsamer Helfer: steht beide Ausgaenge auf derselben Position, wird
+    # HDMI-2 nach rechts geschoben (und notfalls auf Full HD begrenzt).
+    [ -x /usr/local/bin/lhtpi-entkoppeln.sh ] && /usr/local/bin/lhtpi-entkoppeln.sh >> "$LOG" 2>&1 || true
+}
+
 ermittle_geometrie() {
     GEO=$(xrandr --current 2>/dev/null | awk -v m="$MON" \
           '$1==m && $2=="connected"{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+/){print $i; exit}}')
@@ -480,6 +498,7 @@ rm -rf "$PROFILE/Default/Sessions" 2>/dev/null || true
 # Kabel gezogen wurde, beendet X das Fenster. Wird es wieder gesteckt, muss das
 # Fenster ohne Neustart des Pi zurückkommen.
 starte_chromium() {
+    entkopple_ausgaenge
     ermittle_geometrie
     echo "$(date '+%F %T') - starte Chromium auf ${MON} (${W}x${H}+${X}+${Y})" >> "$LOG"
     "$CHROMIUM" \
@@ -648,6 +667,52 @@ EOF
     # übereinander (Einrichtungs-Seite und Kiosk).
     systemctl disable "${service}" >/dev/null 2>&1 || true
     ok "Bildschirm ${idx} eingerichtet (${service}, Start über die Anzeige)"
+}
+
+installiere_entkoppler() {
+    log "Richte Helfer zum Trennen der beiden Bildschirme ein"
+    cat > /usr/local/bin/lhtpi-entkoppeln.sh <<'ENTK_EOF'
+#!/bin/bash
+# LHTPi: verhindert, dass beide Bildschirme dasselbe zeigen.
+#
+# Stehen HDMI-1 und HDMI-2 auf derselben Position, spiegelt der Treiber sie -
+# beide Monitore zeigen dasselbe Bild und der Mauszeiger ist doppelt zu sehen.
+# Beim Pi 4 passiert das bei zwei 4K-Bildschirmen, weil er sie nicht getrennt
+# fahren kann. Dann wird die Aufloesung auf Full HD begrenzt.
+set -u
+export DISPLAY="${DISPLAY:-:0}"
+export XAUTHORITY="${XAUTHORITY:-/home/pi/.Xauthority}"
+
+position() {
+    xrandr --query 2>/dev/null | awk -v m="$1" \
+        '$1==m && $2=="connected"{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+\+/) print $i; exit}'
+}
+
+p1="$(position HDMI-1)"
+p2="$(position HDMI-2)"
+[ -n "${p1}" ] && [ -n "${p2}" ] || exit 0
+
+breite1="$(echo "${p1}" | cut -dx -f1)"
+x1="$(echo "${p1}" | cut -d+ -f2)"
+x2="$(echo "${p2}" | cut -d+ -f2)"
+
+[ "${x1}" = "${x2}" ] || exit 0
+
+# Versuch 1: nur verschieben, Aufloesung behalten
+xrandr --output HDMI-2 --pos "${breite1}x0" >/dev/null 2>&1 || true
+neu="$(position HDMI-2)"
+if [ "$(echo "${neu}" | cut -d+ -f2)" = "${breite1}" ]; then
+    echo "$(date '+%F %T') - Ausgaenge getrennt: HDMI-2 auf ${breite1}x0"
+    exit 0
+fi
+
+# Versuch 2: der Treiber laesst zwei 4K nicht getrennt zu -> Full HD
+xrandr --output HDMI-1 --mode 1920x1080 --pos 0x0 \
+       --output HDMI-2 --mode 1920x1080 --pos 1920x0 >/dev/null 2>&1 || true
+echo "$(date '+%F %T') - Ausgaenge getrennt: auf 1920x1080 begrenzt (zwei 4K nicht moeglich)"
+ENTK_EOF
+    chmod 0755 /usr/local/bin/lhtpi-entkoppeln.sh
+    ok "Helfer /usr/local/bin/lhtpi-entkoppeln.sh eingerichtet"
 }
 
 configure_screens() {
@@ -1937,6 +2002,7 @@ main() {
     configure_autologin
     configure_hdmi_modus
     configure_display_guard
+    installiere_entkoppler
     configure_screens
     configure_screen2_watchdog
     configure_policies

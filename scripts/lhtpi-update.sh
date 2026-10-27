@@ -157,6 +157,29 @@ kopiere "${PAKET}/terminboard" "${TERMIN}" || abbrechen "Kopieren nach ${TERMIN}
 kopiere "${PAKET}/safety-cross" "${SAFETYCROSS}" || abbrechen "Kopieren nach ${SAFETYCROSS} fehlgeschlagen."
 sag "Programmdateien ersetzt."
 
+# ── 6b. Kiosk-Skripte und Helfer (nur wenn im Paket enthalten) ─────────────
+# Aeltere Pakete bringen diese Ordner nicht mit - dann bleibt der bisherige
+# Stand auf dem Geraet, das ist kein Fehler.
+if [ -d "${PAKET}/helfer" ] && [ -f "${PAKET}/helfer/lhtpi-entkoppeln.sh" ]; then
+    install -m 0755 "${PAKET}/helfer/lhtpi-entkoppeln.sh" /usr/local/bin/lhtpi-entkoppeln.sh \
+        && sag "Helfer zum Trennen der Bildschirme aktualisiert."
+fi
+if [ -d "${PAKET}/kiosk" ]; then
+    for idx in 1 2; do
+        quelle="${PAKET}/kiosk/start_kiosk_screen${idx}.sh"
+        ziel="/home/${PI_USER}/start_kiosk_screen${idx}.sh"
+        [ -f "${quelle}" ] || continue
+        install -m 0755 -o "${PI_USER}" -g "${PI_USER}" "${quelle}" "${ziel}" \
+            && sag "Kiosk-Skript ${idx} aktualisiert."
+    done
+    # Laufende Kiosks neu starten, damit das neue Skript greift
+    if command -v systemctl >/dev/null 2>&1 && [ "${LHTPI_SKIP_SERVICES:-0}" != "1" ]; then
+        systemctl restart kiosk-screen1 >/dev/null 2>&1 || true
+        systemctl restart kiosk-screen2 >/dev/null 2>&1 || true
+        sag "Kiosk-Dienste neu gestartet."
+    fi
+fi
+
 # ── 7. Abhängigkeiten nachziehen ───────────────────────────────────────────
 if [ -x "${PROJEKT}/venv/bin/pip" ] && [ -f "${PROJEKT}/requirements.txt" ]; then
     sudo -u "${PI_USER}" "${PROJEKT}/venv/bin/pip" install -q -r "${PROJEKT}/requirements.txt" \
