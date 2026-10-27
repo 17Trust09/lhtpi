@@ -176,12 +176,13 @@ def baue_vorlage(pfad=VORLAGE):
         ws.append(list(zeile))
     _datumsformat(ws, (4, 5), mit_zeit=False)
 
-    # Nummer und Status vorfuellen: die Nummer verbindet Termin und Zeitbloecke,
-    # der Status ist fast immer "offen". Zeilen ohne Art und ohne Von gelten
-    # beim Lesen als leer (siehe excel_modell2.lies_terminblatt).
+    # Nur die Nummer vorfuellen: sie verbindet Termin und Zeitbloecke und muss
+    # nicht getippt werden. Der Status bleibt leer - er ist beim Lesen ohnehin
+    # "offen", und eine Spalte voller roter Zellen hilft niemandem.
+    # Zeilen ohne Art, Pruefstand und Von gelten als leer
+    # (siehe excel_modell2.lies_terminblatt).
     for zeile in range(len(TERMINE) + 2, LETZTE_ZEILE + 1):
         ws.cell(row=zeile, column=1, value=zeile - 1)
-        ws.cell(row=zeile, column=7, value='offen')
     _auswahl(ws, '"%s"' % ','.join(ARTEN), 'B2:B%d' % LETZTE_ZEILE,
              'Art des Termins wählen.', 'Art')
     _auswahl(ws, '=Pruefstaende', 'C2:C%d' % LETZTE_ZEILE,
