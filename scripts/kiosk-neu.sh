@@ -75,12 +75,31 @@ done
 CONFIG="/boot/firmware/config.txt"
 [ -f "${CONFIG}" ] || CONFIG="/boot/config.txt"
 if [ -f "${CONFIG}" ]; then
+    [ -f "${CONFIG}.vor-lhtpi-audio" ] || cp -a "${CONFIG}" "${CONFIG}.vor-lhtpi-audio" 2>/dev/null || true
+
+    # Ebene 1: EDID-Audio ignorieren
     if grep -qE '^[[:space:]]*hdmi_ignore_edid_audio=1' "${CONFIG}"; then
-        sag "HDMI-Audio ist bereits abgeschaltet."
+        sag "hdmi_ignore_edid_audio ist gesetzt."
     else
-        [ -f "${CONFIG}.vor-lhtpi-audio" ] || cp -a "${CONFIG}" "${CONFIG}.vor-lhtpi-audio" 2>/dev/null || true
         printf '\n# LHTPi: kein HDMI-Ton - verhindert die Endlosschleife des Audio-Codecs\nhdmi_ignore_edid_audio=1\n' >> "${CONFIG}"
-        sag "HDMI-Audio abgeschaltet (${CONFIG}) - wirkt nach einem Neustart."
+        sag "hdmi_ignore_edid_audio gesetzt."
+        NEUSTART_NOETIG=1
+    fi
+
+    # Ebene 2: Audio direkt im KMS-Treiber abschalten (noaudio). Ebene 1 allein
+    # reicht nicht - der Codec wird trotzdem angesprochen.
+    if grep -qE '^[[:space:]]*dtoverlay=vc4-kms-v3d' "${CONFIG}"; then
+        if grep -qE '^[[:space:]]*dtoverlay=vc4-kms-v3d[[:space:]]*,.*noaudio' "${CONFIG}"; then
+            sag "KMS-Treiber läuft bereits ohne Audio (noaudio)."
+        else
+            sed -i -E 's/^[[:space:]]*dtoverlay=vc4-kms-v3d[[:space:]]*$/dtoverlay=vc4-kms-v3d,noaudio/' "${CONFIG}"
+            sed -i -E 's/^[[:space:]]*dtoverlay=vc4-kms-v3d,([^n].*)$/dtoverlay=vc4-kms-v3d,noaudio,\1/' "${CONFIG}"
+            sag "KMS-Treiber ohne Audio eingetragen (noaudio)."
+            NEUSTART_NOETIG=1
+        fi
+    else
+        printf '\ndtoverlay=vc4-kms-v3d,noaudio\n' >> "${CONFIG}"
+        sag "KMS-Treiber mit noaudio eingetragen."
         NEUSTART_NOETIG=1
     fi
 else

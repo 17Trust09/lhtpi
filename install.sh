@@ -627,9 +627,15 @@ configure_hdmi_modus() {
     [ "${geaendert}" = "1" ] && ok "Alte Auflösungs-Zwangszeilen entfernt (KMS übernimmt)"
 
     # KMS sicherstellen (Standard bei Pi 4/5, bei Pi 3 nachziehen)
+    # noaudio: HDMI-Ton direkt im KMS-Treiber abschalten. hdmi_ignore_edid_audio
+    # allein genuegt nicht - der Codec wird trotzdem angesprochen und schreibt
+    # endlos "Not able to map channels to speakers (-22)".
     if ! grep -qE '^[[:space:]]*dtoverlay=vc4-kms-v3d' "${config}"; then
-        printf '\n# LHTPi: KMS-Treiber – Auflösung kommt vom Bildschirm (kein Letterbox)\ndtoverlay=vc4-kms-v3d\n' >> "${config}"
-        ok "KMS-Treiber eingetragen"
+        printf '\n# LHTPi: KMS-Treiber – Auflösung kommt vom Bildschirm (kein Letterbox)\ndtoverlay=vc4-kms-v3d,noaudio\n' >> "${config}"
+    elif ! grep -qE '^[[:space:]]*dtoverlay=vc4-kms-v3d[[:space:]]*,.*noaudio' "${config}"; then
+        sed -i -E 's/^[[:space:]]*dtoverlay=vc4-kms-v3d[[:space:]]*$/dtoverlay=vc4-kms-v3d,noaudio/' "${config}"
+        sed -i -E 's/^[[:space:]]*dtoverlay=vc4-kms-v3d,([^n].*)$/dtoverlay=vc4-kms-v3d,noaudio,\1/' "${config}"
+        ok "HDMI-Audio im KMS-Treiber abgeschaltet (noaudio)"
     fi
 
     # HDMI-Erkennung erzwingen: Der Kiosk zeigt auch dann ein Bild, wenn beim
