@@ -175,6 +175,13 @@ def baue_vorlage(pfad=VORLAGE):
     for zeile in TERMINE:
         ws.append(list(zeile))
     _datumsformat(ws, (4, 5), mit_zeit=False)
+
+    # Nummer und Status vorfuellen: die Nummer verbindet Termin und Zeitbloecke,
+    # der Status ist fast immer "offen". Zeilen ohne Art und ohne Von gelten
+    # beim Lesen als leer (siehe excel_modell2.lies_terminblatt).
+    for zeile in range(len(TERMINE) + 2, LETZTE_ZEILE + 1):
+        ws.cell(row=zeile, column=1, value=zeile - 1)
+        ws.cell(row=zeile, column=7, value='offen')
     _auswahl(ws, '"%s"' % ','.join(ARTEN), 'B2:B%d' % LETZTE_ZEILE,
              'Art des Termins wählen.', 'Art')
     _auswahl(ws, '=Pruefstaende', 'C2:C%d' % LETZTE_ZEILE,
@@ -182,18 +189,7 @@ def baue_vorlage(pfad=VORLAGE):
     _auswahl(ws, '"%s"' % ','.join(STATUS), 'G2:G%d' % LETZTE_ZEILE,
              'offen / abgeschlossen / storniert.', 'Status')
     _status_farben(ws, 'G')
-    _legende(ws, [
-        ('offen', 'Prüfstand steht still (rot)'),
-        ('abgeschlossen', 'erledigt (grün)'),
-        ('storniert', 'zählt nicht (grau)'),
-        ('', ''),
-        ('Von / Bis', 'nur Datum, keine Uhrzeit'),
-        ('', ''),
-        ('Uhrzeiten', 'gehören ins Blatt „Zeiten“'),
-        ('', ''),
-        ('Art', 'Kalibrierung / Wartung /'),
-        ('', 'Ausfall / Audit / Info'),
-    ], 'Legende')
+
     ws.sheet_view.showGridLines = True
 
     # ── Blatt „Zeiten" ─────────────────────────────────────────────────────

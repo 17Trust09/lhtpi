@@ -111,6 +111,12 @@ def lies_terminblatt(ws):
             continue
         if index == 1 and _ist_kopfzeile(row):
             continue
+        # Vorlage-Zeilen: Nummer und Status sind schon gesetzt, Art und Von
+        # fehlen noch. So eine Zeile ist kein Termin, sondern eine Einladung,
+        # sie auszufuellen.
+        if not _text(row[SPALTE_ART]) and not _text(row[SPALTE_PRUEFSTAND]) \
+                and _zu_datetime(row[SPALTE_VON] if SPALTE_VON < len(row) else None) is None:
+            continue
 
         def zelle(spalte):
             return row[spalte] if spalte < len(row) else None

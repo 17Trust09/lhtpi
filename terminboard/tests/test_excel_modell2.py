@@ -68,6 +68,14 @@ class TestVorlage:
         z = lies_datei(str(pfad))['zeilen'][0]
         assert z['bis'] == datetime(2026, 11, 5, 23, 59)
 
+    def test_vorlage_zeilen_ohne_art_sind_keine_termine(self, daten):
+        # Nummer und Status sind in der Vorlage vorausgefuellt. Eine Zeile ohne
+        # Art, Pruefstand und Von ist trotzdem kein Termin - sonst meldete der
+        # Import 495 Fehler.
+        assert daten['fehler'] == []
+        for z in daten['zeilen']:
+            assert z['art'] and z['pruefstand'] and z['von'] is not None
+
     def test_bloecke_der_vorlage_sind_leer(self, daten):
         # Das Blatt „Zeiten“ ist bewusst leer - Beispielblöcke würden als
         # echte Ausfallzeiten importiert.
