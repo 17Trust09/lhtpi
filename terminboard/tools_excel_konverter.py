@@ -147,7 +147,7 @@ def schreibe_neu(pfad, zeilen):
 
     # Prüfstände ergänzen, die in der alten Datei vorkommen, aber in der
     # Stammliste fehlen - ohne sie wäre der Prüfstand im Dropdown nicht wählbar.
-    vorhanden = {kennung for kennung, _ in PRUEFSTAENDE}
+    vorhanden = {eintrag[0] for eintrag in PRUEFSTAENDE}
     fehlend = []
     for eintrag in zeilen:
         name = eintrag['pruefstand']

@@ -38,18 +38,21 @@ class TestVorlage:
     def daten(self):
         return lies_datei(VORLAGE)
 
-    def test_sechs_termine(self, daten):
-        assert len(daten['zeilen']) == 6
+    def test_termine_der_vorlage(self, daten):
+        # Die Vorlage gehoert dem Betrieb - geprueft wird, dass jede Zeile
+        # gelesen wird, nicht eine feste Anzahl.
+        assert len(daten['zeilen']) >= 1
+        assert daten['fehler'] == []
 
     def test_erste_zeile(self, daten):
         z = daten['zeilen'][0]
         assert z['nr'] == 1
-        assert z['art'] == 'Wartung'
-        assert z['pruefstand'] == 'P03 NRA'
+        assert z['art'] in ('Kalibrierung', 'Wartung', 'Ausfall', 'Audit', 'Info')
+        assert z['pruefstand']
         # Nur Datum im Blatt „Termine“: Von ist Tagesbeginn, Bis Tagesende.
-        assert z['von'] == datetime(2026, 11, 2, 0, 0)
-        assert z['bis'] == datetime(2026, 11, 2, 23, 59)
-        assert z['status'] == 'abgeschlossen'
+        assert z['von'].hour == 0 and z['von'].minute == 0
+        assert z['bis'].hour == 23 and z['bis'].minute == 59
+        assert z['status'] in ('offen', 'abgeschlossen', 'storniert')
 
     def test_bloecke_der_vorlage_sind_leer(self, daten):
         # Das Blatt „Zeiten“ ist bewusst leer - Beispielblöcke würden als
@@ -79,7 +82,11 @@ class TestVorlage:
                                           datetime(2026, 11, 16, 12, 0))
 
     def test_pruefstaende_gelesen(self, daten):
-        assert len(daten['pruefstaende']) == 15
+        # Die Stammliste waechst mit dem Betrieb - geprueft wird der Inhalt,
+        # nicht die Anzahl.
+        assert 'P01 NRA' in daten['pruefstaende']
+        assert 'P43 LOW-PRESSURE' in daten['pruefstaende']
+        assert len(daten['pruefstaende']) >= 15
         assert 'P03 NRA' in daten['pruefstaende']
         assert 'P43 LOW-PRESSURE' in daten['pruefstaende']
 

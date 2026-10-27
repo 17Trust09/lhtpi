@@ -48,11 +48,13 @@ class TestImport:
         assert ergebnis['importiert'] is False
 
     def test_stick_mit_excel_wird_importiert(self, app, stick):
+        from excel_modell2 import lies_datei
+        erwartet = len(lies_datei(VORLAGE)['zeilen'])
         ergebnis = verarbeite_stick(stick)
         assert ergebnis['stick'] is True
         assert ergebnis['importiert'] is True
-        assert ergebnis['report']['neu'] == 6
-        assert Vorgang.query.count() == 6
+        assert ergebnis['report']['neu'] == erwartet
+        assert Vorgang.query.count() == erwartet
 
     def test_gleiche_datei_wird_nicht_erneut_importiert(self, app, stick):
         verarbeite_stick(stick)
@@ -73,14 +75,17 @@ class TestImport:
         zweiter = verarbeite_stick(stick)
         assert zweiter['importiert'] is True
         assert zweiter['report']['neu'] == 1
-        assert Vorgang.query.count() == 7
+        from excel_modell2 import lies_datei
+        assert Vorgang.query.count() == len(lies_datei(VORLAGE)['zeilen']) + 1
 
     def test_erzwingen_importiert_auch_bei_gleichem_hash(self, app, stick):
         verarbeite_stick(stick)
         zweiter = verarbeite_stick(stick, erzwinge=True)
         assert zweiter['importiert'] is True
-        assert zweiter['report']['unveraendert'] == 6
-        assert Vorgang.query.count() == 6
+        from excel_modell2 import lies_datei
+        assert zweiter['report']['unveraendert'] == len(lies_datei(VORLAGE)['zeilen'])
+        from excel_modell2 import lies_datei
+        assert Vorgang.query.count() == len(lies_datei(VORLAGE)['zeilen'])
 
 
 class TestBerichtsausloeser:

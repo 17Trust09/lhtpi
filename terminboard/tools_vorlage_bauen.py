@@ -50,6 +50,10 @@ PRUEFSTAENDE = [
     ('P40', 'AKKU/HOCHDRUCK-RAUM'),
     ('P41', 'MIL'),
     ('P43', 'LOW-PRESSURE'),
+    # Ohne P-Nummer, und anders herum geschrieben als die uebrigen: im Betrieb
+    # heisst sie "Belastungsbank AHH". Die Auswahl muss genau so lauten, sonst
+    # passt eine vorhandene Zeile nicht zum Drop-Down.
+    ('AHH', 'Belastungsbank', 'Belastungsbank AHH'),
 ]
 
 # ── Die vorhandenen Zeilen (Datenbestand der Vorlage) ───────────────────────
@@ -57,18 +61,14 @@ PRUEFSTAENDE = [
 # ausschließlich ins Blatt „Zeiten“ - sonst gäbe es zwei Orte für dieselbe
 # Angabe, und niemand wüsste, welcher gilt.
 TERMINE = [
-    (1, 'Wartung', 'P03 NRA', date(2026, 11, 2), date(2026, 11, 2),
-     'Jahreswartung Hydraulik', 'abgeschlossen'),
-    (2, 'Kalibrierung', 'P10 PTU TESTFUCHS', date(2026, 11, 16), date(2026, 11, 21),
-     'Kalibrierung Druckmessung, unterbrochen', 'abgeschlossen'),
-    (3, 'Ausfall', 'P21 NRC HYCOM', date(2026, 11, 18), date(2026, 11, 19),
-     'Steuerung ausgefallen, Ersatzteil', 'offen'),
-    (4, 'Kalibrierung', 'P31 THSA', date(2026, 11, 24), date(2026, 11, 24),
-     'Halbtag, Rest des Tages freigegeben', 'offen'),
-    (5, 'Audit', 'P40 AKKU/HOCHDRUCK-RAUM', date(2026, 11, 27), date(2026, 11, 27),
-     'interner Audit', 'offen'),
-    (6, 'Info', 'P07 EHSV NRA', date(2026, 12, 1), None,
-     'Hinweis Software-Update', 'offen'),
+    (1, 'Kalibrierung', 'P11 PUMO HYCOM', date(2026, 10, 19), date(2026, 10, 26),
+     'Kalibrierung Hycom (Kristin + Glen) 07:00 - 14:00', 'offen'),
+    (2, 'Kalibrierung', 'Belastungsbank AHH', date(2026, 10, 26), date(2026, 10, 27),
+     'Kalibrierung (Sven + Glen) 15:00 - 22:00', 'offen'),
+    (3, 'Kalibrierung', 'P43 LOW-PRESSURE', date(2026, 11, 5), None,
+     'Kalibrierung (Kristin) 07:00 - 13:00', 'offen'),
+    (4, 'Kalibrierung', 'P31 THSA', date(2026, 11, 9), date(2026, 11, 20),
+     'Kalibrierung (Bernd + Tommy) 08:00 - 15:00', 'offen'),
 ]
 
 # Blatt „Zeiten“: hier stehen die Uhrzeiten. Ein Block je Zeitraum, in dem
@@ -79,12 +79,9 @@ TERMINE = [
 # gefaehrlich - sie wuerden als echte Zeitbloecke importiert.
 ZEITEN = []
 
-ARCHIV = [
-    (7, 'Ausfall', 'P02 NRA', date(2026, 10, 5), date(2026, 10, 7),
-     'Kühlmittelverlust, Reparatur', 'abgeschlossen'),
-    (8, 'Wartung', 'P41 MIL', date(2026, 10, 12), date(2026, 10, 12),
-     'Dichtungen getauscht', 'abgeschlossen'),
-]
+# Bewusst leer: das Archiv fuellt das Geraet selbst, sobald Termine
+# abgeschlossen sind. Beispielzeilen wuerden als echte Historie importiert.
+ARCHIV = []
 
 LETZTE_ZEILE = 500
 
@@ -137,6 +134,29 @@ def _auswahl(ws, formel, bereich, hinweis='', titel='Auswahl'):
     dv.add(bereich)
 
 
+# Farben fuer den Status. Offen heisst: der Pruefstand steht still, das ist die
+# Zeile, die auffallen soll. Abgeschlossen ist erledigt und gruen.
+STATUS_FARBEN = {
+    'offen': ('FFC7CE', '9C0006'),          # hellrot / dunkelrot
+    'abgeschlossen': ('C6EFCE', '006100'),  # hellgruen / dunkelgruen
+    'storniert': ('E7E6E6', '595959'),      # grau
+}
+
+
+def _status_farben(ws, spalte, letzte_zeile=LETZTE_ZEILE):
+    """Faerbt die Statuszelle je nach Wert ein (bedingte Formatierung)."""
+    from openpyxl.formatting.rule import CellIsRule
+
+    bereich = '%s2:%s%d' % (spalte, spalte, letzte_zeile)
+    for wert, (fuellung, schrift) in STATUS_FARBEN.items():
+        ws.conditional_formatting.add(
+            bereich,
+            CellIsRule(operator='equal', formula=['"%s"' % wert],
+                       fill=PatternFill('solid', start_color=fuellung,
+                                        end_color=fuellung),
+                       font=Font(color=schrift, bold=(wert == 'offen'))))
+
+
 def _datumsformat(ws, spalten, mit_zeit=True):
     for zeile in range(2, LETZTE_ZEILE + 1):
         for spalte in spalten:
@@ -161,20 +181,19 @@ def baue_vorlage(pfad=VORLAGE):
              'Prüfstand aus dem Blatt „Prüfstände“ wählen.', 'Prüfstand')
     _auswahl(ws, '"%s"' % ','.join(STATUS), 'G2:G%d' % LETZTE_ZEILE,
              'offen / abgeschlossen / storniert.', 'Status')
+    _status_farben(ws, 'G')
     _legende(ws, [
-        ('1', 'Wartung, erledigt'),
-        ('2', 'Kalibrierung über mehrere Tage –'),
-        ('', 'Zeitblöcke im Blatt „Zeiten“'),
-        ('6', 'Info – „Bis“ darf leer bleiben'),
+        ('offen', 'Prüfstand steht still (rot)'),
+        ('abgeschlossen', 'erledigt (grün)'),
+        ('storniert', 'zählt nicht (grau)'),
         ('', ''),
         ('Von / Bis', 'nur Datum, keine Uhrzeit'),
         ('', ''),
+        ('Uhrzeiten', 'gehören ins Blatt „Zeiten“'),
+        ('', ''),
         ('Art', 'Kalibrierung / Wartung /'),
         ('', 'Ausfall / Audit / Info'),
-        ('Prüfstand', 'Reihenfolge: erst mit'),
-        ('', 'Dropdown wählen – falsche'),
-        ('', 'Namen zählen nicht'),
-    ], 'Beispiel')
+    ], 'Legende')
     ws.sheet_view.showGridLines = True
 
     # ── Blatt „Zeiten" ─────────────────────────────────────────────────────
@@ -190,8 +209,10 @@ def baue_vorlage(pfad=VORLAGE):
     # ── Blatt „Prüfstände" ─────────────────────────────────────────────────
     ws = wb.create_sheet('Prüfstände')
     _kopf(ws, ['Kennung', 'Bezeichnung', 'Auswahl (für Dropdown)'], [12, 28, 28])
-    for kennung, bezeichnung in PRUEFSTAENDE:
-        ws.append([kennung, bezeichnung, '%s %s' % (kennung, bezeichnung)])
+    for eintrag in PRUEFSTAENDE:
+        kennung, bezeichnung = eintrag[0], eintrag[1]
+        auswahl = eintrag[2] if len(eintrag) > 2 else '%s %s' % (kennung, bezeichnung)
+        ws.append([kennung, bezeichnung, auswahl])
 
     wb.defined_names['Pruefstaende'] = DefinedName(
         'Pruefstaende', attr_text="'Prüfstände'!$C$2:$C$%d" % (len(PRUEFSTAENDE) + 1))
@@ -210,6 +231,7 @@ def baue_vorlage(pfad=VORLAGE):
              'Prüfstand aus dem Blatt „Prüfstände“ wählen.', 'Prüfstand')
     _auswahl(ws, '"%s"' % ','.join(STATUS), 'G2:G%d' % LETZTE_ZEILE,
              'offen / abgeschlossen / storniert.', 'Status')
+    _status_farben(ws, 'G')
 
     _anleitung(wb.create_sheet('Anleitung'))
 
