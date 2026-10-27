@@ -20,7 +20,7 @@ Quelle leer ist, nicht als Fehler – neue Zeilen funktionieren also sofort.
 """
 import os
 import sys
-from datetime import datetime
+from datetime import date, datetime
 
 from openpyxl import load_workbook, Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -53,22 +53,32 @@ PRUEFSTAENDE = [
 ]
 
 # ── Die vorhandenen Zeilen (Datenbestand der Vorlage) ───────────────────────
+# Blatt „Termine“ ist tagesgenau: nur Datum, keine Uhrzeit. Uhrzeiten gehören
+# ausschließlich ins Blatt „Zeiten“ - sonst gäbe es zwei Orte für dieselbe
+# Angabe, und niemand wüsste, welcher gilt.
 TERMINE = [
-    (1, 'Wartung', 'P03 NRA', datetime(2026, 11, 2, 7, 0), datetime(2026, 11, 2, 15, 0),
+    (1, 'Wartung', 'P03 NRA', date(2026, 11, 2), date(2026, 11, 2),
      'Jahreswartung Hydraulik', 'abgeschlossen'),
-    (2, 'Kalibrierung', 'P10 PTU TESTFUCHS', datetime(2026, 11, 16, 8, 0),
-     datetime(2026, 11, 21, 16, 0), 'Kalibrierung Druckmessung, unterbrochen', 'abgeschlossen'),
-    (3, 'Ausfall', 'P21 NRC HYCOM', datetime(2026, 11, 18, 6, 0), datetime(2026, 11, 19, 18, 0),
+    (2, 'Kalibrierung', 'P10 PTU TESTFUCHS', date(2026, 11, 16), date(2026, 11, 21),
+     'Kalibrierung Druckmessung, unterbrochen', 'abgeschlossen'),
+    (3, 'Ausfall', 'P21 NRC HYCOM', date(2026, 11, 18), date(2026, 11, 19),
      'Steuerung ausgefallen, Ersatzteil', 'offen'),
-    (4, 'Kalibrierung', 'P31 THSA', datetime(2026, 11, 24, 9, 0), datetime(2026, 11, 24, 13, 0),
+    (4, 'Kalibrierung', 'P31 THSA', date(2026, 11, 24), date(2026, 11, 24),
      'Halbtag, Rest des Tages freigegeben', 'offen'),
-    (5, 'Audit', 'P40 AKKU/HOCHDRUCK-RAUM', datetime(2026, 11, 27, 10, 0),
-     datetime(2026, 11, 27, 12, 0), 'interner Audit', 'offen'),
-    (6, 'Info', 'P07 EHSV NRA', datetime(2026, 12, 1, 8, 0), None,
+    (5, 'Audit', 'P40 AKKU/HOCHDRUCK-RAUM', date(2026, 11, 27), date(2026, 11, 27),
+     'interner Audit', 'offen'),
+    (6, 'Info', 'P07 EHSV NRA', date(2026, 12, 1), None,
      'Hinweis Software-Update', 'offen'),
 ]
 
+# Blatt „Zeiten“: hier stehen die Uhrzeiten. Ein Block je Zeitraum, in dem
+# tatsaechlich gearbeitet wurde. Fehlt ein Block, gilt der Termin als
+# durchgehend ausser Betrieb.
 ZEITEN = [
+    # Ein halber Tag: der Termin steht im Blatt „Termine“ als ganzer Tag,
+    # die tatsaechliche Arbeitszeit steht hier.
+    (4, datetime(2026, 11, 24, 9, 0), datetime(2026, 11, 24, 13, 0),
+     'Halbtag, Rest des Tages freigegeben'),
     (2, datetime(2026, 11, 16, 8, 0), datetime(2026, 11, 16, 12, 0), 'Tag 1, vormittags'),
     (2, datetime(2026, 11, 17, 8, 0), datetime(2026, 11, 17, 16, 0), 'Tag 2, ganztags'),
     (2, datetime(2026, 11, 19, 7, 0), datetime(2026, 11, 19, 11, 0), 'Tag 4, vormittags'),
@@ -76,9 +86,9 @@ ZEITEN = [
 ]
 
 ARCHIV = [
-    (7, 'Ausfall', 'P02 NRA', datetime(2026, 10, 5, 6, 0), datetime(2026, 10, 7, 22, 0),
+    (7, 'Ausfall', 'P02 NRA', date(2026, 10, 5), date(2026, 10, 7),
      'Kühlmittelverlust, Reparatur', 'abgeschlossen'),
-    (8, 'Wartung', 'P41 MIL', datetime(2026, 10, 12, 7, 0), datetime(2026, 10, 12, 16, 0),
+    (8, 'Wartung', 'P41 MIL', date(2026, 10, 12), date(2026, 10, 12),
      'Dichtungen getauscht', 'abgeschlossen'),
 ]
 
@@ -107,10 +117,11 @@ def _auswahl(ws, formel, bereich, hinweis='', titel='Auswahl'):
     dv.add(bereich)
 
 
-def _datumsformat(ws, spalten):
+def _datumsformat(ws, spalten, mit_zeit=True):
     for zeile in range(2, LETZTE_ZEILE + 1):
         for spalte in spalten:
-            ws.cell(row=zeile, column=spalte).number_format = 'DD.MM.YYYY HH:MM'
+            ws.cell(row=zeile, column=spalte).number_format = (
+                'DD.MM.YYYY HH:MM' if mit_zeit else 'DD.MM.YYYY')
 
 
 def baue_vorlage(pfad=VORLAGE):
@@ -123,7 +134,7 @@ def baue_vorlage(pfad=VORLAGE):
           [6, 16, 24, 18, 18, 46, 15])
     for zeile in TERMINE:
         ws.append(list(zeile))
-    _datumsformat(ws, (4, 5))
+    _datumsformat(ws, (4, 5), mit_zeit=False)
     _auswahl(ws, '"%s"' % ','.join(ARTEN), 'B2:B%d' % LETZTE_ZEILE,
              'Art des Termins wählen.', 'Art')
     _auswahl(ws, '=Pruefstaende', 'C2:C%d' % LETZTE_ZEILE,
@@ -155,7 +166,7 @@ def baue_vorlage(pfad=VORLAGE):
           [6, 16, 24, 18, 18, 46, 15])
     for zeile in ARCHIV:
         ws.append(list(zeile))
-    _datumsformat(ws, (4, 5))
+    _datumsformat(ws, (4, 5), mit_zeit=False)
     # Archiv ist sonst nur lesend - die Listen helfen beim Nachtragen von Hand.
     _auswahl(ws, '"%s"' % ','.join(ARTEN), 'B2:B%d' % LETZTE_ZEILE,
              'Art des Termins wählen.', 'Art')
@@ -182,14 +193,21 @@ def _anleitung(ws):
         ('text', 'A  Nr        – fortlaufende Nummer, wird für das Blatt „Zeiten“ gebraucht'),
         ('text', 'B  Art       – Auswahl: %s' % ' / '.join(ARTEN)),
         ('text', 'C  Prüfstand – Auswahl aus der Liste (Blatt „Prüfstände“)'),
-        ('text', 'D  Von       – Datum und Uhrzeit, z. B. 16.11.2026 08:00'),
-        ('text', 'E  Bis       – Datum und Uhrzeit, bei „Info“ darf das Feld leer bleiben'),
+        ('text', 'D  Von       – nur Datum, z. B. 16.11.2026'),
+        ('text', 'E  Bis       – nur Datum, bei „Info“ darf das Feld leer bleiben'),
+        ('text', '              Uhrzeiten gehören NICHT hierher, sondern ins Blatt „Zeiten“.'),
         ('text', 'F  Info      – kurze Beschreibung'),
         ('text', 'G  Status    – %s' % ' / '.join(STATUS)),
         ('leer', ''),
         ('tipp', 'Die Spalten Art, Prüfstand, Status und Termin-Nr haben ein Drop-Down:'),
         ('tipp', 'in die Zelle klicken, dann rechts am Zellrand auf den Pfeil klicken.'),
         ('tipp', 'So kann kein Tippfehler und kein unbekannter Prüfstand entstehen.'),
+        ('leer', ''),
+        ('kopf', 'Blatt „Zeiten“ – hier stehen die Uhrzeiten'),
+        ('text', 'Das Blatt „Termine“ kennt nur ganze Tage. Sobald eine Uhrzeit eine Rolle'),
+        ('text', 'spielt, wird sie hier eingetragen – als Zeitraum mit Von und Bis.'),
+        ('text', 'Ein Termin kann mehrere Zeilen haben (z. B. eine Kalibrierung, die über'),
+        ('text', 'mehrere Tage läuft, aber täglich nur vormittags).'),
         ('leer', ''),
         ('kopf', 'Wann ist das Blatt „Zeiten“ nötig?'),
         ('text', 'Nur wenn der Prüfstand NICHT durchgehend außer Betrieb ist.'),

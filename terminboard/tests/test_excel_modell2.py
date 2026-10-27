@@ -46,8 +46,9 @@ class TestVorlage:
         assert z['nr'] == 1
         assert z['art'] == 'Wartung'
         assert z['pruefstand'] == 'P03 NRA'
-        assert z['von'] == datetime(2026, 11, 2, 7, 0)
-        assert z['bis'] == datetime(2026, 11, 2, 15, 0)
+        # Nur Datum im Blatt „Termine“: Von ist Tagesbeginn, Bis Tagesende.
+        assert z['von'] == datetime(2026, 11, 2, 0, 0)
+        assert z['bis'] == datetime(2026, 11, 2, 23, 59)
         assert z['status'] == 'abgeschlossen'
 
     def test_bloecke_der_kalibrierung(self, daten):

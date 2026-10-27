@@ -49,10 +49,12 @@ class TestVorlageEndeZuEnde:
         assert zweiter['unveraendert'] == 6
         assert Vorgang.query.count() == 6
 
-    def test_wartung_p03_acht_stunden(self, report):
+    def test_wartung_p03_ganzer_tag(self, report):
         statistik = ausfall_je_pruefstand(2026)
         p03 = statistik['P03 NRA']
-        assert p03['stunden'] == pytest.approx(8.0)
+        # Das Blatt „Termine“ kennt nur Datum: 02.11. ist ein ganzer Tag,
+        # ohne Block im Blatt „Zeiten“ also die volle Betriebszeit.
+        assert p03['stunden'] == pytest.approx(16.75)
         assert p03['tage'] == 1
 
     def test_kalibrierung_p10_aus_bloecken(self, report):
@@ -65,11 +67,14 @@ class TestVorlageEndeZuEnde:
     def test_ausfall_p21_stunden(self, report):
         statistik = ausfall_je_pruefstand(2026)
         p21 = statistik['P21 NRC HYCOM']
-        # Mi 18.11. 06:00–22:45 = 16,75 h; Do 19.11. 06:00–18:00 = 12 h
-        assert p21['stunden'] == pytest.approx(28.75)
+        # 18.11. bis 19.11. sind zwei ganze Tage, ohne Block im Blatt „Zeiten“
+        # also 2 x 16,75 h Betriebszeit.
+        assert p21['stunden'] == pytest.approx(33.5)
         assert p21['tage'] == 2
 
-    def test_halbtag_p31(self, report):
+    def test_halbtag_p31_aus_zeitenblatt(self, report):
+        # Ein halber Tag entsteht nur ueber einen Block im Blatt „Zeiten“:
+        # der Termin steht dort als ganzer Tag, die Arbeitszeit hier.
         statistik = ausfall_je_pruefstand(2026)
         p31 = statistik['P31 THSA']
         assert p31['stunden'] == pytest.approx(4.0)

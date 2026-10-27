@@ -8,9 +8,15 @@ Das neue braucht sieben, weil die Nummer der Bezug zu den Zeitblöcken ist:
 
     Nr | Art | Prüfstand | Von | Bis | Info | Status
 
-Der Konverter liest die alten Zeilen und schreibt eine vollständige Datei mit
-allen Blättern der aktuellen Vorlage. Zeilen, die sich nicht übernehmen lassen,
-werden gemeldet statt stillschweigend verworfen.
+Zwei Regeln des neuen Modells:
+
+* Im Blatt ``Termine`` steht **nur ein Datum**, keine Uhrzeit.
+* Uhrzeiten stehen im Blatt ``Zeiten``, ein Block je Zeitraum.
+
+Der Konverter schreibt eine vollständige Datei mit allen Blättern der
+aktuellen Vorlage (samt Drop-Downs) und verschiebt Uhrzeiten automatisch ins
+Blatt ``Zeiten``. Zeilen, die sich nicht übernehmen lassen, werden gemeldet
+statt stillschweigend verworfen.
 
 Aufruf:
     python3 tools_excel_konverter.py alt.xlsx neu.xlsx
@@ -19,8 +25,7 @@ import os
 import sys
 from datetime import datetime, date, time
 
-VORLAGE = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                       'vorlagen', 'termine_modell2.xlsx')
+from tools_vorlage_bauen import baue_vorlage, PRUEFSTAENDE
 
 # Schreibweise der alten Datei → neue Art
 ARTEN = {
@@ -32,6 +37,7 @@ ARTEN = {
 }
 
 TAGESENDE = time(23, 59)
+MITTERNACHT = time(0, 0)
 
 
 def _datum(wert, ende=False):
@@ -39,6 +45,8 @@ def _datum(wert, ende=False):
     if wert is None or (isinstance(wert, str) and not wert.strip()):
         return None
     if isinstance(wert, datetime):
+        if ende and wert.time() == MITTERNACHT:
+            return datetime.combine(wert.date(), TAGESENDE)
         return wert
     if isinstance(wert, date):
         return datetime.combine(wert, TAGESENDE if ende else time(0, 0))
@@ -50,6 +58,17 @@ def _datum(wert, ende=False):
         except ValueError:
             continue
     return None
+
+
+def _hat_uhrzeit(von, bis):
+    """Steckt in dem Zeitraum eine Uhrzeit, die ins Blatt „Zeiten“ gehört?"""
+    if von is None:
+        return False
+    if von.time() != MITTERNACHT:
+        return True
+    if bis is not None and bis.time() not in (MITTERNACHT, TAGESENDE):
+        return True
+    return False
 
 
 def lies_alt(pfad):
@@ -99,96 +118,56 @@ def lies_alt(pfad):
 
 
 def schreibe_neu(pfad, zeilen):
-    """Schreibt eine vollständige Datei im neuen Format."""
-    from openpyxl import Workbook
-    from openpyxl.worksheet.datavalidation import DataValidation
-    from openpyxl.styles import Font, PatternFill, Alignment
+    """Schreibt eine vollständige Datei im Aufbau der aktuellen Vorlage."""
+    from openpyxl import load_workbook
 
-    wb = Workbook()
-    ws = wb.active
-    ws.title = 'Termine'
+    baue_vorlage(pfad)                     # Struktur samt Drop-Downs
+    wb = load_workbook(pfad)
 
-    kopf = ['Nr', 'Art', 'Prüfstand', 'Von', 'Bis', 'Info', 'Status']
-    ws.append(kopf)
-    fett = Font(bold=True)
-    fuellung = PatternFill('solid', fgColor='E4EAF5')
-    for zelle in ws[1]:
-        zelle.font = fett
-        zelle.fill = fuellung
-        zelle.alignment = Alignment(horizontal='left')
+    # Beispieldaten der Vorlage entfernen, Kopfzeilen bleiben stehen.
+    for blatt in ('Termine', 'Zeiten', 'Archiv'):
+        ws = wb[blatt]
+        if ws.max_row > 1:
+            ws.delete_rows(2, ws.max_row - 1)
 
+    termine = wb['Termine']
+    zeiten = wb['Zeiten']
+    bloecke = 0
     for lauf, eintrag in enumerate(zeilen, start=1):
-        ws.append([lauf, eintrag['art'], eintrag['pruefstand'],
-                   eintrag['von'], eintrag['bis'], eintrag['info'] or None,
-                   'offen'])
-
-    # Datumsformat setzen
-    for zeile in range(2, ws.max_row + 1):
+        von, bis = eintrag['von'], eintrag['bis']
+        termine.append([lauf, eintrag['art'], eintrag['pruefstand'],
+                        von.date(), bis.date() if bis else None,
+                        eintrag['info'] or None, 'offen'])
         for spalte in ('D', 'E'):
-            ws[f'{spalte}{zeile}'].number_format = 'DD.MM.YYYY HH:MM'
+            termine['%s%d' % (spalte, lauf + 1)].number_format = 'DD.MM.YYYY'
+        if _hat_uhrzeit(von, bis):
+            zeiten.append([lauf, von, bis or von,
+                           'aus alter Tabelle übernommen'])
+            bloecke += 1
 
-    # Dropdowns wie in der Vorlage
-    if ws.max_row >= 2:
-        art = DataValidation(type='list',
-                             formula1='"Wartung,Kalibrierung,Ausfall,Audit,Info"',
-                             allow_blank=False)
-        status = DataValidation(type='list',
-                                formula1='"offen,abgeschlossen,storniert"',
-                                allow_blank=False)
-        ws.add_data_validation(art)
-        ws.add_data_validation(status)
-        art.add(f'B{2}:B{max(ws.max_row, 2)}')
-        status.add(f'G{2}:G{max(ws.max_row, 2)}')
+    # Prüfstände ergänzen, die in der alten Datei vorkommen, aber in der
+    # Stammliste fehlen - ohne sie wäre der Prüfstand im Dropdown nicht wählbar.
+    vorhanden = {kennung for kennung, _ in PRUEFSTAENDE}
+    fehlend = []
+    for eintrag in zeilen:
+        name = eintrag['pruefstand']
+        teile = name.split()
+        kennung = teile[0] if teile else name
+        if kennung not in vorhanden:
+            bezeichnung = name[len(kennung):].strip() or '—'
+            fehlend.append((kennung, bezeichnung))
+            vorhanden.add(kennung)
 
-    for spalte, breite in (('A', 6), ('B', 15), ('C', 24), ('D', 18),
-                           ('E', 18), ('F', 38), ('G', 15)):
-        ws.column_dimensions[spalte].width = breite
-    ws.freeze_panes = 'A2'
-
-    # Zweites Blatt: Zeitblöcke (leer, für unterbrochene Kalibrierungen)
-    bloecke = wb.create_sheet('Zeiten')
-    bloecke.append(['Nr', 'Von', 'Bis'])
-    for zelle in bloecke[1]:
-        zelle.font = fett
-        zelle.fill = fuellung
-    bloecke.column_dimensions['A'].width = 6
-    bloecke.column_dimensions['B'].width = 18
-    bloecke.column_dimensions['C'].width = 18
-
-    # Prüfstände: Stammliste aus den vorhandenen Zeilen
-    staemme = wb.create_sheet('Prüfstände')
-    staemme.append(['Prüfstand'])
-    staemme['A1'].font = fett
-    staemme['A1'].fill = fuellung
-    for name in sorted({e['pruefstand'] for e in zeilen}):
-        staemme.append([name])
-    staemme.column_dimensions['A'].width = 28
-
-    archiv = wb.create_sheet('Archiv')
-    archiv.append(['Nr', 'Art', 'Prüfstand', 'Von', 'Bis', 'Info', 'Status'])
-    for zelle in archiv[1]:
-        zelle.font = fett
-        zelle.fill = fuellung
-
-    anleitung = wb.create_sheet('Anleitung')
-    for text in (
-        'Anleitung',
-        '',
-        'Dieses Blatt ist aus einer älteren Tabelle übernommen worden.',
-        'Die Spalten "Nr" und "Status" sind neu – die Nummer verbindet einen',
-        'Termin mit seinen Zeitblöcken auf dem Blatt "Zeiten".',
-        '',
-        'Wichtig:',
-        '- Status "abgeschlossen" setzen, wenn der Termin vorbei ist.',
-        '- Für unterbrochene Kalibrierungen auf "Zeiten" je Arbeitstag eine Zeile',
-        '  eintragen (Nr aus Spalte A, Von, Bis).',
-        '- Termine dürfen nach dem Abschluss gelöscht werden, die Historie bleibt.',
-    ):
-        anleitung.append([text])
-    anleitung.column_dimensions['A'].width = 80
+    if fehlend:
+        from openpyxl.workbook.defined_name import DefinedName
+        ws = wb['Prüfstände']
+        for kennung, bezeichnung in fehlend:
+            ws.append([kennung, bezeichnung, '%s %s' % (kennung, bezeichnung)])
+        wb.defined_names['Pruefstaende'] = DefinedName(
+            'Pruefstaende', attr_text="'Prüfstände'!$C$2:$C$%d" % ws.max_row)
 
     wb.save(pfad)
-    return pfad
+    return {'bloecke': bloecke, 'neue_pruefstaende': fehlend}
 
 
 def konvertiere(quelle, ziel):
@@ -196,9 +175,9 @@ def konvertiere(quelle, ziel):
     if not os.path.exists(quelle):
         raise FileNotFoundError(quelle)
     zeilen, uebersprungen = lies_alt(quelle)
-    schreibe_neu(ziel, zeilen)
+    zusatz = schreibe_neu(ziel, zeilen)
     return {'uebernommen': len(zeilen), 'uebersprungen': uebersprungen,
-            'ziel': ziel}
+            'ziel': ziel, **zusatz}
 
 
 def main(argv):
@@ -207,6 +186,12 @@ def main(argv):
         return 2
     bericht = konvertiere(argv[1], argv[2])
     print(f'Übernommen: {bericht["uebernommen"]} Zeilen')
+    if bericht['bloecke']:
+        print(f'Uhrzeiten ins Blatt „Zeiten“ verschoben: {bericht["bloecke"]} Blöcke')
+    if bericht['neue_pruefstaende']:
+        print('Neue Prüfstände in die Stammliste aufgenommen:')
+        for kennung, bezeichnung in bericht['neue_pruefstaende']:
+            print(f'  {kennung} {bezeichnung}')
     if bericht['uebersprungen']:
         print(f'Übersprungen: {len(bericht["uebersprungen"])} Zeilen')
         for eintrag in bericht['uebersprungen']:

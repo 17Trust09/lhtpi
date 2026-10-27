@@ -2,6 +2,8 @@
 
 Blätter:
   * ``Termine``   – Nr | Art | Prüfstand | Von | Bis | Info | Status
+    (Von und Bis sind **Datum ohne Uhrzeit**; Uhrzeiten stehen im Blatt
+    ``Zeiten``, ein Block je Zeitraum.)
   * ``Zeiten``    – Termin | Von | Bis | Notiz   (optional, für Blöcke)
   * ``Prüfstände``– Kennung | Bezeichnung | Auswahl
 
@@ -44,6 +46,11 @@ def _zu_datetime(wert, als_ende=False):
     if wert is None or (isinstance(wert, str) and not wert.strip()):
         return None
     if isinstance(wert, datetime):
+        # Eine reine Datumszelle kommt aus openpyxl als datetime mit 00:00
+        # zurueck. Ohne diese Unterscheidung waere "Bis" ebenfalls Mitternacht
+        # und der Termin damit null Stunden lang.
+        if als_ende and wert.time() == time(0, 0):
+            return datetime.combine(wert.date(), TAGESENDE)
         return wert
     if isinstance(wert, date):
         return datetime.combine(wert, TAGESENDE if als_ende else time(0, 0))
