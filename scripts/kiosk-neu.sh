@@ -110,8 +110,13 @@ case "${ANZAHL}" in ''|*[!0-9]*) ANZAHL=2 ;; esac
 # wurde sie irgendwo falsch gesetzt (die App schrieb frueher still ins Leere).
 # Dann gilt der tatsaechliche Aufbau - sonst bleibt ein Bildschirm schwarz,
 # ohne dass jemand versteht warum.
-verbunden="$(DISPLAY=:0 XAUTHORITY="/home/${PI_USER}/.Xauthority" \
-    xrandr --query 2>/dev/null | grep -cE '^HDMI-[12] connected')"
+# Ausgaenge direkt im Kernel zaehlen: das braucht kein X und funktioniert
+# auch dann, wenn xrandr im Installer-Kontext keinen Zugang bekommt.
+verbunden="${LHTPI_CONNECTED:-$(cat /sys/class/drm/card*-HDMI-*/status 2>/dev/null | grep -c '^connected$')}"
+if [ "${verbunden}" -lt 1 ]; then
+    verbunden="$(DISPLAY=:0 XAUTHORITY="/home/${PI_USER}/.Xauthority" \
+        xrandr --query 2>/dev/null | grep -cE '^HDMI-[12] connected')"
+fi
 case "${verbunden}" in ''|*[!0-9]*) verbunden=0 ;; esac
 if [ "${verbunden}" -ge 2 ] && [ "${ANZAHL}" -lt 2 ]; then
     sag "Zwei Ausgänge verbunden, Bildschirmzahl stand auf ${ANZAHL} - korrigiere auf 2."
@@ -134,8 +139,9 @@ if [ "${ANZAHL}" -ge 2 ]; then
     # Python statt sqlite3-Kommando: das venv ist immer da, sqlite3 nicht.
     DBS="${LHTPI_APP_DB:-/var/lib/lhtpi/app/lhtpi.db}"
     PYTHON="${REPO}/venv/bin/python"
-    if [ -f "${DBS}" ] && [ -x "${PYTHON}" ]; then
-        ergebnis="$("${PYTHON}" - "${DBS}" <<'PYDB' 2>/dev/null
+    [ -x "${PYTHON}" ] || PYTHON="${LHTPI_PYTHON:-$(command -v python3 || true)}"
+    if [ -f "${DBS}" ] && [ -n "${PYTHON}" ] && [ -x "${PYTHON}" ]; then
+        ergebnis="$("${PYTHON}" - "${DBS}" <<'PYDB' 2>&1
 import sqlite3, sys
 db = sqlite3.connect(sys.argv[1])
 alt = db.execute("SELECT value FROM setting WHERE key='kiosk_screen_count'").fetchone()
