@@ -93,10 +93,10 @@ fi
 # zweite Regel scheiterte das Neustarten nach dem Speichern still - die Anzeige
 # behielt dann die alte Belegung.
 tmp="$(mktemp)"
-printf '%s ALL=(root) NOPASSWD: %s, %s restart kiosk-screen1, %s restart kiosk-screen2\n' \
+SYSTEMCTL="$(command -v systemctl || echo /usr/bin/systemctl)"
+printf '%s ALL=(root) NOPASSWD: %s, %s restart kiosk-screen1, %s restart kiosk-screen2, %s restart terminboard.service, %s restart lhtpi.service, %s restart safetycross.service\n' \
     "${PI_USER}" "${SCREENS_HELFER}" \
-    "$(command -v systemctl || echo /usr/bin/systemctl)" \
-    "$(command -v systemctl || echo /usr/bin/systemctl)" > "${tmp}"
+    "${SYSTEMCTL}" "${SYSTEMCTL}" "${SYSTEMCTL}" "${SYSTEMCTL}" "${SYSTEMCTL}" > "${tmp}"
 if visudo -c -f "${tmp}" >/dev/null 2>&1; then
     install -m 0440 -o root -g root "${tmp}" /etc/sudoers.d/021_lhtpi-screens
     sag "Bildschirmzahl und Kiosk-Neustart ohne Passwort erlaubt."
