@@ -1227,6 +1227,11 @@ User=${PI_USER}
 Group=${PI_GROUP}
 WorkingDirectory=${PROJECT_DIR}
 Environment=PYTHONUNBUFFERED=1
+# Ohne DISPLAY kann die App xrandr nicht fragen und zaehlt immer einen
+# Bildschirm - dann schrieb jedes Speichern der Anzeige-Einstellungen die 1
+# fest, und Bildschirm 2 blieb aus.
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/${PI_USER}/.Xauthority
 Environment=LHTPI_HOST=0.0.0.0
 Environment=LHTPI_PORT=${APP_PORT}
 Environment=LHTPI_SECRET=${secret}

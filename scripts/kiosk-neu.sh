@@ -8,6 +8,8 @@
 # Dieses Skript macht nur diesen Teil – keine Pakete, keine Diensteinrichtung.
 set -uo pipefail
 NEUSTART_NOETIG=0
+APP_NEU=0
+NEU_LADEN=0
 
 [ "$(id -u)" = "0" ] || { echo "Bitte mit sudo starten: sudo bash $0"; exit 1; }
 
@@ -124,8 +126,45 @@ fi
 if [ "${ANZAHL}" -ge 2 ]; then
     [ -f /etc/lhtpi/screen2 ] || { : > /etc/lhtpi/screen2; chmod 644 /etc/lhtpi/screen2; sag "Marke /etc/lhtpi/screen2 angelegt."; }
     sag "Bildschirmzahl: ${ANZAHL} (zwei Anzeigen aktiv)"
+
+    # Auch die gespeicherte Einstellung der App nachziehen. Sie hatte xrandr
+    # nicht zur Verfuegung (kein DISPLAY im Dienst) und hielt deshalb 1 fest -
+    # dadurch beendete sich das Startskript von Bildschirm 2 sofort wieder
+    # ("inactive, Result=success"), obwohl zwei Monitore hingen.
+    # Python statt sqlite3-Kommando: das venv ist immer da, sqlite3 nicht.
+    DBS="${LHTPI_APP_DB:-/var/lib/lhtpi/app/lhtpi.db}"
+    PYTHON="${REPO}/venv/bin/python"
+    if [ -f "${DBS}" ] && [ -x "${PYTHON}" ]; then
+        ergebnis="$("${PYTHON}" - "${DBS}" <<'PYDB' 2>/dev/null
+import sqlite3, sys
+db = sqlite3.connect(sys.argv[1])
+alt = db.execute("SELECT value FROM setting WHERE key='kiosk_screen_count'").fetchone()
+if alt is None:
+    db.execute("INSERT INTO setting (key, value) VALUES ('kiosk_screen_count','2')")
+    db.commit()
+    print("nichts -> 2")
+elif str(alt[0]) != '2':
+    db.execute("UPDATE setting SET value='2' WHERE key='kiosk_screen_count'")
+    db.commit()
+    print("%s -> 2" % alt[0])
+db.close()
+PYDB
+)"
+        [ -n "${ergebnis}" ] && sag "Gespeicherte Bildschirmzahl korrigiert (${ergebnis})."
+    fi
 else
     sag "Nur ${ANZAHL} Bildschirm eingestellt - Bildschirm 2 bleibt aus."
+fi
+
+# App-Dienst braucht DISPLAY: sonst kann sie xrandr nicht fragen, zaehlt einen
+# Bildschirm und schreibt die 1 bei jedem Speichern der Anzeige fest.
+APP_UNIT="/etc/systemd/system/lhtpi.service"
+if [ -f "${APP_UNIT}" ] && ! grep -qE '^Environment=DISPLAY=' "${APP_UNIT}"; then
+    sed -i "/^Environment=PYTHONUNBUFFERED=1/a Environment=DISPLAY=:0" "${APP_UNIT}"
+    sed -i "/^Environment=DISPLAY=:0$/a Environment=XAUTHORITY=/home/${PI_USER}/.Xauthority" "${APP_UNIT}"
+    sag "App-Dienst mit DISPLAY versehen."
+    NEU_LADEN=1
+    APP_NEU=1
 fi
 
 # Pfad-Bedingung aus den Diensten nehmen: sie verhinderte den Start, sobald die
@@ -140,6 +179,9 @@ for unit in /etc/systemd/system/kiosk-screen2.service /etc/systemd/system/lhtpi-
     fi
 done
 [ "${NEU_LADEN}" = "1" ] && systemctl daemon-reload
+if [ "${APP_NEU:-0}" = "1" ]; then
+    systemctl restart lhtpi >/dev/null 2>&1 && sag "App neu gestartet (kennt die Bildschirme jetzt)."
+fi
 
 # ── 2b. HDMI-Audio abschalten ──────────────────────────────────────────────
 # Manche Bildschirme können die Audio-Kanäle nicht zuordnen. Der Treiber

@@ -65,19 +65,29 @@ _apply_url_overrides()
 def detected_screen_count():
     """Wie viele Bildschirme sind gerade angeschlossen? (1 oder 2)
 
-    Liest die angeschlossenen Ausgänge aus ``xrandr``. Ohne X (Rechner, Tests)
-    kommt 1 heraus; ``LHTPI_SCREEN_COUNT`` gibt den Wert fest vor.
+    Liest die angeschlossenen Ausgänge aus ``xrandr``. Ist keine Abfrage
+    möglich (kein X, Rechner, Tests), kommt ``None`` heraus - dann entscheidet
+    der Aufrufer. Früher kam hier 1 heraus, und das hat die Bildschirmzahl in
+    der App dauerhaft auf 1 festgeschrieben. ``LHTPI_SCREEN_COUNT`` gibt den
+    Wert fest vor.
     """
     vorgabe = (os.environ.get('LHTPI_SCREEN_COUNT') or '').strip()
     if vorgabe.isdigit():
         return max(1, min(int(vorgabe), 2))
+    # Ohne DISPLAY kann xrandr nichts liefern - dann None zurueckgeben, statt
+    # eine 1 zu behaupten. Eine erfundene 1 hat Bildschirm 2 abgeschaltet.
+    umgebung = dict(os.environ)
+    if not umgebung.get('DISPLAY'):
+        return None
     try:
-        aus = subprocess.run(['xrandr', '--current'], capture_output=True,
-                             text=True, timeout=5).stdout
+        lauf = subprocess.run(['xrandr', '--current'], capture_output=True,
+                              text=True, timeout=5)
     except (OSError, subprocess.SubprocessError):
-        return 1
-    an = sum(1 for zeile in aus.splitlines() if ' connected' in zeile)
-    return max(1, min(an, 2)) if an else 1
+        return None
+    if lauf.returncode != 0:
+        return None
+    an = sum(1 for zeile in lauf.stdout.splitlines() if ' connected' in zeile)
+    return max(1, min(an, 2)) if an else None
 
 
 def tool_ids():
