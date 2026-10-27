@@ -228,6 +228,20 @@ else
     sag "config.txt nicht gefunden - HDMI-Audio nicht angepasst."
 fi
 
+# ── 2c. Versionsdatei nachziehen ───────────────────────────────────────────
+# Sie wird von install.sh geschrieben und blieb deshalb nach einem reinen
+# git pull auf dem alten Stand - verwirrend, wenn man spaeter nachsieht.
+if [ -f "${REPO}/VERSION" ]; then
+    NEUE_VERSION="$(tr -d '[:space:]' < "${REPO}/VERSION")"
+    ALTE_VERSION="$(cat /etc/lhtpi/version 2>/dev/null || true)"
+    if [ -n "${NEUE_VERSION}" ] && [ "${NEUE_VERSION}" != "${ALTE_VERSION}" ]; then
+        mkdir -p /etc/lhtpi
+        printf '%s' "${NEUE_VERSION}" > /etc/lhtpi/version
+        chmod 644 /etc/lhtpi/version
+        sag "Version vermerkt: ${ALTE_VERSION:-nichts} -> ${NEUE_VERSION}"
+    fi
+fi
+
 # ── 3. Dienste neu starten ─────────────────────────────────────────────────
 if command -v systemctl >/dev/null 2>&1; then
     for dienst in kiosk-screen1 kiosk-screen2; do
