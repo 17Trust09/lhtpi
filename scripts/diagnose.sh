@@ -137,7 +137,23 @@ treffer="$(dmesg 2>/dev/null | grep -c 'hdmi-audio\|ASoC error')"
 case "${treffer}" in ''|*[!0-9]*) treffer="?" ;; esac
 echo "  Treffer hdmi-audio: ${treffer}"
 
-titel "9. Bootparameter"
+titel "9. Bildschirm-Waechter"
+if [ -f "${HOME_DIR}/lhtpi-hdmi.log" ]; then
+    echo "  Letzte Meldungen:"
+    tail -8 "${HOME_DIR}/lhtpi-hdmi.log" | cut -c1-120 | sed 's/^/    /'
+else
+    echo "  (kein Protokoll - Waechter laeuft noch nicht lange oder gar nicht)"
+fi
+dpms="$(xset q 2>/dev/null | grep -A1 'DPMS is' | head -2 | tr '\n' ' ')"
+echo "  DPMS: ${dpms:-unbekannt}"
+
+titel "10. Ereignisse am HDMI-Ausgang"
+# Was der Kernel und der Grafiktreiber zum Ausgang sagen - hier steht, ob ein
+# Bildschirm nachts abgemeldet wurde.
+journalctl -b -k --no-pager 2>/dev/null | grep -iE 'hdmi|drm.*connect|vc4' | tail -8 | cut -c1-130 | sed 's/^/  /' || \
+    echo "  (kein Zugriff auf das Kernel-Protokoll)"
+
+titel "11. Bootparameter"
 grep -E "vc4-kms|hdmi_ignore|hdmi_force|disable_overscan" /boot/firmware/config.txt 2>/dev/null | sed 's/^/  /' || \
     echo "  (config.txt nicht lesbar)"
 

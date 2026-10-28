@@ -189,7 +189,7 @@ install_packages() {
     apt-get install -y -qq \
         python3 python3-pip python3-venv \
         ufw curl git \
-        xorg openbox \
+        xorg openbox x11-utils xdotool \
         chromium-browser chromium-browser-l10n \
         i2c-tools util-linux-extra \
         exfatprogs ntfs-3g dosfstools usbutils
@@ -292,68 +292,21 @@ configure_screen2_watchdog() {
     log "Richte Wächter für Bildschirm 2 ein"
 
     local skript="/home/${PI_USER}/lhtpi-screen2-watch.sh"
-    cat > "${skript}" <<'SCREEN2_EOF'
-#!/bin/bash
-# LHTPi: hält Bildschirm 2 am Leben.
-#
-# - erkennt ein nachträglich gestecktes HDMI-Kabel (kein Neustart nötig)
-# - schaltet den Ausgang ein, falls DPMS ihn abgeschaltet hat
-# - setzt die Position rechts neben HDMI-1 (oder primär, wenn 1 fehlt)
-# - startet den Kiosk-Dienst für Bildschirm 2, wenn er nicht läuft
-set -u
-export DISPLAY="${DISPLAY:-:0}"
-export XAUTHORITY="${XAUTHORITY:-/home/pi/.Xauthority}"
-DIENST="kiosk-screen2.service"
-LOG="/home/pi/lhtpi-screen2-watch.log"
-letzter_zustand=""
-
-sag() { echo "$(date '+%F %T') - $*" >> "$LOG"; }
-
-while true; do
-    # Bildschirm 2 nur, wenn er laut Einstellung genutzt wird
-    anzahl="$(cat /etc/lhtpi/screens 2>/dev/null || echo 1)"
-    case "${anzahl}" in ''|*[!0-9]*) anzahl=1 ;; esac
-    if [ "${anzahl}" -lt 2 ]; then
-        sleep 10
-        continue
+    # Der Waechter liegt im Repository und wird hierher kopiert: so laesst er
+    # sich per git pull aktualisieren. Vorher stand er als Heredoc in dieser
+    # Datei - eine Korrektur waere nur mit einem neuen install.sh angekommen.
+    if [ -f "${SCRIPT_DIR}/scripts/hdmi-wache.sh" ]; then
+        cp "${SCRIPT_DIR}/scripts/hdmi-wache.sh" "${skript}"
+    else
+        warn "scripts/hdmi-wache.sh fehlt - Waechter nicht aktualisiert"
     fi
-
-    zustand="$(xrandr --query 2>/dev/null | grep -E '^HDMI-[12] connected' | awk '{print $1}' | tr '\n' ' ')"
-
-    geaendert=0
-    if [ "${zustand}" != "${letzter_zustand}" ]; then
-        sag "angeschlossen: ${zustand:-keiner}"
-        letzter_zustand="${zustand}"
-        geaendert=1
-    fi
-
-    if printf '%s' "${zustand}" | grep -q 'HDMI-2'; then
-        # Ausgang nur bei Aenderung neu setzen - sonst wuerde die Aufloesung
-        # alle 5 Sekunden zurueckgesetzt und das Bild flackert.
-        if [ "${geaendert}" = "1" ]; then
-            if printf '%s' "${zustand}" | grep -q 'HDMI-1'; then
-                xrandr --output HDMI-1 --primary --auto --pos 0x0 \
-                       --output HDMI-2 --auto --right-of HDMI-1 >/dev/null 2>&1 || true
-            else
-                xrandr --output HDMI-2 --primary --auto --pos 0x0 >/dev/null 2>&1 || true
-            fi
-        fi
-        # Spiegeln aufloesen, falls der Treiber beide gleich setzt
-        [ -x /usr/local/bin/lhtpi-entkoppeln.sh ] && /usr/local/bin/lhtpi-entkoppeln.sh >> "$LOG" 2>&1 || true
-        xset dpms force on >/dev/null 2>&1 || true
-
-        # Kiosk starten, falls nicht aktiv
-        if ! systemctl is-active --quiet "${DIENST}"; then
-            sag "starte ${DIENST}"
-            systemctl start "${DIENST}" >/dev/null 2>&1 || true
-        fi
-    fi
-
-    sleep 5
-done
-SCREEN2_EOF
     chmod +x "${skript}"
     chown "${PI_USER}:${PI_GROUP}" "${skript}"
+
+    if [ -f "${SCRIPT_DIR}/scripts/anzeige-rettung.sh" ]; then
+        install -m 0755 "${SCRIPT_DIR}/scripts/anzeige-rettung.sh" \
+            /usr/local/bin/lhtpi-anzeige-rettung.sh
+    fi
 
     cat > "/etc/systemd/system/${SERVICE_SCREEN2_WATCH}" <<EOF
 [Unit]

@@ -17,6 +17,7 @@ REPO="${LHTPI_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 PI_USER="${LHTPI_USER:-pi}"
 PI_GROUP="${LHTPI_GROUP:-${PI_USER}}"
 HELFER="/usr/local/bin/lhtpi-entkoppeln.sh"
+HOME_DIR="/home/${PI_USER}"
 
 sag() { echo "  $*"; }
 
@@ -94,8 +95,8 @@ fi
 # behielt dann die alte Belegung.
 tmp="$(mktemp)"
 SYSTEMCTL="$(command -v systemctl || echo /usr/bin/systemctl)"
-printf '%s ALL=(root) NOPASSWD: %s, %s restart kiosk-screen1, %s restart kiosk-screen2, %s restart terminboard.service, %s restart lhtpi.service, %s restart safetycross.service\n' \
-    "${PI_USER}" "${SCREENS_HELFER}" \
+printf '%s ALL=(root) NOPASSWD: %s, %s, %s restart kiosk-screen1, %s restart kiosk-screen2, %s restart terminboard.service, %s restart lhtpi.service, %s restart safetycross.service\n' \
+    "${PI_USER}" "${SCREENS_HELFER}" /usr/local/bin/lhtpi-anzeige-rettung.sh \
     "${SYSTEMCTL}" "${SYSTEMCTL}" "${SYSTEMCTL}" "${SYSTEMCTL}" "${SYSTEMCTL}" > "${tmp}"
 if visudo -c -f "${tmp}" >/dev/null 2>&1; then
     install -m 0440 -o root -g root "${tmp}" /etc/sudoers.d/021_lhtpi-screens
@@ -249,12 +250,37 @@ if [ -f "${REPO}/VERSION" ]; then
     fi
 fi
 
+# ── 2d. Bildschirm-Waechter nachziehen ────────────────────────────────────
+# Der Waechter liegt im Repository, laeuft aber aus dem Home-Verzeichnis. Ohne
+# diesen Schritt bliebe nach einem git pull die alte Fassung aktiv - und die
+# kennt den Fall "Ausgang meldet sich ab" nicht.
+WACHE="${HOME_DIR}/lhtpi-screen2-watch.sh"
+if [ -f "${REPO}/scripts/hdmi-wache.sh" ] && [ -f "${WACHE}" ]; then
+    if ! cmp -s "${REPO}/scripts/hdmi-wache.sh" "${WACHE}"; then
+        cp "${REPO}/scripts/hdmi-wache.sh" "${WACHE}"
+        chmod +x "${WACHE}"
+        chown "${PI_USER}:${PI_GROUP}" "${WACHE}" 2>/dev/null || true
+        sag "Bildschirm-Waechter aktualisiert."
+        WACHE_NEU=1
+    fi
+fi
+
+if [ -f "${REPO}/scripts/anzeige-rettung.sh" ]; then
+    install -m 0755 "${REPO}/scripts/anzeige-rettung.sh" \
+        /usr/local/bin/lhtpi-anzeige-rettung.sh 2>/dev/null || true
+fi
+
 # ── 3. Dienste neu starten ─────────────────────────────────────────────────
 if command -v systemctl >/dev/null 2>&1; then
     for dienst in kiosk-screen1 kiosk-screen2; do
         systemctl restart "${dienst}" >/dev/null 2>&1 || true
     done
     sag "Kiosk-Dienste neu gestartet."
+
+    if [ "${WACHE_NEU:-0}" = "1" ]; then
+        systemctl restart lhtpi-screen2-watch.service >/dev/null 2>&1 || true
+        sag "Bildschirm-Waechter neu gestartet."
+    fi
 fi
 
 # ── 4. Kurz nachsehen, wie die Ausgänge stehen ─────────────────────────────
