@@ -303,10 +303,7 @@ configure_screen2_watchdog() {
     chmod +x "${skript}"
     chown "${PI_USER}:${PI_GROUP}" "${skript}"
 
-    if [ -f "${SCRIPT_DIR}/scripts/anzeige-rettung.sh" ]; then
-        install -m 0755 "${SCRIPT_DIR}/scripts/anzeige-rettung.sh" \
-            /usr/local/bin/lhtpi-anzeige-rettung.sh
-    fi
+
 
     cat > "/etc/systemd/system/${SERVICE_SCREEN2_WATCH}" <<EOF
 [Unit]
@@ -2028,12 +2025,23 @@ main() {
     configure_screen2_watchdog
     configure_policies
     installiere_bildschirm_helfer
+    installiere_anzeige_rettung
     installiere_pull_haken
     configure_sudoers_kiosk
     configure_firewall
     configure_usb_automount
     configure_clock
     entferne_installer
+
+    # Zum Schluss pruefen, ob die Kette wirklich steht. Die Fehler der letzten
+    # Wochen waren alle stumm: ein Dienst "active", der freiwillig abbrach, ein
+    # Speichern, das nichts bewirkte, ein Waechter, der Gesundheit meldete,
+    # waehrend das Bild schwarz war. "Installation abgeschlossen" hiess bisher
+    # nicht "Geraet laeuft".
+    if [ -f "${SCRIPT_DIR}/scripts/selbsttest.sh" ]; then
+        LHTPI_USER="${PI_USER}" bash "${SCRIPT_DIR}/scripts/selbsttest.sh" || true
+    fi
+
     print_summary
 }
 
@@ -2049,6 +2057,17 @@ installiere_pull_haken() {
         bash "${repo}/scripts/hook-installieren.sh" >/dev/null 2>&1 \
             && ok "git pull zieht Aenderungen selbst nach" \
             || warn "git-Haken nicht eingerichtet"
+    fi
+}
+
+# Die Rettung nuetzt auch bei einem einzigen Bildschirm - sie wird deshalb
+# unabhaengig von der Bildschirmzahl installiert.
+installiere_anzeige_rettung() {
+    if [ -f "${SCRIPT_DIR}/scripts/anzeige-rettung.sh" ]; then
+        install -m 0755 "${SCRIPT_DIR}/scripts/anzeige-rettung.sh" \
+            /usr/local/bin/lhtpi-anzeige-rettung.sh && ok "Anzeige-Rettung installiert"
+    else
+        warn "scripts/anzeige-rettung.sh fehlt"
     fi
 }
 
@@ -2086,19 +2105,19 @@ echo "Bildschirmzahl: ${anzahl}"
 SCR_EOF
     chmod 0755 /usr/local/bin/lhtpi-screens.sh
 
-    local datei=/etc/sudoers.d/021_lhtpi-screens
-    local tmp
-    tmp="$(mktemp)"
-    cat >"${tmp}" <<SUDOEOF2
-${PI_USER} ALL=(root) NOPASSWD: /usr/local/bin/lhtpi-screens.sh
-SUDOEOF2
-    if visudo -c -f "${tmp}" >/dev/null 2>&1; then
-        install -m 0440 -o root -g root "${tmp}" "${datei}"
-        ok "Bildschirmzahl darf ohne Passwort gesetzt werden (${datei})"
+    # Alle Freigaben an einer Stelle (scripts/sudoers-regeln.sh) - vorher
+    # standen sie doppelt in install.sh und kiosk-neu.sh und liefen
+    # auseinander. Bei einer frischen Installation fehlten dadurch Rechte,
+    # die nach einem Update vorhanden waren.
+    if [ -f "${SCRIPT_DIR}/scripts/sudoers-regeln.sh" ]; then
+        if LHTPI_USER="${PI_USER}" bash "${SCRIPT_DIR}/scripts/sudoers-regeln.sh"; then
+            ok "Freigaben gesetzt (Bildschirme, Rettung, Dienste, Stick)"
+        else
+            warn "Freigaben nicht gesetzt - Speichern und Waechter bleiben wirkungslos"
+        fi
     else
-        warn "Freigabe für lhtpi-screens.sh nicht gesetzt"
+        warn "scripts/sudoers-regeln.sh fehlt - Freigaben nicht gesetzt"
     fi
-    rm -f "${tmp}"
 }
 
 configure_sudoers_kiosk() {
@@ -2108,7 +2127,6 @@ configure_sudoers_kiosk() {
     tmp="$(mktemp)"
     cat >"${tmp}" <<SUDOEOF
 ${PI_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /sbin/reboot, /sbin/poweroff
-${PI_USER} ALL=(root) NOPASSWD: /usr/local/bin/lhtpi-usb-rw.sh
 SUDOEOF
     if [ ! -s "${tmp}" ]; then
         log "  WARNUNG: Freigabe leer geblieben - Knöpfe gehen nicht"

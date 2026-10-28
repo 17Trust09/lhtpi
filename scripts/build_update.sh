@@ -100,6 +100,17 @@ bash -n "${PAKET}/helfer/lhtpi-entkoppeln.sh" || {
 }
 
 # ── Pflichtdateien prüfen, bevor ein Paket entsteht ────────────────────────
+# Skripte, ohne die Bildschirm-Waechter, Rettung und Freigaben fehlen wuerden.
+# Sie muessen im Paket liegen, sonst kommt ein Fix nie beim Geraet an.
+for datei in app/scripts/hdmi-wache.sh app/scripts/anzeige-rettung.sh \
+             app/scripts/sudoers-regeln.sh app/scripts/selbsttest.sh \
+             app/scripts/kiosk-neu.sh app/scripts/nach-pull.sh; do
+    if [ ! -f "${PAKET}/${datei}" ]; then
+        echo "FEHLER: ${datei} fehlt im Paket – Abbruch." >&2
+        exit 1
+    fi
+done
+
 for datei in app/app.py terminboard/app.py safety-cross/app.py; do
     if [ ! -f "${PAKET}/${datei}" ]; then
         echo "FEHLER: ${datei} fehlt im Paket – Abbruch." >&2

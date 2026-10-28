@@ -93,19 +93,18 @@ fi
 # Freigaben: Bildschirmzahl setzen und die Kiosk-Dienste neu starten. Ohne die
 # zweite Regel scheiterte das Neustarten nach dem Speichern still - die Anzeige
 # behielt dann die alte Belegung.
-tmp="$(mktemp)"
-SYSTEMCTL="$(command -v systemctl || echo /usr/bin/systemctl)"
-printf '%s ALL=(root) NOPASSWD: %s, %s, %s restart kiosk-screen1, %s restart kiosk-screen2, %s restart terminboard.service, %s restart lhtpi.service, %s restart safetycross.service\n' \
-    "${PI_USER}" "${SCREENS_HELFER}" /usr/local/bin/lhtpi-anzeige-rettung.sh \
-    "${SYSTEMCTL}" "${SYSTEMCTL}" "${SYSTEMCTL}" "${SYSTEMCTL}" "${SYSTEMCTL}" > "${tmp}"
-if visudo -c -f "${tmp}" >/dev/null 2>&1; then
-    install -m 0440 -o root -g root "${tmp}" /etc/sudoers.d/021_lhtpi-screens
-    sag "Bildschirmzahl und Kiosk-Neustart ohne Passwort erlaubt."
+# Alle Freigaben an einer Stelle - dieselbe Datei wie bei der Installation.
+if [ -f "${REPO}/scripts/sudoers-regeln.sh" ]; then
+    if LHTPI_USER="${PI_USER}" bash "${REPO}/scripts/sudoers-regeln.sh"; then
+        sag "Freigaben gesetzt (Bildschirme, Rettung, Dienste, Stick)."
+    else
+        warn_freigabe=1
+        sag "WARNUNG: Freigaben nicht gesetzt - Speichern startet die Anzeige nicht neu."
+    fi
 else
     warn_freigabe=1
-    sag "WARNUNG: Freigabe nicht gesetzt - Speichern startet die Anzeige nicht neu."
+    sag "WARNUNG: scripts/sudoers-regeln.sh fehlt."
 fi
-rm -f "${tmp}"
 
 # Marke für Bildschirm 2 sicherstellen
 mkdir -p /etc/lhtpi
@@ -295,6 +294,11 @@ if [ "${NEUSTART_NOETIG:-0}" = "1" ]; then
     echo "Bitte einmal neu starten, damit die HDMI-Einstellung greift:"
     echo "  sudo reboot"
 fi
+# Nach dem Nachziehen pruefen, ob die Kette steht - nicht nur die Ausgaenge.
+if [ -f "${REPO}/scripts/selbsttest.sh" ]; then
+    LHTPI_USER="${PI_USER}" bash "${REPO}/scripts/selbsttest.sh" || true
+fi
+
 echo
 echo "Fertig. Steht bei beiden dieselbe Position, hat der Treiber es nicht "
 echo "akzeptiert – dann steht der Grund in /home/${PI_USER}/kiosk-screen2.log"

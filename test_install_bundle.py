@@ -662,6 +662,35 @@ if rtc_match:
     ok(r.returncode == 0 and '--systohc --utc' in hwlog and ersatz != 'ALT',
        'Speichern aktualisiert gleichzeitig DS3231 und SD-Fallback')
 
+# ── Waechter, Rettung und Freigaben muessen im Bundle liegen ─────────────
+# Diese Fehler waren stumm: ein Waechter, der den Ausfall nicht bemerkt, ein
+# Speichern ohne Wirkung, ein Neustart ohne Recht. Bei einer frischen
+# Installation muessen alle Teile von selbst ankommen.
+for datei, beschreibung in [
+        ('scripts/hdmi-wache.sh', 'Bildschirm-Waechter'),
+        ('scripts/anzeige-rettung.sh', 'Anzeige-Rettung ohne Reboot'),
+        ('scripts/sudoers-regeln.sh', 'Freigaben an einer Stelle'),
+        ('scripts/selbsttest.sh', 'Selbsttest nach der Installation'),
+        ('scripts/kiosk-neu.sh', 'Nachziehen der Kiosk-Teile'),
+        ('scripts/nach-pull.sh', 'Nachziehen nach git pull'),
+]:
+    ok(os.path.isfile(os.path.join(BASE, datei)),
+       '%s liegt im Bundle (%s)' % (beschreibung, datei))
+
+# install.sh muss die Freigaben aus der gemeinsamen Datei holen, nicht selbst
+# welche schreiben - sonst laufen Installer und Update wieder auseinander.
+ok('sudoers-regeln.sh' in _inst,
+   'install.sh nutzt die gemeinsamen sudo-Regeln')
+ok('selbsttest.sh' in _inst,
+   'install.sh prueft sich zum Schluss selbst')
+
+# Der Waechter muss den Fall kennen, der den Reboot gekostet hat.
+_wache = open(os.path.join(BASE, 'scripts', 'hdmi-wache.sh'), encoding='utf-8').read()
+ok("meldet nicht 'connected'" in _wache,
+   'Waechter handelt auch, wenn der Ausgang sich abmeldet')
+ok('sudo -n systemctl restart kiosk-screen2' in _wache,
+   'Waechter startet den Kiosk mit Recht (sudo -n)')
+
 print('\n%s%d Prüfungen bestanden, %d fehlgeschlagen'
       % ('OK – ' if failed == 0 else 'FEHLER – ', passed, failed))
 sys.exit(1 if failed else 0)
