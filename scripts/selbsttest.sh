@@ -64,13 +64,26 @@ if [ "${anzahl}" -ge 2 ]; then
 fi
 
 # ── 3. Werkzeuge, ohne die der Waechter blind ist ────────────────────────
-for werkzeug in xrandr xset xdotool; do
+for werkzeug in xrandr xset; do
     if command -v "${werkzeug}" >/dev/null 2>&1; then
         gruen "${werkzeug} vorhanden"
     else
         rot "${werkzeug} fehlt"
     fi
 done
+
+# Fensterpruefung: xdotool ist der genaue Weg, xwininfo der Ersatz. Fehlt
+# beides, kann der Waechter ein fehlendes Fenster nicht erkennen - dann bleibt
+# nur der Ausgang als Kriterium.
+if command -v xdotool >/dev/null 2>&1; then
+    gruen "xdotool vorhanden (Fensterpruefung genau)"
+elif command -v xwininfo >/dev/null 2>&1; then
+    gelb "xdotool fehlt - xwininfo uebernimmt die Fensterpruefung"
+    echo "        Nachinstallieren: sudo apt-get install -y xdotool"
+else
+    rot "weder xdotool noch xwininfo - Fenster werden nicht geprueft"
+    echo "        Nachinstallieren: sudo apt-get install -y xdotool x11-utils"
+fi
 
 # ── 4. Rettungsskript ────────────────────────────────────────────────────
 if [ -x /usr/local/bin/lhtpi-anzeige-rettung.sh ]; then

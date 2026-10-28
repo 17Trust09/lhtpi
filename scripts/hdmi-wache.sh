@@ -56,10 +56,23 @@ ausgang_bekannt() {
 }
 
 # Laeuft ein Fenster fuer diesen Bildschirm?
+#
+# xdotool fragt die Fensterklasse ab - das ist der genaue Weg. Fehlt es, wird
+# ueber xwininfo gesucht; das ist ungenauer, aber besser als gar nicht zu
+# pruefen. Fehlt beides, gilt "unbekannt" und es wird NICHT neu gestartet:
+# ein Waechter, der aus Unwissen die Anzeige alle 30 Sekunden neu startet,
+# waere schlimmer als einer, der nur den Ausgang prueft.
 fenster_da() {
     local klasse="$1"
-    command -v xdotool >/dev/null 2>&1 || return 0    # ohne xdotool nicht pruefen
-    xdotool search --class "${klasse}" >/dev/null 2>&1
+    if command -v xdotool >/dev/null 2>&1; then
+        xdotool search --class "${klasse}" >/dev/null 2>&1
+        return $?
+    fi
+    if command -v xwininfo >/dev/null 2>&1; then
+        xwininfo -root -children 2>/dev/null | grep -q "${klasse}"
+        return $?
+    fi
+    return 0    # unbekannt: nichts erzwingen
 }
 
 ausgang_einschalten() {

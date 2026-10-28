@@ -249,6 +249,23 @@ if [ -f "${REPO}/VERSION" ]; then
     fi
 fi
 
+# ── 2c2. Fehlende Werkzeuge nachinstallieren ─────────────────────────────
+# install_packages laeuft nur bei einer Neuinstallation. Nach einem git pull
+# fehlte xdotool deshalb, und der Waechter konnte nicht nach Fenstern fragen -
+# ausgerechnet das Werkzeug, das den schwarzen Bildschirm erkennt.
+fehlt=""
+for werkzeug in xdotool xwininfo; do
+    command -v "${werkzeug}" >/dev/null 2>&1 || fehlt="${fehlt} ${werkzeug}"
+done
+if [ -n "${fehlt}" ]; then
+    sag "Fehlende Werkzeuge:${fehlt} - versuche nachzuinstallieren."
+    if DEBIAN_FRONTEND=noninteractive timeout 120 apt-get install -y -qq xdotool x11-utils >/dev/null 2>&1; then
+        sag "Werkzeuge nachinstalliert."
+    else
+        sag "Nachinstallieren nicht moeglich (kein Netz?) - der Waechter nutzt einen Ersatzweg."
+    fi
+fi
+
 # ── 2d. Bildschirm-Waechter nachziehen ────────────────────────────────────
 # Der Waechter liegt im Repository, laeuft aber aus dem Home-Verzeichnis. Ohne
 # diesen Schritt bliebe nach einem git pull die alte Fassung aktiv - und die
