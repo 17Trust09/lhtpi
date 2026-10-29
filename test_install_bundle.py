@@ -673,6 +673,7 @@ for datei, beschreibung in [
         ('scripts/selbsttest.sh', 'Selbsttest nach der Installation'),
         ('scripts/hdmi-fixieren.sh', 'Ausgaenge bleiben nach Standby aktiv'),
         ('scripts/wlan-reparieren.sh', 'WLAN pruefen und reparieren'),
+        ('scripts/wlan-verbinden.sh', 'WLAN-Profil im Dialog anlegen'),
         ('scripts/kiosk-neu.sh', 'Nachziehen der Kiosk-Teile'),
         ('scripts/nach-pull.sh', 'Nachziehen nach git pull'),
 ]:
