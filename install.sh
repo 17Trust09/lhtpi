@@ -351,13 +351,33 @@ set -u
 
 # Kiosk Bildschirm __IDX__ – Anzeige-Router der Verteiler-App
 # Monitor-Zuordnung: HDMI-1 primär links, HDMI-2 rechts daneben.
-# --auto statt fester Auflösung: sonst entstehen bei abweichender Panel-Auflösung
-# schwarze Balken links und rechts.
+# Eine in "Anzeigen" gewählte Auflösung hat Vorrang – sonst erzwingt --auto
+# immer die höchste (oft 4096x2160), und eine bewusste Auswahl wäre weg.
+GEWAEHLT="$(python3 - "__IDX__" <<'PY' 2>/dev/null
+import sys
+try:
+    import anzeige_fein
+    v = anzeige_fein.aufloesung(int(sys.argv[1]))
+    print(v if v else '')
+except Exception:
+    print('')
+PY
+)"
+
 if xrandr --query 2>/dev/null | grep -q '^HDMI-2 connected'; then
-    xrandr --output HDMI-1 --primary --auto --pos 0x0 \
-           --output HDMI-2 --auto --right-of HDMI-1 >/dev/null 2>&1 || true
+    if [ -n "${GEWAEHLT}" ]; then
+        xrandr --output HDMI-1 --mode "${GEWAEHLT}" --pos 0x0 \
+               --output HDMI-2 --auto --right-of HDMI-1 >/dev/null 2>&1 || true
+    else
+        xrandr --output HDMI-1 --primary --auto --pos 0x0 \
+               --output HDMI-2 --auto --right-of HDMI-1 >/dev/null 2>&1 || true
+    fi
 else
-    xrandr --output HDMI-1 --primary --auto --pos 0x0 >/dev/null 2>&1 || true
+    if [ -n "${GEWAEHLT}" ]; then
+        xrandr --output HDMI-1 --mode "${GEWAEHLT}" --pos 0x0 >/dev/null 2>&1 || true
+    else
+        xrandr --output HDMI-1 --primary --auto --pos 0x0 >/dev/null 2>&1 || true
+    fi
 fi
 
 LOG="__LOG__"
@@ -388,8 +408,13 @@ for i in $(seq 1 30); do
     if xrandr --query 2>/dev/null | grep -q "^__MON__ connected"; then
         break
     fi
-    # Außerdem: Bildschirm einschalten, falls DPMS ihn hatte ausschalten lassen
-    xrandr --output __MON__ --auto >/dev/null 2>&1 || true
+    # Außerdem: Bildschirm einschalten, falls DPMS ihn hatte ausschalten lassen.
+    # Eine gewählte Auflösung bleibt: --auto würde sie wieder aufs Maximum setzen.
+    if [ -n "${GEWAEHLT}" ]; then
+        xrandr --output __MON__ --mode "${GEWAEHLT}" >/dev/null 2>&1 || true
+    else
+        xrandr --output __MON__ --auto >/dev/null 2>&1 || true
+    fi
     echo "$(date '+%F %T') - warte auf __MON__" >> "$LOG"
     sleep 2
 done

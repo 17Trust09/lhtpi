@@ -90,6 +90,16 @@ def display_aufloesung():
     dauerhaft = request.form.get('dauerhaft') == '1'
 
     ok, meldung = bildschirm_info.setze_aufloesung(ausgang, modus)
+    # Die Wahl merken, damit auch das Kiosk-Startskript sie kennt: Beim Neustart
+    # der Anzeige wuerde es sonst --auto erzwingen und damit die Aufloesung auf
+    # die hoechste vom Bildschirm gemeldete zuruecksetzen - die Auswahl waere
+    # sofort wieder weg. Deshalb steht sie hier fest, nicht nur in xrandr.
+    if ok:
+        try:
+            idx = int(ausgang.rsplit('-', 1)[-1])
+            anzeige_fein.setze_aufloesung(idx, modus)
+        except (ValueError, AttributeError):
+            pass
     if ok and dauerhaft:
         ok2, meldung2 = bildschirm_info.dauerhaft_setzen(ausgang, modus)
         meldung = meldung + ' ' + meldung2 if ok2 else meldung + ' Dauerhaft: ' + meldung2
