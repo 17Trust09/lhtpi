@@ -481,6 +481,55 @@ def anzeige_neu_starten():
     return True
 
 
+def anzeige_neu_starten_verzoegert(sekunden=2):
+    """Kiosk-Neustart AUSSERHALB der laufenden Anfrage anstossen.
+
+    Warum das wichtig ist: der Neustart schliesst Chromium und startet es neu,
+    Chromium laedt dann sofort /screen/<n>. Passiert das SYNCHRON mitten in der
+    Request-Verarbeitung (z. B. beim Aendern der Aufloesung), greift Chromium
+    genau dann zu, wenn die App noch arbeitet - und die kurze Phase, in der die
+    Antwort noch nicht da ist, zeigt Chrome als 'Not Found' (404).
+
+    Deshalb wird der Neustart in einen eigenen, abgekoppelten Prozess gelegt,
+    der ein paar Sekunden wartet und dann neu startet. Die Web-Antwort ist dann
+    laengst draussen, und Chromium laedt eine ruhige Seite.
+    """
+    if SYSTEM_DRYRUN:
+        return True
+    sudo = shutil.which('sudo') or '/usr/bin/sudo'
+    systemctl = shutil.which('systemctl') or '/usr/bin/systemctl'
+
+    def _warten_und_neustart():
+        try:
+            time.sleep(sekunden)
+            subprocess.run([sudo, '-n', systemctl, 'restart', 'kiosk-screen1'],
+                           stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, timeout=25)
+            subprocess.run([sudo, '-n', systemctl, 'restart', 'kiosk-screen2'],
+                           stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, timeout=25)
+        except (OSError, subprocess.SubprocessError):
+            pass
+
+    # doppelter Fork: der Prozess loest sich von der Flask-Anfrage, damit der
+    # Neustart auch dann noch laeuft, wenn die Anfrage schon beantwortet ist.
+    pid = os.fork()
+    if pid == 0:
+        try:
+            os.setsid()
+            pid2 = os.fork()
+            if pid2 == 0:
+                _warten_und_neustart()
+        finally:
+            os._exit(0)
+    else:
+        try:
+            os.waitpid(pid, 0)
+        except OSError:
+            pass
+    return True
+
+
 def systembefehl(ziel):
     """Neustart oder Herunterfahren ausloesen.
 

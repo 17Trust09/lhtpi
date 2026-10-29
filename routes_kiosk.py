@@ -119,13 +119,12 @@ def display_aufloesung():
     # geschrieben wird.
     rollback.start(vorher)
 
-    # Fenster neu starten, damit die neue Groesse sichtbar wird.
-    neu = router.anzeige_neu_starten()
-    if neu:
-        meldung = meldung + ' Anzeige neu gestartet.'
-
+    # Fenster neu starten, damit die neue Groesse sichtbar wird - VERZOEGERT:
+    # so wird die Antwort zuerst rausgeschickt, und Chromium laedt /screen/1
+    # erst dann neu, wenn die App ruhig ist. Sonst zeigt Chrome kurz 'Not Found'.
+    router.anzeige_neu_starten_verzoegert()
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return jsonify({'ok': True, 'meldung': meldung, 'neu': neu,
+        return jsonify({'ok': True, 'meldung': meldung, 'neu': True,
                         'rollback': True, 'ausgang': ausgang, 'modus': modus,
                         'dauerhaft': dauerhaft})
 
@@ -171,7 +170,7 @@ def display_aufloesung_abbrechen():
         if modus:
             bildschirm_info.setze_aufloesung(ausgang, modus)
     rollback.abbrechen()
-    router.anzeige_neu_starten()
+    router.anzeige_neu_starten_verzoegert()
 
     meldung = 'Zurueckgesetzt auf den vorherigen Zustand.'
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -199,15 +198,14 @@ def display_skala():
 
     # Die Skalierung wird beim Start des Fensters uebergeben. Sie wirkt deshalb
     # erst nach einem Neustart der Anzeige - dafuer ist sie dann scharf, weil
-    # Chromium von Anfang an in dieser Groesse zeichnet.
-    neu = False
+    # Chromium von Anfang an in dieser Groesse zeichnet. VERZOEGERT neu starten,
+    # damit Chromium nicht mitten in der laufenden Anfrage laedt (-> 'Not Found').
     if request.form.get('neu_starten') == '1':
-        neu = router.anzeige_neu_starten()
-        meldung = meldung + (' Anzeige neu gestartet.' if neu
-                             else ' Anzeige konnte nicht neu starten.')
+        router.anzeige_neu_starten_verzoegert()
+        meldung = meldung + ' Anzeige wird neu gestartet.'
 
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return jsonify({'ok': True, 'meldung': meldung, 'neu': neu})
+        return jsonify({'ok': True, 'meldung': meldung, 'neu': True})
     flash(meldung, 'ok')
     return redirect(url_for('display'))
 
@@ -271,8 +269,9 @@ def display_save():
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         # Die Anzeige soll die neue Belegung sofort zeigen: Fenster sauber
         # neu starten. Vorher blieb der Bildschirm nach dem Speichern schwarz
-        # oder zeigte weiter die alte Seite.
-        router.anzeige_neu_starten()
+        # oder zeigte weiter die alte Seite. Verzoegert, damit Chromium nicht
+        # mitten in der laufenden Anfrage neu laedt (sonst kurz 'Not Found').
+        router.anzeige_neu_starten_verzoegert()
         return jsonify({'ok': True})
 
     # Knopf "Vorschau": die Auswahl wird zuerst gespeichert, damit man genau
