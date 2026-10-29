@@ -114,6 +114,50 @@ except Exception:
 PY
 }
 
+# Laeuft gerade ein unbestaetigtes manuelles Wechsel-Fenster? Dann darf der
+# Waechter NICHT mit --auto eingreifen - sonst ueberschreibt er den manuellen
+# Versuch innerhalb der 30 s.
+manuell_aktiv() {
+    python3 - <<'PY' 2>/dev/null
+import json
+try:
+    daten = json.load(open('/etc/lhtpi/anzeige-rollback.json'))
+    print('1' if daten.get('aktiv') and not daten.get('bestaetigt') else '0')
+except Exception:
+    print('0')
+PY
+}
+
+# Rollback-Pruefung: Ist ein manueller Wechsel aelter als 30 s und nie
+# bestaetigt, wird der vorherige Zustand wiederhergestellt (blind aus dem
+# Snapshot, nicht aus frischer EDID - die liefert bei 'kein Signal' evtl.
+# nichts mehr). Der Waechter ist der Timer-Owner.
+rollback_pruefen() {
+    local vorher=""
+    vorher="$(python3 - <<'PY' 2>/dev/null
+import json, sys, time
+try:
+    daten = json.load(open('/etc/lhtpi/anzeige-rollback.json'))
+    if not daten.get('aktiv') or daten.get('bestaetigt'):
+        sys.exit(0)
+    if int(time.time()) - daten.get('seit', 0) >= 30:
+        for ausgang, modus in (daten.get('vorher') or {}).items():
+            if modus:
+                print('%s=%s' % (ausgang, modus))
+except Exception:
+    pass
+PY
+)"
+    if [ -n "${vorher}" ]; then
+        while IFS='=' read -r ausgang modus; do
+            [ -n "${ausgang}" ] && [ -n "${modus}" ] || continue
+            xrandr --output "${ausgang}" --mode "${modus}" >/dev/null 2>&1 || true
+        done <<< "${vorher}"
+        rm -f /etc/lhtpi/anzeige-rollback.json 2>/dev/null || true
+        sag "Rollback: manueller Wechsel nicht bestaetigt - vorherige Aufloesung wiederhergestellt"
+    fi
+}
+
 letzter_zustand=""
 fehler_zaehler=0
 dpms_zuletzt=0
@@ -123,6 +167,18 @@ sag "Waechter gestartet"
 while true; do
     anzahl="$(gewuenschte_bildschirme)"
     verbundene="$(verbundene)"
+
+    # 1. Rollback-Zeitfenster pruefen (manueller Wechsel >30 s ohne Bestaetigung).
+    #    Das ist die einzige Stelle, die den Timer uebernimmt.
+    rollback_pruefen
+
+    # 2. Laeuft gerade ein unbestaetigter manueller Wechsel, greift der Waechter
+    #    in dieser Runde NICHT mit --auto ein - er wuerde sonst den Versuch
+    #    innerhalb der 30 s wieder ueberschreiben.
+    if [ "$(manuell_aktiv)" = "1" ]; then
+        sleep "${TAKT}"
+        continue
+    fi
 
     if [ "${anzahl}" -lt 2 ]; then
         # Nur ein Bildschirm gewuenscht: trotzdem dafuer sorgen, dass er an ist.

@@ -24,6 +24,96 @@ AUSGAENGE = ('HDMI-1', 'HDMI-2')
 UNUEBLICH = ('4096x2160',)
 
 
+def _drm_name(ausgang):
+    """X-Ausgangsname -> Kernel-/DRM-Name (HDMI-1 -> HDMI-A-1).
+
+    xrandr nennt die Ausgaenge HDMI-1/HDMI-2, der Kernel legt sie als
+    HDMI-A-1/HDMI-A-2 an. Die /sys/class/drm/card*-<name>/modes-Dateien tragen
+    den Kernel-Namen - ohne diese Umrechnung findet man dort nichts.
+    """
+    nummer = ausgang.rsplit('-', 1)[-1]
+    return 'HDMI-A-%s' % nummer
+
+
+def _modi(zeilen, index):
+    """Modi aus dem Block eines Ausgangs, groesster zuerst."""
+    modi = []
+    for zeile in zeilen[index + 1:]:
+        if zeile and not zeile.startswith(' '):
+            break
+        treffer = re.match(r'\s+(\d+x\d+)', zeile)
+        if treffer and treffer.group(1) not in modi:
+            modi.append(treffer.group(1))
+
+    def groesse(modus):
+        breite, hoehe = modus.split('x')
+        return int(breite) * int(hoehe)
+
+    # Unuebliche Formate nach hinten, sonst absteigend nach Flaeche.
+    modi.sort(key=lambda m: (m in UNUEBLICH, -groesse(m)))
+    return modi
+
+
+def _edid_modi(ausgang):
+    """Nur die Aufloesungen, die der Bildschirm selbst meldet.
+
+    xrandr listet neben den EDID-Modi des Bildschirms auch eine lange
+    Standard-Liste (1280x720, 1024x768, ...), die der X-Server immer anbietet.
+    Ein Fernseher kann davon nur einen Bruchteil anzeigen - eine dort gewaehlte
+    Aufloesung quittiert er mit 'kein Signal'. Die EDID-Modi stehen im Kernel
+    unter /sys/class/drm/card*-<AUSGANG>/modes und sind genau die, die das
+    Geraet wirklich unterstuetzt.
+
+    Der ERSTE Eintrag ist der, den der Bildschirm als bevorzugten (preferred)
+    Modus meldet - also die native Aufloesung.
+    """
+    import glob
+    modi = []
+    for pfad in glob.glob('/sys/class/drm/card*-%s/modes' % _drm_name(ausgang)):
+        try:
+            with open(pfad, encoding='utf-8') as datei:
+                for zeile in datei:
+                    wert = zeile.strip()
+                    if wert and wert not in modi:
+                        modi.append(wert)
+        except OSError:
+            continue
+    return _sortiere_nativ(modi)
+
+
+def _sortiere_nativ(modi):
+    """Sortiert so, dass der natuerliche native Modus vorn steht.
+
+    Ein 4K-Fernseher meldet oft zuerst 4096x2160 (DCI-Kino) und erst danach
+    3840x2160, obwohl sein Panel 16:9 ist. Auch ein 30-Hz-Eintrag kann vor dem
+    60-Hz-Eintrag stehen. Deshalb: 16:9-Modi ohne Kinoformat zuerst, nach
+    Flaeche absteigend. Innerhalb gleicher Flaeche bleibt die EDID-Reihenfolge.
+    """
+
+    def schluessel(modus):
+        try:
+            breite, hoehe = modus.split('x')
+            breite, hoehe = int(breite), int(hoehe)
+        except (ValueError, AttributeError):
+            return (1, 0)
+        h = hoehe if hoehe > 0 else 1
+        ist_16_zu_9 = abs(breite / h - 16 / 9) < 0.05
+        kinoformat = modus in UNUEBLICH or br_gt(breite, h)
+        if kinoformat:
+            gruppe = 2
+        elif ist_16_zu_9:
+            gruppe = 0
+        else:
+            gruppe = 1
+        return (gruppe, -(breite * hoehe))
+    return sorted(modi, key=schluessel)
+
+
+def br_gt(breite, hoehe):
+    """True, wenn das Seitenverhaeltnis breiter als 16:9 ist (Kino)."""
+    return breite / hoehe > 1.79
+
+
 def _xrandr(*args, timeout=15):
     """xrandr mit DISPLAY, weil die App als Dienst ohne Sitzung laeuft."""
     umgebung = dict(os.environ)
@@ -124,8 +214,10 @@ def bildschirme():
         # Ist der laufende Modus der, den der Bildschirm als seinen eigenen
         # meldet? Nicht jeder angebotene Modus zaehlt: 720x400 steht in der
         # Liste, ist aber VGA-Text - damit ist das Bild hochgerechnet.
-        # Deshalb: der groesste uebliche Modus gilt als nativ.
-        nativ = next((m for m in modi if m not in UNUEBLICH), None)
+        # Der native Modus ist der erste Eintrag der EDID-Liste (nachdem
+        # Kinoformate nach hinten sortiert wurden) - das ist der, den der
+        # Bildschirm als seinen bevorzugten meldet.
+        nativ = modi[0] if modi else None
         passt = bool(aktuell) and aktuell == nativ
 
         ergebnis.append({

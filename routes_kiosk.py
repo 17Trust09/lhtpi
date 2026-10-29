@@ -11,6 +11,7 @@ import kiosk_router as router
 import kiosk_tools as tools
 import bildschirm_info
 import anzeige_fein
+import rollback
 import license_bundle as lic
 
 
@@ -89,47 +90,93 @@ def display():
 @app.route('/display/aufloesung', methods=['POST'])
 @login_required
 def display_aufloesung():
-    """Aufloesung setzen - sofort und auf Wunsch dauerhaft."""
+    """Aufloesung setzen - sofort, mit 30-Sekunden-Rollback.
+
+    Der Wechsel ist ein Versuch: Ein Fernseher kann die gewaehlte Aufloesung
+    mit 'kein Signal' quittieren. Deshalb wird der VORHERIGE Zustand gespeichert
+    und ein 30-s-Fenster gestartet. Bestaetigt der Nutzer ('passt'), wird die
+    Wahl dauerhaft uebernommen. Sonst setzt der HDMI-Waechter nach 30 s den
+    vorherigen Zustand zurueck.
+    """
     ausgang = (request.form.get('ausgang') or '').strip()
     modus = (request.form.get('modus') or '').strip()
     dauerhaft = request.form.get('dauerhaft') == '1'
 
+    # Vorherigen Zustand merken (fuer den Rollback), dann sofort setzen.
+    vorher = {b['ausgang']: b.get('aktuell') for b in bildschirm_info.bildschirme()
+              if b.get('angeschlossen') and b.get('aktuell')}
+
     ok, meldung = bildschirm_info.setze_aufloesung(ausgang, modus)
-    # Die Wahl merken, damit auch das Kiosk-Startskript sie kennt: Beim Neustart
-    # der Anzeige wuerde es sonst --auto erzwingen und damit die Aufloesung auf
-    # die hoechste vom Bildschirm gemeldete zuruecksetzen - die Auswahl waere
-    # sofort wieder weg. Deshalb steht sie hier fest, nicht nur in xrandr.
-    if ok:
-        try:
-            idx = int(ausgang.rsplit('-', 1)[-1])
-            anzeige_fein.setze_aufloesung(idx, modus)
-        except (ValueError, AttributeError):
-            pass
-    if ok and dauerhaft:
-        ok2, meldung2 = bildschirm_info.dauerhaft_setzen(ausgang, modus)
-        meldung = meldung + ' ' + meldung2 if ok2 else meldung + ' Dauerhaft: ' + meldung2
-        ok = ok2
-
-    # Das Fenster behaelt sonst die alte Groesse und sitzt klein in der Ecke -
-    # das sieht aus wie "immer noch unscharf". Das gilt auch fuer den AJAX-Weg,
-    # den die Verwaltungsseite benutzt - ohne Neustart aendert sich die Groesse
-    # der Anzeige nicht, egal welche Aufloesung gewaehlt wurde.
-    neu = False
-    if ok:
-        neu = router.anzeige_neu_starten()
-        if neu:
-            meldung = meldung + ' Anzeige neu gestartet.'
-
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return jsonify({'ok': ok, 'meldung': meldung, 'neu': neu,
-                        'bildschirme': [{'ausgang': b['ausgang'],
-                                         'aktuell': b.get('aktuell')}
-                                        for b in bildschirm_info.bildschirme()]})
-
     if not ok:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'ok': False, 'meldung': meldung})
         flash(meldung, 'fehler')
         return redirect(url_for('display'))
-    flash(meldung, 'ok' if ok else 'fehler')
+
+    # Rollback-Fenster starten. Wichtig: die dauerhafte Speicherung (anzeige-
+    # fein.json + Kernel-Zeile) passiert ERST bei Bestaetigung - so bleibt der
+    # Rollback sauber, ohne dass eine unbrauchbare Aufloesung in die Startzeile
+    # geschrieben wird.
+    rollback.start(vorher)
+
+    # Fenster neu starten, damit die neue Groesse sichtbar wird.
+    neu = router.anzeige_neu_starten()
+    if neu:
+        meldung = meldung + ' Anzeige neu gestartet.'
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'ok': True, 'meldung': meldung, 'neu': neu,
+                        'rollback': True, 'ausgang': ausgang, 'modus': modus,
+                        'dauerhaft': dauerhaft})
+
+    flash(meldung, 'ok')
+    return redirect(url_for('display'))
+
+
+@app.route('/display/aufloesung/bestaetigen', methods=['POST'])
+@login_required
+def display_aufloesung_bestaetigen():
+    """'Passt' - die gewaehlte Aufloesung wird dauerhaft uebernommen."""
+    ausgang = (request.form.get('ausgang') or '').strip()
+    modus = (request.form.get('modus') or '').strip()
+    dauerhaft = request.form.get('dauerhaft') == '1'
+
+    rollback.bestaetigen()
+
+    # Jetzt erst dauerhaft merken: in anzeige-fein.json (fuer Waechter/Retter/
+    # Startskript) und, auf Wunsch, in der Kernel-Zeile.
+    meldung = 'Aufloesung uebernommen.'
+    try:
+        idx = int(ausgang.rsplit('-', 1)[-1])
+        anzeige_fein.setze_aufloesung(idx, modus)
+    except (ValueError, AttributeError):
+        pass
+
+    if dauerhaft:
+        ok2, meldung2 = bildschirm_info.dauerhaft_setzen(ausgang, modus)
+        meldung = meldung + ' ' + meldung2 if ok2 else meldung + ' Dauerhaft: ' + meldung2
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'ok': True, 'meldung': meldung})
+    flash(meldung, 'ok')
+    return redirect(url_for('display'))
+
+
+@app.route('/display/aufloesung/abbrechen', methods=['POST'])
+@login_required
+def display_aufloesung_abbrechen():
+    """Sofort zuruecksetzen (statt auf den 30-s-Timer zu warten)."""
+    vorher = rollback.vorher_zustand()
+    for ausgang, modus in vorher.items():
+        if modus:
+            bildschirm_info.setze_aufloesung(ausgang, modus)
+    rollback.abbrechen()
+    router.anzeige_neu_starten()
+
+    meldung = 'Zurueckgesetzt auf den vorherigen Zustand.'
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'ok': True, 'meldung': meldung})
+    flash(meldung, 'ok')
     return redirect(url_for('display'))
 
 
