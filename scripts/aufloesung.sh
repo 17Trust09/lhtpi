@@ -126,15 +126,48 @@ if [ "${SETZEN}" = "1" ]; then
     geaendert=0
     for ausgang in HDMI-1 HDMI-2; do
         xrandr --query | grep -qE "^${ausgang} connected" || continue
-        nativ="$(xrandr --query | sed -n "/^${ausgang} connected/,/^[^ ]/p" \
+
+        # Alle angebotenen Modi, groesster zuerst. 3840x2160 (Fernseher) und
+        # 4096x2160 (Kino) sind nicht dasselbe - welcher passt, entscheidet
+        # das Geraet, nicht die Groesse allein.
+        modi="$(xrandr --query | sed -n "/^${ausgang} connected/,/^[^ ]/p" \
             | grep -oE '^[[:space:]]+[0-9]+x[0-9]+' | tr -d ' ' \
-            | sort -t x -k1,1nr -k2,2nr | uniq | head -1)"
-        [ -n "${nativ}" ] || continue
-        if xrandr --output "${ausgang}" --mode "${nativ}" >/dev/null 2>&1; then
-            sag "${ausgang} auf ${nativ} gesetzt."
-            geaendert=1
-        else
-            sag "${ausgang}: ${nativ} liess sich nicht setzen."
+            | sort -t x -k1,1nr -k2,2nr | uniq)"
+        if [ -z "${modi}" ]; then
+            sag "${ausgang}: keine Modi angeboten (kein EDID?)"
+            continue
+        fi
+
+        gesetzt=0
+        while IFS= read -r modus; do
+            [ -n "${modus}" ] || continue
+            # Fehler NICHT verschlucken: ohne die Meldung von xrandr ist nicht
+            # zu sehen, ob der Modus fehlt, der Ausgang aus ist oder der
+            # Bildschirm ihn ablehnt.
+            meldung="$(xrandr --output "${ausgang}" --mode "${modus}" 2>&1)"
+            if [ -z "${meldung}" ]; then
+                sag "${ausgang} auf ${modus} gesetzt."
+                gesetzt=1
+                geaendert=1
+                break
+            fi
+            sag "${ausgang} ${modus}: ${meldung}"
+        done <<< "${modi}"
+
+        # Zweiter Versuch: Ausgang einmal aus und wieder an. Dabei fragt der
+        # Treiber den Bildschirm neu und bietet oft Modi an, die vorher fehlten.
+        if [ "${gesetzt}" = "0" ]; then
+            sag "${ausgang}: Ausgang wird neu ausgehandelt ..."
+            xrandr --output "${ausgang}" --off >/dev/null 2>&1
+            sleep 2
+            meldung="$(xrandr --output "${ausgang}" --auto 2>&1)"
+            if [ -z "${meldung}" ]; then
+                jetzt="$(xrandr --query | grep -E "^${ausgang} connected" | grep -oE '[0-9]+x[0-9]+\+' | head -1 | cut -d+ -f1)"
+                sag "${ausgang} automatisch auf ${jetzt:-?} gesetzt."
+                [ "${jetzt}" != "720x400" ] && [ "${jetzt}" != "720x480" ] && geaendert=1
+            else
+                sag "${ausgang}: auto meldet: ${meldung}"
+            fi
         fi
     done
 
