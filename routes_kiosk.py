@@ -95,16 +95,25 @@ def display_aufloesung():
         meldung = meldung + ' ' + meldung2 if ok2 else meldung + ' Dauerhaft: ' + meldung2
         ok = ok2
 
+    # Das Fenster behaelt sonst die alte Groesse und sitzt klein in der Ecke -
+    # das sieht aus wie "immer noch unscharf". Das gilt auch fuer den AJAX-Weg,
+    # den die Verwaltungsseite benutzt - ohne Neustart aendert sich die Groesse
+    # der Anzeige nicht, egal welche Aufloesung gewaehlt wurde.
+    neu = False
+    if ok:
+        neu = router.anzeige_neu_starten()
+        if neu:
+            meldung = meldung + ' Anzeige neu gestartet.'
+
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        return jsonify({'ok': ok, 'meldung': meldung,
+        return jsonify({'ok': ok, 'meldung': meldung, 'neu': neu,
                         'bildschirme': [{'ausgang': b['ausgang'],
                                          'aktuell': b.get('aktuell')}
                                         for b in bildschirm_info.bildschirme()]})
 
-    # Das Fenster behaelt sonst die alte Groesse und sitzt klein in der Ecke -
-    # das sieht aus wie "immer noch unscharf".
-    if ok:
-        router.anzeige_neu_starten()
+    if not ok:
+        flash(meldung, 'fehler')
+        return redirect(url_for('display'))
     flash(meldung, 'ok' if ok else 'fehler')
     return redirect(url_for('display'))
 
