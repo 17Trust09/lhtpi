@@ -9,7 +9,15 @@
 html,body{width:100%;height:100%;overflow:hidden;background:#000;user-select:none;-webkit-user-select:none;-moz-user-select:none;-ms-user-select:none}
 #page{width:100%;height:100%;pointer-events:none}
 #player{width:100%;height:100%;display:flex;align-items:center;justify-content:center}
-#player img,#player video{max-width:100%;max-height:100%;object-fit:contain;pointer-events:none;-webkit-user-drag:none;user-drag:none}
+/* Bilder/Video sollen die Flaeche FUERLLEN (kein schwarzer Rand), egal welche
+   Pixelgroesse oder welches Seitenverhaeltnis die Datei hat. cover = voll
+   ausfuellen, notfalls an den Raendern abschneiden; contain = komplett
+   einpassen (hinterlaesst bei abweichendem Format schwarze Raender). Standard
+   ist cover, weil ein aus einem kleinen PDF exportiertes Bild sonst winzig mit
+   dickem Rand gezeigt wird. Einzelne Bilder lassen sich per Option auf contain
+   umschalten (siehe _anwenden unten). */
+#player img,#player video{width:100%;height:100%;object-fit:cover;pointer-events:none;-webkit-user-drag:none;user-drag:none}
+#player img.fit-contain,#player video.fit-contain{object-fit:contain}
 #player video{width:100%;height:100%}
 #empty{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:#555;font-family:sans-serif;font-size:2rem;text-align:center;pointer-events:none}
 /* Maus-Cursor-Overlay: deckt den HW-Cursor mit einem transparenten Bereich ab */
