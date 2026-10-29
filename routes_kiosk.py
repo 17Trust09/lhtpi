@@ -19,6 +19,11 @@ import license_bundle as lic
 @app.route('/screen/<int:idx>')
 def screen(idx):
     """Router-Seite: zeigt die Tools dieses Bildschirms (fest oder rotierend)."""
+    # Fehlende Bildschirme anlegen, statt 404 zu liefern: Nach einer Neu-
+    # installation ist die Datenbank leer, bis jemand die Seite "Anzeigen"
+    # oeffnet. Der Kiosk laedt /screen/N aber sofort - ohne diesen Aufruf
+    # erschiene "Not Found", obwohl das Geraet gesund ist.
+    router.ensure_defaults()
     cfg = router.screen_config(idx)
     if cfg is None:
         abort(404)
