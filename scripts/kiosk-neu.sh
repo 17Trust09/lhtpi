@@ -90,6 +90,26 @@ PYSCR
     bash -n "${SCREENS_HELFER}" && sag "Helfer eingerichtet: ${SCREENS_HELFER}"
 fi
 
+# Stick-Helfer zum kurzzeitigen Beschreibbar-Schalten (fuer Berichte) nachziehen.
+# install.sh erzeugt ihn, aber ein reines git pull laesst ihn fehlen - dann
+# schlaegt der Selbsttest "Stick beschreibbar schalten" fehl, obwohl die
+# sudoers-Regel vorhanden ist.
+USB_RW_HELFER="/usr/local/bin/lhtpi-usb-rw.sh"
+if [ ! -x "${USB_RW_HELFER}" ] && grep -q "lhtpi-usb-rw.sh <<'EOF'" "${REPO}/install.sh"; then
+    python3 - "${REPO}/install.sh" "${USB_RW_HELFER}" <<'PYRW'
+import pathlib, sys
+quelle, ziel = sys.argv[1], sys.argv[2]
+s = pathlib.Path(quelle).read_text()
+marker = "cat > /usr/local/bin/lhtpi-usb-rw.sh <<'EOF'"
+a = s.index(marker)
+a = s.index("\n", a) + 1
+b = s.index("EOF", a)
+pathlib.Path(ziel).write_text(s[a:b])
+PYRW
+    chmod 0755 "${USB_RW_HELFER}"
+    bash -n "${USB_RW_HELFER}" && sag "Helfer eingerichtet: ${USB_RW_HELFER}"
+fi
+
 # Freigaben: Bildschirmzahl setzen und die Kiosk-Dienste neu starten. Ohne die
 # zweite Regel scheiterte das Neustarten nach dem Speichern still - die Anzeige
 # behielt dann die alte Belegung.

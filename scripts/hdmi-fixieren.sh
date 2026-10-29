@@ -157,9 +157,15 @@ edid_modus() {
 anzahl="$(cat /etc/lhtpi/screens 2>/dev/null || echo 1)"
 case "${anzahl}" in ''|*[!0-9]*) anzahl=1 ;; esac
 
-eintraege="video=HDMI-A-1:${modus1}D"
+# Ausgang aktiv halten, aber KEINE Aufloesung erzwingen: Der Treiber nimmt die
+# native Aufloesung aus dem EDID. Eine feste Aufloesung hier (video=HDMI-A-1:<modus>D)
+# zwingt jeden spaeter angeschlossenen Bildschirm - auch einen 4K-Fernseher - auf
+# genau diesen einen Modus. Genau das wollte der Nutzer NICHT: Anschliessen soll
+# automatisch die beste native Aufloesung ergeben. Deshalb nur ":D" (digital
+# aktivieren), keine Aufloesung davor.
+eintraege="video=HDMI-A-1:D"
 if [ "${anzahl}" -ge 2 ]; then
-    eintraege="${eintraege} video=HDMI-A-2:${modus2}D"
+    eintraege="${eintraege} video=HDMI-A-2:D"
 fi
 
 schreibe_video "${CMDLINE}" "${eintraege}"
