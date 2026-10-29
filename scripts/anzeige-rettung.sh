@@ -43,19 +43,54 @@ sag "Stromsparen und Bildschirmschoner aus."
 verbunden="$(xrandr --query 2>/dev/null | grep -E '^HDMI-[12] connected' | awk '{print $1}')"
 sag "Verbunden: $(echo ${verbunden:-keiner})"
 
+# In "Anzeigen" gewaehlte Aufloesung hat Vorrang. Ohne sie nimmt --auto die
+# hoechste - und wuerde damit eine bewusste Auswahl wieder ueberschreiben.
+gewaehlt() {
+    local nummer="${1#HDMI-}"
+    python3 - "${nummer}" <<'PY' 2>/dev/null
+import sys
+try:
+    import anzeige_fein
+    v = anzeige_fein.aufloesung(int(sys.argv[1]))
+    print(v if v else '')
+except Exception:
+    print('')
+PY
+}
+
+g1="$(gewaehlt HDMI-1)"
+g2="$(gewaehlt HDMI-2)"
+
 if printf '%s' "${verbunden}" | grep -q 'HDMI-1'; then
     if printf '%s' "${verbunden}" | grep -q 'HDMI-2'; then
-        xrandr --output HDMI-1 --primary --auto --pos 0x0 \
-               --output HDMI-2 --auto --right-of HDMI-1 >/dev/null 2>&1 || true
+        if [ -n "${g1}" ]; then
+            xrandr --output HDMI-1 --mode "${g1}" --pos 0x0 \
+                   --output HDMI-2 --${g2:+mode "${g2}"}${g2:-auto} --right-of HDMI-1 >/dev/null 2>&1 || true
+        else
+            xrandr --output HDMI-1 --primary --auto --pos 0x0 \
+                   --output HDMI-2 --auto --right-of HDMI-1 >/dev/null 2>&1 || true
+        fi
         sag "Beide Ausgaenge gesetzt (HDMI-2 rechts von HDMI-1)."
     else
-        xrandr --output HDMI-1 --primary --auto --pos 0x0 >/dev/null 2>&1 || true
+        if [ -n "${g1}" ]; then
+            xrandr --output HDMI-1 --mode "${g1}" --pos 0x0 >/dev/null 2>&1 || true
+        else
+            xrandr --output HDMI-1 --primary --auto --pos 0x0 >/dev/null 2>&1 || true
+        fi
         # HDMI-2 ist gemeldet, aber nicht verbunden - einmal anstossen
-        xrandr --output HDMI-2 --auto >/dev/null 2>&1 || true
+        if [ -n "${g2}" ]; then
+            xrandr --output HDMI-2 --mode "${g2}" >/dev/null 2>&1 || true
+        else
+            xrandr --output HDMI-2 --auto >/dev/null 2>&1 || true
+        fi
         sag "HDMI-1 gesetzt, HDMI-2 angestossen."
     fi
 else
-    xrandr --output HDMI-1 --auto >/dev/null 2>&1 || true
+    if [ -n "${g1}" ]; then
+        xrandr --output HDMI-1 --mode "${g1}" >/dev/null 2>&1 || true
+    else
+        xrandr --output HDMI-1 --auto >/dev/null 2>&1 || true
+    fi
     sag "HDMI-1 angestossen."
 fi
 

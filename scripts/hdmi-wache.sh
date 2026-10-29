@@ -77,12 +77,40 @@ fenster_da() {
 
 ausgang_einschalten() {
     local ausgang="$1" andere="$2"
+    # Eine bewusst gewaehlte Aufloesung hat Vorrang. Ohne sie nimmt --auto die
+    # hoechste - und wuerde damit eine Auswahl aus "Anzeigen" sofort wieder
+    # ueberschreiben, sobald der Waechter einmal einschaltet.
+    local gewaehlt=""
+    gewaehlt="$(gewaehlte_aufloesung "${ausgang}")"
     if [ -n "${andere}" ] && printf '%s' "${verbundene}" | grep -q "${andere}"; then
-        xrandr --output "${andere}" --primary --auto --pos 0x0 \
-               --output "${ausgang}" --auto --right-of "${andere}" >/dev/null 2>&1
+        if [ -n "${gewaehlt}" ]; then
+            xrandr --output "${andere}" --auto --pos 0x0 \
+                   --output "${ausgang}" --mode "${gewaehlt}" --right-of "${andere}" >/dev/null 2>&1
+        else
+            xrandr --output "${andere}" --primary --auto --pos 0x0 \
+                   --output "${ausgang}" --auto --right-of "${andere}" >/dev/null 2>&1
+        fi
     else
-        xrandr --output "${ausgang}" --primary --auto --pos 0x0 >/dev/null 2>&1
+        if [ -n "${gewaehlt}" ]; then
+            xrandr --output "${ausgang}" --mode "${gewaehlt}" --pos 0x0 >/dev/null 2>&1
+        else
+            xrandr --output "${ausgang}" --primary --auto --pos 0x0 >/dev/null 2>&1
+        fi
     fi
+}
+
+# Aus "Anzeigen" gemerkte Aufloesung fuer einen Ausgang, sonst leer.
+gewaehlte_aufloesung() {
+    local ausgang="$1" nummer="${ausgang#HDMI-}"
+    python3 - "${nummer}" <<'PY' 2>/dev/null
+import sys
+try:
+    import anzeige_fein
+    v = anzeige_fein.aufloesung(int(sys.argv[1]))
+    print(v if v else '')
+except Exception:
+    print('')
+PY
 }
 
 letzter_zustand=""
@@ -148,7 +176,14 @@ while true; do
             letzter_zustand="2-weg"
         fi
         if ausgang_bekannt HDMI-2; then
-            xrandr --output HDMI-2 --auto >/dev/null 2>&1 || true
+            # Eine gewaehlte Aufloesung bleibt - --auto wuerde sie aufs Maximum setzen.
+            local gewaehlt=""
+            gewaehlt="$(gewaehlte_aufloesung HDMI-2)"
+            if [ -n "${gewaehlt}" ]; then
+                xrandr --output HDMI-2 --mode "${gewaehlt}" >/dev/null 2>&1 || true
+            else
+                xrandr --output HDMI-2 --auto >/dev/null 2>&1 || true
+            fi
         fi
         xset dpms force on >/dev/null 2>&1 || true
 
