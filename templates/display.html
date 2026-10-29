@@ -55,6 +55,22 @@
   .note{color:var(--muted);font-size:.9rem;margin-top:.4rem}
   .tools-missing{margin-top:.8rem;color:var(--muted);font-size:.88rem}
   .tools-missing b{color:var(--text)}
+  /* Bildschirme & Auflösung */
+  .bildschirm-zeile{padding:.9rem 0;border-top:1px solid var(--border)}
+  .bildschirm-zeile:first-of-type{border-top:0}
+  .bkopf{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
+  .badge{font-size:.8rem;font-weight:700;padding:.15rem .55rem;border-radius:99px;
+    background:#EEF1F6;color:var(--navy)}
+  .badge.ok{background:#E6F4EA;color:#14532d}
+  .badge.weg{background:#F3F4F6;color:#6B7280}
+  .badge.warn{background:#FEF3C7;color:#92400E}
+  .aufloesung-form{display:flex;gap:.8rem;align-items:end;flex-wrap:wrap;margin-top:.6rem}
+  .aufloesung-form label.field{min-width:11rem}
+  .aufloesung-form label.check{display:flex;gap:.4rem;align-items:center;
+    font-size:.9rem;color:var(--text)}
+  .meldung{font-size:.9rem;margin-top:.4rem}
+  .meldung.ok{color:#14532d}
+  .meldung.fehler{color:#9C0006}
   .ersteinrichtung{background:#fff6e5;border:1px solid #e8c26a;border-radius:12px;
     padding:16px 20px;margin:0 0 20px;color:#4a3a12;line-height:1.55}
   .ersteinrichtung h3{margin:0 0 8px;font-size:1.1rem;color:#3d2f0c}
@@ -124,6 +140,73 @@
       Zurück zu dieser Seite kommt man über einen Neustart des Geräts.</div>
   </div>
   {% endif %}
+
+  <div class="card" id="bildschirme">
+    <header>
+      <h3>🖵 Bildschirme &amp; Auflösung</h3>
+      <span class="note">Was angeschlossen ist und worauf es läuft</span>
+    </header>
+
+    {% for b in bildschirme %}
+    <div class="bildschirm-zeile" data-ausgang="{{ b.ausgang }}">
+      <div class="bkopf">
+        <b>{{ b.ausgang }}</b>
+        {% if b.angeschlossen %}
+          <span class="badge ok">angeschlossen</span>
+        {% else %}
+          <span class="badge weg">kein Signal</span>
+        {% endif %}
+        {% if b.aktuell %}
+          <span class="badge">{{ b.aktuell }}</span>
+        {% endif %}
+        {% if b.angeschlossen and b.aktuell and not b.passt %}
+          <span class="badge warn">hochgerechnet</span>
+        {% endif %}
+      </div>
+
+      {% if b.fehler %}
+        <div class="note">{{ b.fehler }}</div>
+      {% elif not b.angeschlossen %}
+        <div class="note">Kein Gerät erkannt. Kabel prüfen oder Eingang am Bildschirm wählen.</div>
+      {% else %}
+        <div class="note">
+          {% if b.passt %}
+            Läuft in einer Auflösung, die der Bildschirm selbst meldet – scharf.
+          {% else %}
+            Der Bildschirm meldet andere Auflösungen. Ein Bild in {{ b.aktuell }}
+            wird hochgerechnet und deshalb unscharf.
+          {% endif %}
+        </div>
+        <form method="post" action="{{ url_for('display_aufloesung') }}"
+              class="aufloesung-form" data-ausgang="{{ b.ausgang }}">
+          <label class="field">
+            Auflösung
+            <select name="modus">
+              {% for m in b.modi %}
+                <option value="{{ m }}" {% if m == b.aktuell %}selected{% endif %}>
+                  {{ m }}{% if loop.first %} (nativ){% endif %}
+                </option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="check">
+            <input type="checkbox" name="dauerhaft" value="1" checked>
+            auch nach Neustart
+          </label>
+          <input type="hidden" name="ausgang" value="{{ b.ausgang }}">
+          <button class="btn" type="submit">Setzen</button>
+        </form>
+        <div class="meldung" data-fuer="{{ b.ausgang }}"></div>
+      {% endif %}
+    </div>
+    {% endfor %}
+
+    <div class="note">
+      „auch nach Neustart" schreibt die Auflösung in die Startzeile. Ohne das
+      gilt sie nur bis zum nächsten Neustart – beim Hochfahren, bevor die
+      Anzeige startet, kann der Bildschirm noch aus sein.
+    </div>
+  </div>
 
   <form method="post" action="{{ url_for('display_save') }}">
     <div class="card">
@@ -390,6 +473,44 @@ document.querySelectorAll('.card[data-screen]').forEach(function (karte) {
       knopf.disabled = false;
       knopf.textContent = alt;
       form.submit();
+    });
+  });
+})();
+
+// Auflösung setzen, ohne die Seite neu zu laden: Die Meldung erscheint an der
+// Zeile, und das Bild bleibt im Blick - sonst müsste man nach jedem Versuch
+// neu scrollen, um zu sehen, ob es besser geworden ist.
+(function () {
+  var formen = document.querySelectorAll('.aufloesung-form');
+  Array.prototype.forEach.call(formen, function (form) {
+    form.addEventListener('submit', function (ereignis) {
+      ereignis.preventDefault();
+      var knopf = form.querySelector('button[type=submit]');
+      var ziel = document.querySelector('.meldung[data-fuer="' + form.dataset.ausgang + '"]');
+      var alt = knopf.textContent;
+      knopf.disabled = true;
+      knopf.textContent = 'Setze …';
+
+      fetch(form.action, {
+        method: 'POST',
+        body: new FormData(form),
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'same-origin'
+      }).then(function (antwort) {
+        return antwort.json();
+      }).then(function (daten) {
+        knopf.disabled = false;
+        knopf.textContent = alt;
+        if (ziel) {
+          ziel.textContent = daten.meldung || '';
+          ziel.className = 'meldung ' + (daten.ok ? 'ok' : 'fehler');
+        }
+      }).catch(function () {
+        // Im Zweifel normal absenden - lieber neu laden als nichts tun.
+        knopf.disabled = false;
+        knopf.textContent = alt;
+        form.submit();
+      });
     });
   });
 })();

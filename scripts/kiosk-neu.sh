@@ -293,6 +293,12 @@ if [ -f "${REPO}/scripts/hdmi-wache.sh" ] && [ -f "${WACHE}" ]; then
     fi
 fi
 
+# Helfer fuer die Kernel-Zeile: Damit kann die Verwaltungsseite die
+# Aufloesung dauerhaft setzen, ohne dass jemand ins Terminal muss.
+if [ -f "${REPO}/scripts/lhtpi-cmdline.sh" ]; then
+    install -m 0755 "${REPO}/scripts/lhtpi-cmdline.sh" /usr/local/bin/lhtpi-cmdline.sh
+fi
+
 if [ -f "${REPO}/scripts/anzeige-rettung.sh" ]; then
     install -m 0755 "${REPO}/scripts/anzeige-rettung.sh" \
         /usr/local/bin/lhtpi-anzeige-rettung.sh 2>/dev/null || true

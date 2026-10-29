@@ -35,6 +35,10 @@ ${PI_USER} ALL=(root) NOPASSWD: ${SYSTEMCTL} restart terminboard.service
 ${PI_USER} ALL=(root) NOPASSWD: ${SYSTEMCTL} restart lhtpi.service
 ${PI_USER} ALL=(root) NOPASSWD: ${SYSTEMCTL} restart safetycross.service
 ${PI_USER} ALL=(root) NOPASSWD: /usr/local/bin/lhtpi-usb-rw.sh
+# Aufloesung dauerhaft setzen: erlaubt nur Ausgang und Modus, keine freien
+# Argumente - sonst waere die Regel ein Freifahrtschein fuer beliebige Befehle.
+${PI_USER} ALL=(root) NOPASSWD: /usr/local/bin/lhtpi-cmdline.sh HDMI-1 [0-9]*x[0-9]*
+${PI_USER} ALL=(root) NOPASSWD: /usr/local/bin/lhtpi-cmdline.sh HDMI-2 [0-9]*x[0-9]*
 EOF
 
 # visudo -c prueft die Syntax. Eine kaputte Datei in sudoers.d kann sudo

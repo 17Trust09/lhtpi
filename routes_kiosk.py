@@ -9,6 +9,7 @@ from flask_login import login_required
 from app import app
 import kiosk_router as router
 import kiosk_tools as tools
+import bildschirm_info
 import license_bundle as lic
 
 
@@ -68,7 +69,38 @@ def display():
         # Von selbst starten nur bei der Ersteinrichtung. Ist das Gerät fertig,
         # bleibt die Seite stehen, bis Tim 'Anzeige jetzt starten' drückt -
         # sonst nimmt ihm der Selbststart nach 30 s die Seite unter den Füßen weg.
-        autostart_sekunden=0 if eingerichtet else AUTOSTART_SEKUNDEN)
+        autostart_sekunden=0 if eingerichtet else AUTOSTART_SEKUNDEN,
+        # Welcher Bildschirm haengt dran, worauf laeuft er, was waere moeglich.
+        # Ohne das muss man fuer eine Aufloesung ins Terminal.
+        bildschirme=bildschirm_info.bildschirme())
+
+
+@app.route('/display/aufloesung', methods=['POST'])
+@login_required
+def display_aufloesung():
+    """Aufloesung setzen - sofort und auf Wunsch dauerhaft."""
+    ausgang = (request.form.get('ausgang') or '').strip()
+    modus = (request.form.get('modus') or '').strip()
+    dauerhaft = request.form.get('dauerhaft') == '1'
+
+    ok, meldung = bildschirm_info.setze_aufloesung(ausgang, modus)
+    if ok and dauerhaft:
+        ok2, meldung2 = bildschirm_info.dauerhaft_setzen(ausgang, modus)
+        meldung = meldung + ' ' + meldung2 if ok2 else meldung + ' Dauerhaft: ' + meldung2
+        ok = ok2
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'ok': ok, 'meldung': meldung,
+                        'bildschirme': [{'ausgang': b['ausgang'],
+                                         'aktuell': b.get('aktuell')}
+                                        for b in bildschirm_info.bildschirme()]})
+
+    # Das Fenster behaelt sonst die alte Groesse und sitzt klein in der Ecke -
+    # das sieht aus wie "immer noch unscharf".
+    if ok:
+        router.anzeige_neu_starten()
+    flash(meldung, 'ok' if ok else 'fehler')
+    return redirect(url_for('display'))
 
 
 @app.route('/anzeige/start', methods=['POST'])

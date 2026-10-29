@@ -2071,6 +2071,10 @@ installiere_pull_haken() {
 # Die Rettung nuetzt auch bei einem einzigen Bildschirm - sie wird deshalb
 # unabhaengig von der Bildschirmzahl installiert.
 installiere_anzeige_rettung() {
+    if [ -f "${SCRIPT_DIR}/scripts/lhtpi-cmdline.sh" ]; then
+        install -m 0755 "${SCRIPT_DIR}/scripts/lhtpi-cmdline.sh" \
+            /usr/local/bin/lhtpi-cmdline.sh
+    fi
     if [ -f "${SCRIPT_DIR}/scripts/anzeige-rettung.sh" ]; then
         install -m 0755 "${SCRIPT_DIR}/scripts/anzeige-rettung.sh" \
             /usr/local/bin/lhtpi-anzeige-rettung.sh && ok "Anzeige-Rettung installiert"
