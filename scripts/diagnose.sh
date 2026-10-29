@@ -156,6 +156,12 @@ journalctl -b -k --no-pager 2>/dev/null | grep -iE 'hdmi|drm.*connect|vc4' | tai
 titel "11. Bootparameter"
 grep -E "vc4-kms|hdmi_ignore|hdmi_force|disable_overscan" /boot/firmware/config.txt 2>/dev/null | sed 's/^/  /' || \
     echo "  (config.txt nicht lesbar)"
+# Die Kernel-Zeile entscheidet, ob ein Ausgang nach dem Standby wiederkommt.
+for cmd in /boot/firmware/cmdline.txt /boot/cmdline.txt; do
+    [ -f "${cmd}" ] || continue
+    eintrag="$(grep -o 'video=HDMI-A-[12]:[^ ]*' "${cmd}" 2>/dev/null | tr '\n' ' ')"
+    echo "  cmdline: ${eintrag:-KEIN video=-Eintrag (Bild bleibt nach Standby schwarz)}"
+done
 
 echo
 strich

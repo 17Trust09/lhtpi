@@ -2038,6 +2038,14 @@ main() {
     # Speichern, das nichts bewirkte, ein Waechter, der Gesundheit meldete,
     # waehrend das Bild schwarz war. "Installation abgeschlossen" hiess bisher
     # nicht "Geraet laeuft".
+    # Ausgaenge dauerhaft aktiv halten: Die Bildschirme gehen nachts aus, dabei
+    # faellt die Hotplug-Leitung weg und das Bild bleibt morgens schwarz.
+    if [ -f "${SCRIPT_DIR}/scripts/hdmi-fixieren.sh" ]; then
+        LHTPI_USER="${PI_USER}" bash "${SCRIPT_DIR}/scripts/hdmi-fixieren.sh" \
+            && ok "HDMI-Ausgaenge bleiben auch ohne Bildschirm aktiv" \
+            || warn "HDMI-Fixierung nicht gesetzt"
+    fi
+
     if [ -f "${SCRIPT_DIR}/scripts/selbsttest.sh" ]; then
         LHTPI_USER="${PI_USER}" bash "${SCRIPT_DIR}/scripts/selbsttest.sh" || true
     fi

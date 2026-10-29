@@ -131,6 +131,32 @@ else
     gelb "Kein git-Haken (kein Klon?) - git pull zieht nichts nach"
 fi
 
+# ── 6b. Ausgaenge dauerhaft aktiv? ──────────────────────────────────────
+# Ohne diesen Eintrag bleibt das Bild morgens schwarz, wenn der Bildschirm
+# ueber Nacht aus war - der haeufigste Ausfall bei diesem Geraet.
+cmds=""
+for kandidat in /boot/firmware/cmdline.txt /boot/cmdline.txt; do
+    [ -f "${kandidat}" ] && cmds="${kandidat}" && break
+done
+if [ -n "${cmds}" ]; then
+    if grep -q 'video=HDMI-A-1:' "${cmds}" 2>/dev/null; then
+        gruen "HDMI-Ausgang 1 dauerhaft aktiv ($(grep -o 'video=HDMI-A-1:[^ ]*' "${cmds}"))"
+    else
+        rot "kein video=HDMI-A-1 in cmdline.txt - Bild bleibt nach Standby schwarz"
+        echo "        Beheben: sudo bash /home/${PI_USER}/lhtpi/scripts/hdmi-fixieren.sh"
+    fi
+    if [ "${anzahl}" -ge 2 ]; then
+        if grep -q 'video=HDMI-A-2:' "${cmds}" 2>/dev/null; then
+            gruen "HDMI-Ausgang 2 dauerhaft aktiv ($(grep -o 'video=HDMI-A-2:[^ ]*' "${cmds}"))"
+        else
+            rot "kein video=HDMI-A-2 in cmdline.txt - Bild 2 bleibt nach Standby schwarz"
+            echo "        Beheben: sudo bash /home/${PI_USER}/lhtpi/scripts/hdmi-fixieren.sh"
+        fi
+    fi
+else
+    gelb "cmdline.txt nicht gefunden - Fixierung nicht pruefbar"
+fi
+
 # ── 7. Ausgabe am Bildschirm ─────────────────────────────────────────────
 export DISPLAY="${DISPLAY:-:0}"
 export XAUTHORITY="/home/${PI_USER}/.Xauthority"

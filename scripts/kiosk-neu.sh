@@ -235,6 +235,18 @@ else
     sag "config.txt nicht gefunden - HDMI-Audio nicht angepasst."
 fi
 
+# ── 2b2. Ausgaenge dauerhaft aktiv halten ─────────────────────────────────
+# Die Bildschirme gehen nachts aus. Dabei faellt die Hotplug-Leitung weg, der
+# Treiber meldet "disconnected", und morgens kommt kein Bild zurueck. xrandr
+# kann dann nichts richten - die Loesung steht in der Kernel-Kommandozeile.
+if [ -f "${REPO}/scripts/hdmi-fixieren.sh" ]; then
+    if LHTPI_USER="${PI_USER}" bash "${REPO}/scripts/hdmi-fixieren.sh" >/dev/null 2>&1; then
+        sag "HDMI-Ausgaenge dauerhaft aktiv (video= in cmdline.txt)."
+    else
+        sag "HDMI-Fixierung nicht gesetzt."
+    fi
+fi
+
 # ── 2c. Versionsdatei nachziehen ───────────────────────────────────────────
 # Sie wird von install.sh geschrieben und blieb deshalb nach einem reinen
 # git pull auf dem alten Stand - verwirrend, wenn man spaeter nachsieht.
