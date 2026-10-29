@@ -412,6 +412,26 @@ entkopple_ausgaenge() {
     [ -x /usr/local/bin/lhtpi-entkoppeln.sh ] && /usr/local/bin/lhtpi-entkoppeln.sh >> "$LOG" 2>&1 || true
 }
 
+# Skalierung dieses Bildschirms (1.0 = so gross, wie der Bildschirm es hergibt).
+# Kommt aus der Verwaltungsseite; ohne Eintrag bleibt es bei 1.0. Der Wert geht
+# an --force-device-scale-factor: Chromium zeichnet dann von Anfang an in dieser
+# Groesse. Das ist NICHT der Zoom im Browser - der zoomt eine fertige Seite und
+# macht sie unscharf.
+ermittle_skala() {
+    SKALA=$(python3 - "__IDX__" <<'PY' 2>/dev/null || echo 1.0
+import sys
+try:
+    import anzeige_fein
+    print('%.2f' % anzeige_fein.skala(int(sys.argv[1])))
+except Exception:
+    print('1.0')
+PY
+)
+    case "$SKALA" in
+        ''|*[!0-9.]*) SKALA=1.0 ;;
+    esac
+}
+
 ermittle_geometrie() {
     GEO=$(xrandr --current 2>/dev/null | awk -v m="$MON" \
           '$1==m && $2=="connected"{for(i=1;i<=NF;i++) if($i ~ /^[0-9]+x[0-9]+/){print $i; exit}}')
@@ -473,7 +493,7 @@ starte_chromium() {
     --window-position="${X},${Y}" \
     --window-size="${W},${H}" \
     --start-fullscreen \
-    --force-device-scale-factor=1 \
+    --force-device-scale-factor="$SKALA" \
     --noerrdialogs \
     --disable-infobars \
     --disable-session-crashed-bubble \
@@ -499,6 +519,7 @@ starte_chromium() {
 
 entkopple_ausgaenge
 ermittle_geometrie
+ermittle_skala
 LETZTE_GEO="${W}x${H}+${X}+${Y}"
 starte_chromium &
 PID=$!

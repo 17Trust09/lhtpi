@@ -198,6 +198,30 @@
         </form>
         <div class="meldung" data-fuer="{{ b.ausgang }}"></div>
       {% endif %}
+
+      {# Groesse der Seite: Das ist nicht der Zoom im Browser. Der zoomt eine
+         fertige Seite und macht sie weich; hier zeichnet Chromium von Anfang
+         an kleiner - das bleibt scharf. #}
+      {% set idx = loop.index %}
+      <form method="post" action="{{ url_for('display_skala') }}"
+            class="aufloesung-form skala-form" data-idx="{{ idx }}">
+        <label class="field">
+          Größe der Anzeige
+          <input type="number" name="skala" step="0.01"
+                 min="{{ '%.2f'|format(skala_min) }}"
+                 max="{{ '%.2f'|format(skala_max) }}"
+                 value="{{ '%.2f'|format(skalen[idx]) }}">
+          <small>1.00 = 100 %, scharf. Darunter wird mehr sichtbar,
+            darüber größer.</small>
+        </label>
+        <label class="check">
+          <input type="checkbox" name="neu_starten" value="1" checked>
+          Anzeige neu starten
+        </label>
+        <input type="hidden" name="idx" value="{{ idx }}">
+        <button class="btn" type="submit">Übernehmen</button>
+      </form>
+      <div class="meldung" data-skala="{{ idx }}"></div>
     </div>
     {% endfor %}
 
@@ -486,7 +510,10 @@ document.querySelectorAll('.card[data-screen]').forEach(function (karte) {
     form.addEventListener('submit', function (ereignis) {
       ereignis.preventDefault();
       var knopf = form.querySelector('button[type=submit]');
-      var ziel = document.querySelector('.meldung[data-fuer="' + form.dataset.ausgang + '"]');
+      var skalaForm = form.classList.contains('skala-form');
+      var ziel = skalaForm
+        ? document.querySelector('.meldung[data-skala="' + form.dataset.idx + '"]')
+        : document.querySelector('.meldung[data-fuer="' + form.dataset.ausgang + '"]');
       var alt = knopf.textContent;
       knopf.disabled = true;
       knopf.textContent = 'Setze …';

@@ -10,6 +10,7 @@ from app import app
 import kiosk_router as router
 import kiosk_tools as tools
 import bildschirm_info
+import anzeige_fein
 import license_bundle as lic
 
 
@@ -72,7 +73,12 @@ def display():
         autostart_sekunden=0 if eingerichtet else AUTOSTART_SEKUNDEN,
         # Welcher Bildschirm haengt dran, worauf laeuft er, was waere moeglich.
         # Ohne das muss man fuer eine Aufloesung ins Terminal.
-        bildschirme=bildschirm_info.bildschirme())
+        bildschirme=bildschirm_info.bildschirme(),
+        # Groesse der Seite je Bildschirm (kein Zoom): 1.00 = so gross, wie
+        # der Bildschirm es hergibt, also scharf.
+        skalen={idx: anzeige_fein.skala(idx) for idx in (1, 2)},
+        skala_min=anzeige_fein.SKALA_MIN,
+        skala_max=anzeige_fein.SKALA_MAX)
 
 
 @app.route('/display/aufloesung', methods=['POST'])
@@ -100,6 +106,38 @@ def display_aufloesung():
     if ok:
         router.anzeige_neu_starten()
     flash(meldung, 'ok' if ok else 'fehler')
+    return redirect(url_for('display'))
+
+
+@app.route('/display/skala', methods=['POST'])
+@login_required
+def display_skala():
+    """Skalierung eines Bildschirms setzen (Groesse der Seite, kein Zoom)."""
+    try:
+        idx = int(request.form.get('idx') or 0)
+    except ValueError:
+        idx = 0
+    wert = request.form.get('skala')
+
+    ok, meldung = anzeige_fein.setze_skala(idx, wert)
+    if not ok:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'ok': False, 'meldung': meldung})
+        flash(meldung, 'fehler')
+        return redirect(url_for('display'))
+
+    # Die Skalierung wird beim Start des Fensters uebergeben. Sie wirkt deshalb
+    # erst nach einem Neustart der Anzeige - dafuer ist sie dann scharf, weil
+    # Chromium von Anfang an in dieser Groesse zeichnet.
+    neu = False
+    if request.form.get('neu_starten') == '1':
+        neu = router.anzeige_neu_starten()
+        meldung = meldung + (' Anzeige neu gestartet.' if neu
+                             else ' Anzeige konnte nicht neu starten.')
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'ok': True, 'meldung': meldung, 'neu': neu})
+    flash(meldung, 'ok')
     return redirect(url_for('display'))
 
 
