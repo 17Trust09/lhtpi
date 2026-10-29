@@ -353,11 +353,14 @@ set -u
 # Monitor-Zuordnung: HDMI-1 primär links, HDMI-2 rechts daneben.
 # Eine in "Anzeigen" gewählte Auflösung hat Vorrang – sonst erzwingt --auto
 # immer die höchste (oft 4096x2160), und eine bewusste Auswahl wäre weg.
+# Direkt aus der Config lesen (kein import anzeige_fein): Dieses Skript läuft
+# mit beliebigem Arbeitsverzeichnis, ein Modul-Import würde dort scheitern.
 GEWAEHLT="$(python3 - "__IDX__" <<'PY' 2>/dev/null
+import json
 import sys
 try:
-    import anzeige_fein
-    v = anzeige_fein.aufloesung(int(sys.argv[1]))
+    daten = json.load(open('/etc/lhtpi/anzeige-fein.json'))
+    v = (daten.get(str(int(sys.argv[1]))) or {}).get('aufloesung')
     print(v if v else '')
 except Exception:
     print('')
@@ -444,10 +447,12 @@ entkopple_ausgaenge() {
 # macht sie unscharf.
 ermittle_skala() {
     SKALA=$(python3 - "__IDX__" <<'PY' 2>/dev/null || echo 1.0
+import json
 import sys
 try:
-    import anzeige_fein
-    print('%.2f' % anzeige_fein.skala(int(sys.argv[1])))
+    daten = json.load(open('/etc/lhtpi/anzeige-fein.json'))
+    v = (daten.get(str(int(sys.argv[1]))) or {}).get('skala', 1.0)
+    print('%.2f' % float(v))
 except Exception:
     print('1.0')
 PY

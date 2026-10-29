@@ -56,6 +56,36 @@ def _modi(zeilen, index):
     return modi
 
 
+def _edid_modi(ausgang):
+    """Nur die Aufloesungen, die der Bildschirm selbst meldet.
+
+    xrandr listet neben den EDID-Modi des Bildschirms auch eine lange
+    Standard-Liste (1280x720, 1024x768, ...), die der X-Server immer anbietet.
+    Ein Fernseher kann davon nur einen Bruchteil anzeigen - eine dort gewaehlte
+    Aufloesung quittiert er mit 'kein Signal'. Die EDID-Modi stehen im Kernel
+    unter /sys/class/drm/card*-<AUSGANG>/modes und sind genau die, die das
+    Geraet wirklich unterstuetzt.
+    """
+    import glob
+    modi = []
+    for pfad in glob.glob('/sys/class/drm/card*-%s/modes' % ausgang):
+        try:
+            with open(pfad, encoding='utf-8') as datei:
+                for zeile in datei:
+                    wert = zeile.strip()
+                    if wert and wert not in modi:
+                        modi.append(wert)
+        except OSError:
+            continue
+
+    def groesse(modus):
+        breite, hoehe = modus.split('x')
+        return int(breite) * int(hoehe)
+
+    modi.sort(key=lambda m: (m in UNUEBLICH, -groesse(m)))
+    return modi
+
+
 def bildschirme():
     """Was haengt dran, worauf laeuft es, was waere moeglich?
 
@@ -83,7 +113,13 @@ def bildschirme():
         angeschlossen = ' connected' in zeile
         treffer = re.search(r'(\d+x\d+)\+(\d+)\+(\d+)', zeile)
         aktuell = treffer.group(1) if treffer else None
-        modi = _modi(zeilen, index) if angeschlossen else []
+        # Nur EDID-Modi (was der Bildschirm wirklich kann), mit Fallback auf die
+        # xrandr-Liste, falls der Kernel sie nicht freigibt (z. B. Treiber ohne
+        # /sys/class/drm-Angaben). Die Standard-Modi von xrandr gehoeren NICHT
+        # in die Auswahl - ein Fernseher zeigt sie oft gar nicht an.
+        modi = (_edid_modi(ausgang) if angeschlossen else [])
+        if not modi and angeschlossen:
+            modi = _modi(zeilen, index)
 
         # Ist der laufende Modus der, den der Bildschirm als seinen eigenen
         # meldet? Nicht jeder angebotene Modus zaehlt: 720x400 steht in der

@@ -48,10 +48,11 @@ sag "Verbunden: $(echo ${verbunden:-keiner})"
 gewaehlt() {
     local nummer="${1#HDMI-}"
     python3 - "${nummer}" <<'PY' 2>/dev/null
+import json
 import sys
 try:
-    import anzeige_fein
-    v = anzeige_fein.aufloesung(int(sys.argv[1]))
+    daten = json.load(open('/etc/lhtpi/anzeige-fein.json'))
+    v = (daten.get(str(int(sys.argv[1]))) or {}).get('aufloesung')
     print(v if v else '')
 except Exception:
     print('')
