@@ -288,8 +288,13 @@ EOF
 # ihren Ausgang bereits; dieser Dienst ist die Rückfallebene für den Fall, dass
 # ein Fenster nicht mehr existiert.
 configure_screen2_watchdog() {
-    [ "${SCREEN_COUNT}" -ge 2 ] || return 0
-    log "Richte Wächter für Bildschirm 2 ein"
+    # Der Waechter ist NICHT mehr nur fuer Bildschirm 2 zustaendig: Er macht
+    # jetzt Auto-Hotplug (beim Anschliessen sofort die native Aufloesung) und
+    # uebernimmt den 30-s-Rollback-Timer fuer manuelle Wechsel. Deshalb muss er
+    # IMMER laufen - auch bei nur einem Bildschirm. Frueher sprang er nur bei
+    # zwei Bildschirmen an; wer das Geraet mit einem Bildschirm eingerichtet
+    # hatte, hatte danach keinen Auto-Hotplug und keinen Rollback.
+    log "Richte Waechter ein (Auto-Hotplug + Rollback)"
 
     local skript="/home/${PI_USER}/lhtpi-screen2-watch.sh"
     # Der Waechter liegt im Repository und wird hierher kopiert: so laesst er
