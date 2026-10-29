@@ -10,6 +10,7 @@ from models import db, User, Media, Playlist, PlaylistItem
 from usb_source import (find_usb_slides_dir, usb_items,
                         get_mode, get_manual_source, set_setting,
                         SETTING_MODE, SETTING_MANUAL_SOURCE)
+import upscale
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'mp4'}
 
@@ -331,6 +332,15 @@ def delete_media(id):
 
 @app.route('/uploads/<filename>')
 def uploaded_file(filename):
+    """Liefert eine hochgeladene Mediendatei, Bilder ggf. hochskaliert."""
+    if upscale.is_image(filename):
+        src_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        if os.path.isfile(src_path):
+            cached = upscale.upscale_image(src_path, app.config['UPLOAD_FOLDER'])
+            if cached and cached != src_path:
+                return send_from_directory(os.path.dirname(cached),
+                                           os.path.basename(cached),
+                                           mimetype='image/png')
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 
@@ -488,12 +498,31 @@ def kiosk():
 
 @app.route('/present/usb-file/<filename>')
 def usb_file(filename):
-    """Liefert eine Mediendatei direkt vom angeschlossenen USB-Stick aus."""
+    """Liefert eine Mediendatei direkt vom angeschlossenen USB-Stick aus.
+
+    Bilder werden dabei einmalig auf die Zielaufloesung hochskaliert (Lanczos)
+    und gecacht ausgeliefert, damit kleine PowerPoint-/PDF-Exporte auf einem
+    4K-Bildschirm scharf und flaechendenkend erscheinen - vollautomatisch, ohne
+    dass der Nutzer etwas hochskalieren oder hochladen muss.
+    """
     if not allowed_file(filename):
         abort(404)
     slides_dir = find_usb_slides_dir()
     if not slides_dir:
         abort(404)
+
+    src_path = os.path.join(slides_dir, filename)
+    if not os.path.isfile(src_path):
+        abort(404)
+
+    # Nur Bilder hochskalieren; Videos unveraendert vom Stick liefern.
+    if upscale.is_image(filename):
+        cached = upscale.upscale_image(src_path, app.config['UPLOAD_FOLDER'])
+        if cached and cached != src_path:
+            return send_from_directory(os.path.dirname(cached),
+                                       os.path.basename(cached),
+                                       mimetype='image/png')
+
     return send_from_directory(slides_dir, filename)
 
 
