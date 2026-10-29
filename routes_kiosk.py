@@ -31,6 +31,9 @@ def screen(idx):
     # Vorschau (aus der Verwaltung): zeigt an, welches Tool gerade dran ist.
     # Der Kiosk lädt die Seite ohne diesen Zusatz - dort bleibt alles ruhig.
     cfg['vorschau'] = request.args.get('vorschau') == '1'
+    # Skalierung dieses Bildschirms als CSS-Zoom: Die Aufloesung bleibt nativ
+    # (scharf), nur die Inhalte werden groesser/kleiner gerendert.
+    cfg['skala'] = anzeige_fein.skala(idx)
     return render_template('screen.html', cfg=cfg)
 
 

@@ -10,21 +10,26 @@ Zwei Werte, absichtlich getrennt:
 * **Aufloesung** (xrandr): welches Bild der Rechner ausgibt. Sie muss zu dem
   passen, was der Bildschirm kann. 720x400 auf einem 4K-Fernseher ergibt ein
   riesiges, hochgerechnetes Bild - deshalb der Zoom auf 33 %.
-* **Skalierung** (Chromium): wie gross die Seite im Verhaeltnis zur Flaeche
-  gezeichnet wird. 1.0 heisst: so gross wie der Bildschirm es hergibt.
+* **Skalierung** (CSS-Zoom auf der Kiosk-Seite): wie gross die Inhalte gezeichnet
+  werden. 1.0 heisst: so gross, wie die Seite es nativ hergibt. Der Wert bleibt
+  scharf, weil die Aufloesung nativ bleibt und nur die Elemente groesser/kleiner
+  gerendert werden.
 
-Der Zoom im Browser ist NICHT dasselbe wie die Skalierung hier: Der Browser
-zoomt eine fertig gezeichnete Seite (weich), die Skalierung zeichnet klein und
-scharf. Deshalb bleibt die Seite bei 1.0 scharf, auch wenn du die Aufloesung
-aenderst.
+Der Zoom im Browser (Strg +/-) ist NICHT dasselbe: Der Browser zoomt eine
+fertig gezeichnete Seite (weich), die Skalierung hier zeichnet in der richtigen
+Groesse und bleibt scharf. Deshalb ist Strg +/- ueberfluessig.
 """
 import json
 import os
 
-# Chromium: --force-device-scale-factor. Erlaubt ist ein enger Bereich - wer
-# 0.33 eintraegt, will zoomen, und genau das soll hier nicht passieren.
-SKALA_MIN = 0.8
-SKALA_MAX = 1.5
+# Skalierung der Anzeige (CSS-Zoom auf der Kiosk-Seite). Absichtlich ein weiter
+# Bereich: Auf einem 4K-Fernseher ist selbst 150 % noch klein, dort braucht man
+# oft 200-300 %. CSS-Zoom ist verlustfrei (die Aufloesung bleibt nativ, nur die
+# Elemente werden groesser neu gerendert) - deshalb darf der Bereich weit sein.
+# Frueher stand hier 0.8-1.5, weil der Wert an --force-device-scale-factor
+# ging, der bei != 1.0 Resampling und Unschaerfe einleitete.
+SKALA_MIN = 0.5
+SKALA_MAX = 3.0
 SKALA_STANDARD = 1.0
 
 

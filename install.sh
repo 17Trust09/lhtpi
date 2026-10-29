@@ -390,7 +390,12 @@ fi
 
 LOG="__LOG__"
 APP_URL="__APP_URL__"
-READY_URL="http://localhost:__PORT__/login"
+# Auf die EIGENE Seite warten, nicht auf /login: /login antwortet schon, wenn
+# die App steht, aber die Bildschirm-Datenbank koennte noch leer sein. Dann
+# zeigte Chromium kurz "Not Found" (404), bis die Ueberwachung neu laedt.
+# Auf /screen/<idx> zu warten heisst: Chromium startet erst, wenn die Seite
+# wirklich da ist - kein flackerndes "Not Found" mehr beim Hochfahren.
+READY_URL="http://localhost:__PORT__/screen/__IDX__"
 MON="__MON__"
 PROFILE="/home/pi/.config/chromium-screen__IDX__"
 
@@ -528,7 +533,7 @@ starte_chromium() {
     --window-position="${X},${Y}" \
     --window-size="${W},${H}" \
     --start-fullscreen \
-    --force-device-scale-factor="$SKALA" \
+    --device-scale-factor=1 \
     --noerrdialogs \
     --disable-infobars \
     --disable-session-crashed-bubble \
