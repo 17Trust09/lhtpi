@@ -81,6 +81,29 @@ for ausgang in HDMI-1 HDMI-2; do
     echo
 done
 
+# ── Alte Zwangszeilen in config.txt ──────────────────────────────────────
+# hdmi_mode/hdmi_group stammen vom alten Videotreiber und legen die Aufloesung
+# fest, bevor der Bildschirm ueberhaupt gefragt wird. Mit KMS sind sie falsch
+# und erzeugen genau das Bild, das hier auffaellt: klein und hochgerechnet.
+# framebuffer_width/height tun dasselbe auf anderem Weg.
+CONFIG=""
+for kandidat in /boot/firmware/config.txt /boot/config.txt; do
+    [ -f "${kandidat}" ] && CONFIG="${kandidat}" && break
+done
+if [ -n "${CONFIG}" ]; then
+    altlasten="$(grep -nE '^[[:space:]]*(hdmi_group|hdmi_mode|hdmi_force_hotplug|framebuffer_width|framebuffer_height|hdmi_cvt)' "${CONFIG}" 2>/dev/null)"
+    if [ -n "${altlasten}" ]; then
+        echo "Alte Zwangszeilen in ${CONFIG}:"
+        printf '%s\n' "${altlasten}" | sed 's/^/  /'
+        echo
+        echo "  Diese Zeilen legen die Aufloesung fest, bevor der Bildschirm"
+        echo "  gefragt wird. Mit dem KMS-Treiber sind sie falsch und erklaeren"
+        echo "  ein kleines, hochgerechnetes Bild. Entfernen mit:"
+        echo "    sudo bash scripts/hdmi-fixieren.sh --altlasten"
+        echo
+    fi
+fi
+
 # ── Prozessorgeschwindigkeit: was ist ueberhaupt moeglich? ───────────────
 echo "Geraet:"
 if [ -f /proc/device-tree/model ]; then
@@ -100,6 +123,7 @@ fi
 if [ "${SETZEN}" = "1" ]; then
     echo
     echo "===== Setzen ====="
+    geaendert=0
     for ausgang in HDMI-1 HDMI-2; do
         xrandr --query | grep -qE "^${ausgang} connected" || continue
         nativ="$(xrandr --query | sed -n "/^${ausgang} connected/,/^[^ ]/p" \
@@ -108,10 +132,25 @@ if [ "${SETZEN}" = "1" ]; then
         [ -n "${nativ}" ] || continue
         if xrandr --output "${ausgang}" --mode "${nativ}" >/dev/null 2>&1; then
             sag "${ausgang} auf ${nativ} gesetzt."
+            geaendert=1
         else
             sag "${ausgang}: ${nativ} liess sich nicht setzen."
         fi
     done
+
+    # Die Kiosk-Fenster wurden mit der alten Groesse gestartet. Ohne Neustart
+    # sitzt das Bild in einem kleinen Fenster in der Ecke - das sieht aus wie
+    # "immer noch unscharf".
+    if [ "${geaendert}" = "1" ]; then
+        echo
+        sag "Kiosk-Fenster neu starten, damit sie die neue Groesse bekommen ..."
+        for dienst in kiosk-screen1 kiosk-screen2; do
+            systemctl is-active --quiet "${dienst}.service" 2>/dev/null || continue
+            sudo -n systemctl restart "${dienst}.service" >/dev/null 2>&1 \
+                && sag "${dienst} neu gestartet." \
+                || sag "${dienst} konnte nicht neu starten (ohne sudo ausgefuehrt?)"
+        done
+    fi
 fi
 
 # ── Dauerhaft ─────────────────────────────────────────────────────────────

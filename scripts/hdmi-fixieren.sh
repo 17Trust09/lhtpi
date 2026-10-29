@@ -25,7 +25,9 @@
 set -u
 
 ENTFERNEN=0
+ALLASTEN=0
 [ "${1:-}" = "--entfernen" ] && ENTFERNEN=1
+[ "${1:-}" = "--altlasten" ] && ALLASTEN=1
 
 [ "$(id -u)" = "0" ] || { echo "Bitte mit sudo starten: sudo bash $0"; exit 1; }
 
@@ -96,6 +98,36 @@ schreibe_video() {
     inhalt="$(tr -d '\n' < "${datei}")"
     printf '%s %s\n' "${inhalt}" "$*" > "${datei}"
 }
+
+# ── Alte Aufloesungs-Zwangszeilen entfernen ──────────────────────────────
+# hdmi_group/hdmi_mode/framebuffer_* kommen vom Legacy-Treiber. Mit KMS legen
+# sie die Aufloesung fest, bevor der Bildschirm gefragt wird - das Ergebnis ist
+# ein kleines, hochgerechnetes Bild (typisch 720x480 bei einem 4K-Schirm).
+if [ "${ALLASTEN}" = "1" ]; then
+    [ -n "${CONFIG}" ] || { echo "config.txt nicht gefunden."; exit 1; }
+    sicherung="${CONFIG}.vor-lhtpi-$(date +%Y%m%d%H%M%S)"
+    cp -a "${CONFIG}" "${sicherung}" 2>/dev/null || true
+    sag "Sicherung: ${sicherung}"
+
+    geaendert=0
+    for zeile in hdmi_group hdmi_mode hdmi_force_hotplug hdmi_drive hdmi_cvt \
+                 framebuffer_width framebuffer_height framebuffer_depth; do
+        if grep -qE "^[[:space:]]*#?[[:space:]]*${zeile}=" "${CONFIG}"; then
+            sed -i -E "/^[[:space:]]*#?[[:space:]]*${zeile}=/d" "${CONFIG}"
+            sag "entfernt: ${zeile}"
+            geaendert=1
+        fi
+    done
+
+    if [ "${geaendert}" = "0" ]; then
+        sag "keine alten Zwangszeilen gefunden - nichts zu tun."
+    else
+        echo
+        echo "  Danach neu starten:  sudo reboot"
+        echo "  Der Bildschirm meldet seine Aufloesung dann selbst."
+    fi
+    exit 0
+fi
 
 if [ "${ENTFERNEN}" = "1" ]; then
     entferne_video "${CMDLINE}"
