@@ -46,6 +46,9 @@ fi
 # Fehlt es, verbindet er sich je nach Kanal gar nicht - und es sieht aus wie
 # ein kaputtes WLAN-Profil.
 titel "Laendercode"
+# Nur die erste vorhandene Datei pruefen und dann abbrechen: Auf manchen
+# Geraeten liegen beide Pfade, und /boot/cmdline.txt ist eine alte Kopie ohne
+# den Eintrag. Ohne break meldet das Skript dann faelschlich ein Problem.
 for cmd in /boot/firmware/cmdline.txt /boot/cmdline.txt; do
     [ -f "${cmd}" ] || continue
     if grep -q 'cfg80211.ieee80211_regdom' "${cmd}" 2>/dev/null; then
@@ -64,6 +67,7 @@ for cmd in /boot/firmware/cmdline.txt /boot/cmdline.txt; do
             sag "Bitte in raspi-config setzen: 5 Localisation Options -> L4 WLAN Country"
         fi
     fi
+    break
 done
 iw reg get 2>/dev/null | head -3 | sed 's/^/  /' || true
 
