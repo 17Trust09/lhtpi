@@ -127,55 +127,6 @@ def _xrandr(*args, timeout=15):
         return None if fehler else None
 
 
-def _modi(zeilen, index):
-    """Modi aus dem Block eines Ausgangs, groesster zuerst."""
-    modi = []
-    for zeile in zeilen[index + 1:]:
-        if zeile and not zeile.startswith(' '):
-            break
-        treffer = re.match(r'\s+(\d+x\d+)', zeile)
-        if treffer and treffer.group(1) not in modi:
-            modi.append(treffer.group(1))
-
-    def groesse(modus):
-        breite, hoehe = modus.split('x')
-        return int(breite) * int(hoehe)
-
-    # Unuebliche Formate nach hinten, sonst absteigend nach Flaeche.
-    modi.sort(key=lambda m: (m in UNUEBLICH, -groesse(m)))
-    return modi
-
-
-def _edid_modi(ausgang):
-    """Nur die Aufloesungen, die der Bildschirm selbst meldet.
-
-    xrandr listet neben den EDID-Modi des Bildschirms auch eine lange
-    Standard-Liste (1280x720, 1024x768, ...), die der X-Server immer anbietet.
-    Ein Fernseher kann davon nur einen Bruchteil anzeigen - eine dort gewaehlte
-    Aufloesung quittiert er mit 'kein Signal'. Die EDID-Modi stehen im Kernel
-    unter /sys/class/drm/card*-<AUSGANG>/modes und sind genau die, die das
-    Geraet wirklich unterstuetzt.
-    """
-    import glob
-    modi = []
-    for pfad in glob.glob('/sys/class/drm/card*-%s/modes' % ausgang):
-        try:
-            with open(pfad, encoding='utf-8') as datei:
-                for zeile in datei:
-                    wert = zeile.strip()
-                    if wert and wert not in modi:
-                        modi.append(wert)
-        except OSError:
-            continue
-
-    def groesse(modus):
-        breite, hoehe = modus.split('x')
-        return int(breite) * int(hoehe)
-
-    modi.sort(key=lambda m: (m in UNUEBLICH, -groesse(m)))
-    return modi
-
-
 def bildschirme():
     """Was haengt dran, worauf laeuft es, was waere moeglich?
 
