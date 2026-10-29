@@ -157,6 +157,18 @@ else
     gelb "cmdline.txt nicht gefunden - Fixierung nicht pruefbar"
 fi
 
+# ── 6c. WLAN, falls eingerichtet ────────────────────────────────────────
+profile_wlan="$(nmcli -t -f NAME,TYPE connection show 2>/dev/null | awk -F: '$2=="wifi"{print $1}' | head -1)"
+if [ -n "${profile_wlan}" ]; then
+    wlan_zustand="$(nmcli -t -f DEVICE,TYPE,STATE device 2>/dev/null | awk -F: '$2=="wifi"{print $3; exit}')"
+    if [ "${wlan_zustand}" = "connected" ]; then
+        gruen "WLAN verbunden (${profile_wlan})"
+    else
+        gelb "WLAN-Profil '${profile_wlan}' vorhanden, aber nicht verbunden"
+        echo "        Pruefen: sudo bash /home/${PI_USER}/lhtpi/scripts/wlan-reparieren.sh"
+    fi
+fi
+
 # ── 7. Ausgabe am Bildschirm ─────────────────────────────────────────────
 export DISPLAY="${DISPLAY:-:0}"
 export XAUTHORITY="/home/${PI_USER}/.Xauthority"
