@@ -104,10 +104,41 @@ fi
 titel "Profile"
 profile="$(nmcli -t -f NAME,TYPE connection show 2>/dev/null | awk -F: '$2=="wifi"{print $1}')"
 if [ -z "${profile}" ]; then
-    echo "  Kein WLAN-Profil gespeichert. Dann kann er sich nicht automatisch"
-    echo "  verbinden - es gibt nichts, womit."
+    echo "  Kein NetworkManager-Profil fuer WLAN."
     echo
-    echo "  Einrichten:  sudo raspi-config  ->  1 System Options  ->  S1 Wireless LAN"
+
+    # Das Geraet kann trotzdem verbunden sein - dann laeuft die Verbindung
+    # an NetworkManager vorbei, typischerweise ueber die alte
+    # /etc/wpa_supplicant/wpa_supplicant.conf. In dem Fall gibt es nichts,
+    # was sich automatisch verbinden koennte: kein Profil, kein Autoconnect.
+    aktiv="$(nmcli -t -f GENERAL.CONNECTION device show "${wlan}" 2>/dev/null | cut -d: -f2-)"
+    ssid="$(iwgetid -r 2>/dev/null || true)"
+    echo "  Verbunden mit:  ${ssid:-unbekannt}"
+    echo "  Laut NetworkManager: ${aktiv:-nichts}"
+    echo
+
+    if [ -f /etc/wpa_supplicant/wpa_supplicant.conf ]; then
+        echo "  Gefunden: /etc/wpa_supplicant/wpa_supplicant.conf (alte Verwaltung)"
+        grep -E '^[[:space:]]*ssid=' /etc/wpa_supplicant/wpa_supplicant.conf 2>/dev/null \
+            | sed 's/^/    /' || true
+        echo
+        echo "  Diese Datei kennt kein 'automatisch verbinden' - sie wird beim"
+        echo "  Start von dhcpcd gelesen. Wenn es trotzdem nicht klappt, liegt es"
+        echo "  an dhcpcd oder am Profil selbst, nicht an NetworkManager."
+        echo
+        echo "  Sauberer Weg: ein NetworkManager-Profil anlegen, dann gibt es"
+        echo "  Autoconnect und Prioritaeten:"
+        echo "    sudo nmcli device wifi connect \"DEIN-HOTSPOT\" password \"PASSWORT\""
+    else
+        echo "  Keine wpa_supplicant.conf und kein Profil - dann ist nichts"
+        echo "  gespeichert, was sich verbinden koennte."
+        echo
+        echo "  Einrichten:"
+        echo "    sudo nmcli device wifi connect \"DEIN-HOTSPOT\" password \"PASSWORT\""
+    fi
+    echo
+    echo "  Verfuegbare Netze:"
+    nmcli device wifi list 2>/dev/null | head -8 | sed 's/^/    /'
     exit 1
 fi
 
