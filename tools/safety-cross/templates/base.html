@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Safety Cross – Lufthansa Technik</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ version }}">
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
 <nav class="tabbar">
   <div class="brand"><span>LUFTHANSA</span></div>
   <a class="tab {% if active_tab == 'anzeige' %}active{% endif %}" href="{{ url_for('board') }}">Anzeige</a>

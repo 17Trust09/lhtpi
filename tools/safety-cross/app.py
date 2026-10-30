@@ -47,6 +47,24 @@ WEEKDAYS_DE = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samst
 STATUS_LABEL = {"green": "Unfallfrei", "yellow": "Beinahe-Unfall", "red": "Unfall"}
 
 
+def _css_version():
+    """Cache-Bust fuer style.css: aendert sich, sobald die Datei neu ist.
+
+    Ohne diesen Parameter cached Chromium die alte style.css (die URL bleibt
+    gleich) und zeigt nach einem Update weiterhin die alten Pixelgroessen.
+    """
+    try:
+        return str(int(os.path.getmtime(os.path.join(app.static_folder, "style.css"))))
+    except OSError:
+        return "1"
+
+
+@app.context_processor
+def _inject_version():
+    """Stellt ``version`` (CSS-Cache-Bust) in allen Templates bereit."""
+    return {"version": _css_version()}
+
+
 # ---------- Lizenz-Gate ----------
 
 @app.before_request

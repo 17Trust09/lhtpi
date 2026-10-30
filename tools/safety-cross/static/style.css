@@ -13,13 +13,20 @@
     --shadow:0 4px 18px rgba(5,22,77,.08);
   }
   *{box-sizing:border-box;margin:0;padding:0}
-  html,body{height:100%}
+  html,body{height:100%;width:100%}
   body{
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
     background:var(--bg);
     color:var(--ink);
     -webkit-font-smoothing:antialiased;
   }
+
+  /* Kiosk-Ansicht (nur Anzeige): body als Flex-Spalte, damit der Inhalt die
+     volle Hoehe fuellt - zuverlaessig auch im iframe (wo vh unsicher sein
+     kann). Die Admin-Tabbar wird ausgeblendet, sie gehoert nicht in die
+     Anzeige. */
+  body.kiosk{display:flex;flex-direction:column;height:100%;overflow:hidden}
+  body.kiosk .tabbar{display:none}
 
   /* ===== TAB BAR ===== */
   .tabbar{
@@ -56,6 +63,7 @@
     color:#fff;
     padding:1.6vw 2.4vw;
     display:flex;align-items:center;justify-content:space-between;gap:1.2vw;
+    flex:none;
   }
   .kiosk-header .left{display:flex;align-items:center;gap:1.2vw}
   .kiosk-title h1{font-size:2.8vw;font-weight:800;letter-spacing:.01em;line-height:1}
@@ -92,7 +100,7 @@
   .kiosk-body{
     display:grid;grid-template-columns:24vw 1fr;gap:1.7vw;
     padding:1.8vw 2.4vw 2.2vw;align-items:start;
-    height:calc(100vh - 5.6vw);box-sizing:border-box;
+    flex:1;min-height:0;box-sizing:border-box;
   }
 
   /* Ersthelfer */
