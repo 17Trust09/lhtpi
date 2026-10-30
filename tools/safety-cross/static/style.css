@@ -98,8 +98,9 @@
   }
 
   .kiosk-body{
-    display:grid;grid-template-columns:24vw 1fr;gap:1.7vw;
-    padding:1.8vw 2.4vw 2.2vw;align-items:start;
+    display:grid;grid-template-columns:24vw 1fr;grid-template-rows:minmax(0,1fr);
+    gap:1.7vw;
+    padding:1.8vw 2.4vw 2.2vw;align-items:stretch;
     flex:1;min-height:0;box-sizing:border-box;
   }
 
@@ -154,14 +155,14 @@
     background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow);
     padding:1.7vw;border-top:.35vw solid var(--navy);
     display:flex;flex-direction:column;
-    height:100%;box-sizing:border-box;
+    height:100%;min-height:0;box-sizing:border-box;overflow:hidden;
   }
   .cross-panel .month-title{
     font-size:1.7vw;font-weight:800;color:var(--navy);margin-bottom:1.1vw;
-    display:flex;align-items:baseline;gap:.7vw;
+    display:flex;align-items:baseline;gap:.7vw;flex:none;
   }
   .cross-panel .month-title small{color:var(--muted);font-weight:500;font-size:1vw}
-  .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:.85vw;flex:1;align-content:stretch}
+  .grid{display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:minmax(0,1fr);gap:.85vw;flex:1;align-content:stretch}
   .grid>*{display:grid;place-items:center}
   .dow{text-align:center;font-size:.95vw;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;padding-bottom:.4vw}
   .day{
@@ -169,7 +170,9 @@
     display:grid;place-items:center;
     font-size:1.7vw;font-weight:800;color:#fff;
     position:relative;cursor:default;user-select:none;
-    max-width:9vw;max-height:9vw;margin:0 auto;width:100%;height:100%;
+    /* Quadratisch, aber die Hoehe folgt der Reihenhoehe (1fr), damit das
+       Raster die verfuegbare Hoehe fuellt statt sie zu sprengen. */
+    height:100%;width:auto;justify-self:center;
   }
   .day.green{
     background:linear-gradient(180deg,#55cc76,#2E9E4F);

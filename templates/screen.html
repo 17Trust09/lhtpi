@@ -63,19 +63,6 @@
 </style>
 </head>
 <body>
-<script>
-/* Automatische Groesse: fester Zoom ({{ cfg.skala_auto_zoom }} = 150 %), damit
-   die Anzeige auf jedem Geraet gleich gross ist - nicht 'Breite fuellen'. Erst
-   wenn der Nutzer den Groesse-Regler bewegt, gilt sein fester Wert. CSS-Zoom
-   bleibt scharf: die Aufloesung bleibt nativ, nur die Elemente werden
-   groesser/kleiner gerendert. */
-(function () {
-  var auto = {{ cfg.skala_auto|tojson }};
-  var fest = {{ cfg.skala_auto_zoom }};
-  var manuell = {{ cfg.skala }};
-  document.body.style.zoom = auto ? fest : manuell;
-})();
-</script>
 <div id="stage"></div>
 <div id="hint" hidden></div>
 <div id="badge" hidden></div>
