@@ -351,7 +351,9 @@ def _systembefehl(ziel):
     if not router.systembefehl(ziel):
         # Die Kiosk-Fenster sind schon geschlossen: Anzeige wieder hochfahren
         # (derselbe Weg wie „Anzeige starten" - der Pfad-Wächter übernimmt).
-        router.anzeige_neu_starten()
+        # Verzoegert: synchron waere Chromium mitten im laufenden Request neu
+        # gestartet worden - genau das erzeugt das sporadische 'Not Found'.
+        router.anzeige_neu_starten_verzoegert()
         return ('', 500)
     return ('', 204)
 
