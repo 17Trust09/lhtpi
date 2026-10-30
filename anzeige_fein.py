@@ -32,14 +32,14 @@ SKALA_MIN = 0.5
 SKALA_MAX = 3.0
 SKALA_STANDARD = 1.0
 
-# Fester Default-Zoom im Automatik-Modus. Tim empfindet 150 % (1.5) auf seinen
-# Bildschirmen als 'richtig' - auch auf 4K (4096x2160). Eine 'Breite fuellen'-
-# Formel (Bildschirmbreite / Referenz) war falsch: auf 4K waere daraus 3.2x
-# geworden, viel zu gross. Stattdessen gilt ein FESTER Zoom, damit die Anzeige
-# auf jedem Geraet gleich gross ist (gleiche Pixelgroesse, angenehme Lesbarkeit)
-# statt die volle Breite zu fuellen. Der Nutzer kann den Wert ueber den
-# Groesse-Regler jederzeit ueberschreiben.
-SKALA_AUTO_ZOOM = 1.5
+# Fester Default-Zoom im Automatik-Modus. Die Kiosk-Tools (v.a. Safety Cross)
+# sind inzwischen responsive: sie fuellen den Bildschirm bei 100 % (1.0) von
+# selbst, unabhaengig von der Aufloesung. Ein fester Zoom > 1.0 wuerde das
+# responsive Layout wieder ueber den Bildschirmrand aufblasen. Also 1.0 = keine
+# zusaetzliche Vergroesserung; das Tool selbst regelt seine Groesse. Der
+# Groesse-Regler bleibt als manueller Notbehelf erhalten (z. B. wenn eine
+# einzelne Anzeige optisch kleiner/grösser wirken soll).
+SKALA_AUTO_ZOOM = 1.0
 
 
 def _pfad():
