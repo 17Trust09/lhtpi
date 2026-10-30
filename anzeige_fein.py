@@ -32,6 +32,14 @@ SKALA_MIN = 0.5
 SKALA_MAX = 3.0
 SKALA_STANDARD = 1.0
 
+# Referenzbreite der Kiosk-Tools (Safety Cross, Terminboard, Folien). Die Tools
+# sind fuer ~1280 px Breite gestaltet (Sidebar + Kalendergrid). Im Automatik-
+# Modus skaliert die Kiosk-Seite deshalb mit ``zoom = Bildschirmbreite / 1280``,
+# damit eine auf 1280 px gestaltete Seite den Bildschirm voll ausfuellt - egal
+# ob 720p, 1080p oder 4K. Genau das war der Wunsch: anschliessen => ausfuellen,
+# ohne selbst skalieren zu muessen.
+SKALA_AUTO_REFERENZ = 1280
+
 
 def _pfad():
     basis = os.environ.get('LHTPI_CONFIG_DIR') or '/etc/lhtpi'
@@ -79,6 +87,7 @@ def setze_skala(idx, wert):
     daten = _lesen()
     eintrag = daten.setdefault(str(int(idx)), {})
     eintrag['skala'] = wert
+    eintrag['skala_auto'] = False  # manueller Eingriff schaltet die Automatik ab
     try:
         _schreiben(daten)
     except OSError as fehler:
@@ -89,6 +98,30 @@ def setze_skala(idx, wert):
 def aufloesung(idx):
     """Zuletzt gesetzte Aufloesung fuer Bildschirm idx, oder None."""
     return _lesen().get(str(idx), {}).get('aufloesung')
+
+
+def skala_auto(idx):
+    """Ob Bildschirm idx die Groesse automatisch fuellt (Standard: ja).
+
+    Im Automatik-Modus skaliert die Kiosk-Seite mit ``zoom = Bildschirmbreite /
+    Referenzbreite``. Erst wenn der Nutzer den Groesse-Regler selbst bewegt,
+    wird auf 'manuel' umgeschaltet.
+    """
+    wert = _lesen().get(str(idx), {}).get('skala_auto', True)
+    return bool(wert)
+
+
+def setze_skala_auto(idx, wert):
+    """Setzt Automatik (True) oder manuell (False). Liefert (ok, meldung)."""
+    daten = _lesen()
+    eintrag = daten.setdefault(str(int(idx)), {})
+    eintrag['skala_auto'] = bool(wert)
+    try:
+        _schreiben(daten)
+        return True, 'Groesse fuer Bildschirm %d: %s' % (
+            int(idx), 'automatisch' if wert else 'manuell')
+    except OSError as fehler:
+        return False, 'Nicht speicherbar: %s' % fehler
 
 
 def setze_aufloesung(idx, modus):

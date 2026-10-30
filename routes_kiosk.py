@@ -34,6 +34,11 @@ def screen(idx):
     # Skalierung dieses Bildschirms als CSS-Zoom: Die Aufloesung bleibt nativ
     # (scharf), nur die Inhalte werden groesser/kleiner gerendert.
     cfg['skala'] = anzeige_fein.skala(idx)
+    # Automatik: die Kiosk-Seite fuellt den Bildschirm von selbst
+    # (zoom = Bildschirmbreite / Referenzbreite). Erst wenn der Nutzer den
+    # Groesse-Regler bewegt, gilt sein fester Wert.
+    cfg['skala_auto'] = anzeige_fein.skala_auto(idx)
+    cfg['skala_referenz'] = anzeige_fein.SKALA_AUTO_REFERENZ
     return render_template('screen.html', cfg=cfg)
 
 
@@ -86,6 +91,7 @@ def display():
         # Groesse der Seite je Bildschirm (kein Zoom): 1.00 = so gross, wie
         # der Bildschirm es hergibt, also scharf.
         skalen={idx: anzeige_fein.skala(idx) for idx in (1, 2)},
+        skala_auto={idx: anzeige_fein.skala_auto(idx) for idx in (1, 2)},
         skala_min=anzeige_fein.SKALA_MIN,
         skala_max=anzeige_fein.SKALA_MAX)
 
@@ -204,6 +210,33 @@ def display_skala():
     # Chromium von Anfang an in dieser Groesse zeichnet. VERZOEGERT neu starten,
     # damit Chromium nicht mitten in der laufenden Anfrage laedt (-> 'Not Found').
     if request.form.get('neu_starten') == '1':
+        router.anzeige_neu_starten_verzoegert()
+        meldung = meldung + ' Anzeige wird neu gestartet.'
+
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({'ok': True, 'meldung': meldung, 'neu': True})
+    flash(meldung, 'ok')
+    return redirect(url_for('display'))
+
+
+@app.route('/display/skala-auto', methods=['POST'])
+@login_required
+def display_skala_auto():
+    """Groesse eines Bildschirms auf 'automatisch' stellen (fuellt von selbst)."""
+    try:
+        idx = int(request.form.get('idx') or 0)
+    except ValueError:
+        idx = 0
+    neu_starten = request.form.get('neu_starten') == '1'
+
+    ok, meldung = anzeige_fein.setze_skala_auto(idx, True)
+    if not ok:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'ok': False, 'meldung': meldung})
+        flash(meldung, 'fehler')
+        return redirect(url_for('display'))
+
+    if neu_starten:
         router.anzeige_neu_starten_verzoegert()
         meldung = meldung + ' Anzeige wird neu gestartet.'
 

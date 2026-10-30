@@ -214,8 +214,9 @@
                  min="{{ '%.2f'|format(skala_min) }}"
                  max="{{ '%.2f'|format(skala_max) }}"
                  value="{{ '%.2f'|format(skalen[idx]) }}">
-          <small>1.00 = 100 %, scharf. Darunter wird mehr sichtbar,
-            darüber größer.</small>
+          <small>{% if skala_auto[idx] %}Automatisch – füllt die Breite von
+            selbst aus. Erst ein hier gesetzter Wert schaltet auf manuell um.{% else %}
+            1.00 = 100 %, scharf. Darunter wird mehr sichtbar, darüber größer.{% endif %}</small>
         </label>
         <label class="check">
           <input type="checkbox" name="neu_starten" value="1" checked>
@@ -224,6 +225,14 @@
         <input type="hidden" name="idx" value="{{ idx }}">
         <button class="btn" type="submit">Übernehmen</button>
       </form>
+      {% if not skala_auto[idx] %}
+      <form method="post" action="{{ url_for('display_skala_auto') }}"
+            data-idx="{{ idx }}">
+        <input type="hidden" name="idx" value="{{ idx }}">
+        <input type="hidden" name="neu_starten" value="1">
+        <button class="btn" type="submit">Automatisch (füllt aus)</button>
+      </form>
+      {% endif %}
       <div class="meldung" data-skala="{{ idx }}"></div>
     </div>
     {% endfor %}
