@@ -64,20 +64,16 @@
 </head>
 <body>
 <script>
-/* Automatische Groesse: die Kiosk-Tools sind fuer ~{{ cfg.skala_referenz }}px
-   Breite gestaltet. Im Automatik-Modus fuellt die Anzeige den Bildschirm von
-   selbst (zoom = Bildschirmbreite / Referenzbreite). Erst wenn der Nutzer den
-   Regler bewegt, gilt sein fester Wert. CSS-Zoom bleibt scharf: die Aufloesung
-   bleibt nativ, nur die Elemente werden groesser/kleiner gerendert. */
+/* Automatische Groesse: fester Zoom ({{ cfg.skala_auto_zoom }} = 150 %), damit
+   die Anzeige auf jedem Geraet gleich gross ist - nicht 'Breite fuellen'. Erst
+   wenn der Nutzer den Groesse-Regler bewegt, gilt sein fester Wert. CSS-Zoom
+   bleibt scharf: die Aufloesung bleibt nativ, nur die Elemente werden
+   groesser/kleiner gerendert. */
 (function () {
   var auto = {{ cfg.skala_auto|tojson }};
-  var referenz = {{ cfg.skala_referenz }};
+  var fest = {{ cfg.skala_auto_zoom }};
   var manuell = {{ cfg.skala }};
-  function anwenden() {
-    document.body.style.zoom = auto ? (window.innerWidth / referenz) : manuell;
-  }
-  anwenden();
-  if (auto) window.addEventListener('resize', anwenden);
+  document.body.style.zoom = auto ? fest : manuell;
 })();
 </script>
 <div id="stage"></div>

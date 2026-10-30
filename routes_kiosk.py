@@ -34,11 +34,11 @@ def screen(idx):
     # Skalierung dieses Bildschirms als CSS-Zoom: Die Aufloesung bleibt nativ
     # (scharf), nur die Inhalte werden groesser/kleiner gerendert.
     cfg['skala'] = anzeige_fein.skala(idx)
-    # Automatik: die Kiosk-Seite fuellt den Bildschirm von selbst
-    # (zoom = Bildschirmbreite / Referenzbreite). Erst wenn der Nutzer den
-    # Groesse-Regler bewegt, gilt sein fester Wert.
+    # Automatik: die Kiosk-Seite nutzt einen FESTEN Zoom (gleiche Groesse auf
+    # jedem Geraet). Erst wenn der Nutzer den Groesse-Regler bewegt, gilt sein
+    # fester Wert.
     cfg['skala_auto'] = anzeige_fein.skala_auto(idx)
-    cfg['skala_referenz'] = anzeige_fein.SKALA_AUTO_REFERENZ
+    cfg['skala_auto_zoom'] = anzeige_fein.SKALA_AUTO_ZOOM
     return render_template('screen.html', cfg=cfg)
 
 

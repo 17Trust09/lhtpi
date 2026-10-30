@@ -32,13 +32,14 @@ SKALA_MIN = 0.5
 SKALA_MAX = 3.0
 SKALA_STANDARD = 1.0
 
-# Referenzbreite der Kiosk-Tools (Safety Cross, Terminboard, Folien). Die Tools
-# sind fuer ~1280 px Breite gestaltet (Sidebar + Kalendergrid). Im Automatik-
-# Modus skaliert die Kiosk-Seite deshalb mit ``zoom = Bildschirmbreite / 1280``,
-# damit eine auf 1280 px gestaltete Seite den Bildschirm voll ausfuellt - egal
-# ob 720p, 1080p oder 4K. Genau das war der Wunsch: anschliessen => ausfuellen,
-# ohne selbst skalieren zu muessen.
-SKALA_AUTO_REFERENZ = 1280
+# Fester Default-Zoom im Automatik-Modus. Tim empfindet 150 % (1.5) auf seinen
+# Bildschirmen als 'richtig' - auch auf 4K (4096x2160). Eine 'Breite fuellen'-
+# Formel (Bildschirmbreite / Referenz) war falsch: auf 4K waere daraus 3.2x
+# geworden, viel zu gross. Stattdessen gilt ein FESTER Zoom, damit die Anzeige
+# auf jedem Geraet gleich gross ist (gleiche Pixelgroesse, angenehme Lesbarkeit)
+# statt die volle Breite zu fuellen. Der Nutzer kann den Wert ueber den
+# Groesse-Regler jederzeit ueberschreiben.
+SKALA_AUTO_ZOOM = 1.5
 
 
 def _pfad():
