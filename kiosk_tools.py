@@ -7,6 +7,7 @@ Default-Anzeigedauern; Anzeige-Router, Admin-Seite und Installer lesen hier.
 import os
 import socket
 import subprocess
+import time
 from urllib.parse import urlparse
 
 TOOLS = {
@@ -196,18 +197,32 @@ def configured_screen_count():
     return n if n > 0 else None
 
 
+_probe_cache = {}  # url -> (monotonic_zeitpunkt, ergebnis)
+
+
 def probe(url, timeout=0.6):
-    """Kurzer TCP-Test: antwortet auf Zielhost/-port überhaupt ein Dienst?
+    """Kurzer TCP-Test: antwortet auf Zielhost/-port ueberhaupt ein Dienst?
 
     Wird mit ``LHTPI_KIOSK_PROBE=0`` abgeschaltet (Tests, Entwicklung).
+    Das Ergebnis wird wenige Sekunden gecacht: Der Kiosk ruft /screen/N alle
+    60 s auf und die Verwaltung laedt die Seite oft mehrmals - ohne Cache wuerde
+    jede Anfrage die Tool-Ports synchron anpingen und die Antwort verzoegern.
+    Das ist eine der Quellen fuer das sporadische 'Not Found'.
     """
     if os.environ.get('LHTPI_KIOSK_PROBE', '1') == '0':
         return True
+    jetzt = time.monotonic()
+    if url in _probe_cache:
+        stamp, ergebnis = _probe_cache[url]
+        if jetzt - stamp < 5.0:
+            return ergebnis
     p = urlparse(url)
     host = p.hostname or 'localhost'
     port = p.port or (443 if p.scheme == 'https' else 80)
     try:
         with socket.create_connection((host, port), timeout=timeout):
-            return True
+            ergebnis = True
     except OSError:
-        return False
+        ergebnis = False
+    _probe_cache[url] = (jetzt, ergebnis)
+    return ergebnis
