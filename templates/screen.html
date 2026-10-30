@@ -179,6 +179,18 @@
 
 <script id="cfg" type="application/json">{{ cfg|tojson }}</script>
 <script>
+/* Referenz-Raster: konstante physische Groesse auf jedem Bildschirm. Der Zoom
+   (aktuelle_DPI / Referenz_DPI) kommt vom Server (siehe anzeige_fein.py) und
+   wird hier als CSS-Zoom angewendet - die Aufloesung bleibt nativ scharf.
+   Ist die DPI unbekannt (kein EDID/xrandr), gilt 1.0 = natuerliche Groesse. */
+(function () {
+  var cfgR = JSON.parse(document.getElementById('cfg').textContent);
+  var z = parseFloat(cfgR.zoom);
+  if (!isFinite(z) || z <= 0) z = 1;
+  if (z !== 1) document.body.style.zoom = String(z);
+})();
+</script>
+<script>
 /* ── Wartungs-Knopf: im Wartungsbetrieb dauerhaft sichtbar ───────────────── */
 /* Ueber einem bedienbaren Tool-Rahmen bekommt diese Seite keine Mausbewegung
    mehr mit - der Knopf muss also sichtbar bleiben, sonst waere er unerreichbar. */
