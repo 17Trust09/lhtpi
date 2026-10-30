@@ -12,6 +12,7 @@ Zwei Ebenen, und das ist wichtig zu verstehen:
   Bildschirm beim Hochfahren noch aus ist. Ohne das faellt das Geraet nach
   einem Neustart auf eine kleine Aufloesung zurueck.
 """
+import glob
 import os
 import re
 import subprocess
@@ -112,6 +113,87 @@ def _sortiere_nativ(modi):
 def br_gt(breite, hoehe):
     """True, wenn das Seitenverhaeltnis breiter als 16:9 ist (Kino)."""
     return breite / hoehe > 1.79
+
+
+# ── Physische Groesse und DPI ────────────────────────────────────────────────
+# Fuer das Referenz-Raster (konstante Lesegroesse auf jedem Bildschirm): Aus
+# EDID und aktueller Aufloesung laesst sich die echte DPI des Bildschirms
+# ausrechnen. Damit skaliert die Anzeige so, dass ein Element auf einem 4K-
+# Fernseher und einem Full-HD-Monitor physisch gleich gross erscheint.
+
+def _edid_datei(ausgang):
+    """Pfad zur EDID-Datei des Ausgangs (None, wenn der Kernel sie nicht zeigt)."""
+    for pfad in glob.glob('/sys/class/drm/card*-%s/edid' % _drm_name(ausgang)):
+        return pfad
+    return None
+
+
+def physische_groesse_mm(ausgang):
+    """(Breite_mm, Hoehe_mm) aus der EDID, sonst (None, None).
+
+    Die EDID traegt die Gehaeuse-Groesse in Byte 21 (Breite) und Byte 22
+    (Hoehe) als Zentimeter. 0 heisst "nicht gemeldet" - dann greift der
+    xrandr-Weg (der dieselbe Angabe als 'NNNmm x NNNmm' ausgibt).
+    """
+    pfad = _edid_datei(ausgang)
+    if pfad:
+        try:
+            with open(pfad, 'rb') as datei:
+                roh = datei.read(128)
+        except OSError:
+            roh = b''
+        if len(roh) >= 23 and roh[:8] == b'\x00\xff\xff\xff\xff\xff\xff\x00':
+            breite_cm, hoehe_cm = roh[21], roh[22]
+            if breite_cm and hoehe_cm:
+                return breite_cm * 10, hoehe_cm * 10
+    return _mm_aus_xrandr(ausgang)
+
+
+def _mm_aus_xrandr(ausgang):
+    """Physische Groesse aus 'xrandr --query' (Fallback ohne EDID-Zugriff)."""
+    lauf = _xrandr('--query')
+    if lauf is None or lauf.returncode != 0:
+        return None, None
+    for zeile in lauf.stdout.splitlines():
+        if zeile.startswith(ausgang + ' ') and ' connected' in zeile:
+            treffer = re.search(r'(\d+)mm\s*x\s*(\d+)mm', zeile)
+            if treffer:
+                return int(treffer.group(1)), int(treffer.group(2))
+    return None, None
+
+
+def aktuelle_aufloesung(ausgang):
+    """Laufende Aufloesung ('WxH') eines angeschlossenen Ausgangs, oder None."""
+    lauf = _xrandr('--query')
+    if lauf is None or lauf.returncode != 0:
+        return None
+    for zeile in lauf.stdout.splitlines():
+        if zeile.startswith(ausgang + ' ') and ' connected' in zeile:
+            treffer = re.search(r'(\d+x\d+)\+', zeile)
+            return treffer.group(1) if treffer else None
+    return None
+
+
+def dpi(ausgang, aufloesung=None):
+    """DPI des Ausgangs aus physischer Groesse + Aufloesung, sonst None.
+
+    DPI = Breite_in_Pixel / Breite_in_Zoll. Ohne physische Groesse (kein
+    EDID, kein xrandr) ist die DPI unbekannt - der Aufrufer skaliert dann
+    mit 1.0 und die Anzeige bleibt in ihrer natuerlichen Groesse scharf.
+    """
+    breite_mm, _hoehe_mm = physische_groesse_mm(ausgang)
+    if not breite_mm:
+        return None
+    aufloesung = aufloesung or aktuelle_aufloesung(ausgang)
+    if not aufloesung:
+        return None
+    try:
+        breite_px = int(aufloesung.split('x', 1)[0])
+    except (ValueError, IndexError):
+        return None
+    if breite_px <= 0:
+        return None
+    return breite_px * 25.4 / breite_mm
 
 
 def _xrandr(*args, timeout=15):
