@@ -214,8 +214,9 @@
                  min="{{ '%.2f'|format(skala_min) }}"
                  max="{{ '%.2f'|format(skala_max) }}"
                  value="{{ '%.2f'|format(skalen[idx]) }}">
-          <small>{% if skala_auto[idx] %}Automatisch – füllt die Breite von
-            selbst aus. Erst ein hier gesetzter Wert schaltet auf manuell um.{% else %}
+          <small>{% if skala_auto[idx] %}Automatisch – konstante physische Größe
+            (Referenz-Raster, aus EDID-DPI). Erst ein hier gesetzter Wert schaltet
+            auf manuell um.{% else %}
             1.00 = 100 %, scharf. Darunter wird mehr sichtbar, darüber größer.{% endif %}</small>
         </label>
         <label class="check">
@@ -230,7 +231,7 @@
             data-idx="{{ idx }}">
         <input type="hidden" name="idx" value="{{ idx }}">
         <input type="hidden" name="neu_starten" value="1">
-        <button class="btn" type="submit">Automatisch (füllt aus)</button>
+        <button class="btn" type="submit">Automatisch (Referenz-Größe)</button>
       </form>
       {% endif %}
       <div class="meldung" data-skala="{{ idx }}"></div>
