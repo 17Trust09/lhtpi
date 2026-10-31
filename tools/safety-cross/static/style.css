@@ -91,17 +91,24 @@
     display:flex;flex-direction:column;gap:20px;min-height:0;
     height:calc(100vh - 190px);
   }
-  /* Abt-Karte bleibt kompakt. Die beiden Listen teilen sich die restliche
-     Hoehe. Jede Liste bricht bei Ueberlauf in eine zweite Spalte DANEBEN um
-     (column-fill:auto fuellt erst Spalte 1, dann Spalte 2). */
+  /* Abt-Karte bleibt kompakt. Die Ersthelfer-Liste bekommt den gesamten
+     verbleibenden Platz. Die Notruf-Box ist so hoch wie ihr Inhalt (klein bei
+     wenigen Nummern) - nur bei sehr vielen Nummern bricht sie mehrspaltig um. */
   .abt-card{flex:none}
-  .ersthelfer,.notruf{
+  .ersthelfer{
     flex:1 1 0;min-height:0;
     display:flex;flex-direction:column;
   }
+  .notruf{
+    flex:0 0 auto;
+    display:flex;flex-direction:column;
+  }
   .ersthelfer h2,.notruf h2{flex:none}
-  .ersthelfer ul,.notruf ul{
+  .ersthelfer ul{
     flex:1 1 0;min-height:0;
+    overflow-y:hidden;
+  }
+  .notruf ul{
     overflow-y:hidden;
   }
   .ersthelfer li,.notruf li{
