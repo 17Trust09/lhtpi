@@ -12,6 +12,7 @@
   <a class="tab {% if active_tab == 'anzeige' %}active{% endif %}" href="{{ url_for('board') }}">Anzeige</a>
   <a class="tab {% if active_tab == 'admin' %}active{% endif %}" href="{{ url_for('admin') }}">Admin</a>
 </nav>
+<a class="admin-knopf" href="{{ url_for('admin') }}" title="Admin öffnen">⚙ Admin</a>
 {% block content %}{% endblock %}
 <script>
 /* Kiosk-Mauszeiger: nach Inaktivität aus, bei Bewegung sofort wieder da.

@@ -28,6 +28,17 @@
   body.kiosk{display:flex;flex-direction:column;height:100%;overflow:hidden}
   body.kiosk .tabbar{display:none}
 
+  /* Admin-Knopf: im Kiosk oben rechts dauerhaft erreichbar, obwohl die
+     Tabbar ausgeblendet ist. Ausserhalb des Kiosk (Admin-Ansicht) bleibt er
+     aus, dort gibt es ja die volle Tabbar. */
+  .admin-knopf{display:none}
+  body.kiosk .admin-knopf{
+    display:inline-flex;align-items:center;gap:6px;
+    position:fixed;top:12px;right:14px;z-index:50;
+    background:var(--navy);color:#fff;text-decoration:none;
+    padding:8px 14px;border-radius:8px;font-size:14px;font-weight:600;
+  }
+
   /* ===== TAB BAR ===== */
   .tabbar{
     position:fixed;top:0;left:0;right:0;z-index:50;
