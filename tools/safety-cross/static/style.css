@@ -116,21 +116,21 @@
   .ersthelfer li,.notruf li{
     break-inside:avoid;
   }
-  .kiosk-meta{text-align:right;min-width:240px}
-  .kiosk-meta .date{font-size:15px;color:#dfe6f5;white-space:nowrap}
+  .kiosk-meta{text-align:right;min-width:200px}
+  .kiosk-meta .date{font-size:13px;color:#dfe6f5;white-space:nowrap}
   .kiosk-meta .safe{
-    margin-top:10px;display:inline-flex;flex-direction:column;align-items:center;
-    gap:2px;padding:12px 28px;border-radius:16px;
+    margin-top:6px;display:inline-flex;flex-direction:column;align-items:center;
+    gap:1px;padding:6px 18px;border-radius:14px;
     background:linear-gradient(180deg,rgba(255,173,0,.18),rgba(255,173,0,.05));
     border:1px solid rgba(255,173,0,.45);
-    box-shadow:0 8px 24px rgba(255,173,0,.20);
+    box-shadow:0 6px 18px rgba(255,173,0,.18);
   }
   .kiosk-meta .safe span{
-    font-size:12px;font-weight:700;color:#ffd97a;letter-spacing:.2em;text-transform:uppercase;
+    font-size:10px;font-weight:700;color:#ffd97a;letter-spacing:.2em;text-transform:uppercase;
   }
   .kiosk-meta .safe b{
-    font-size:64px;font-weight:900;line-height:.9;color:var(--yellow);
-    text-shadow:0 4px 0 rgba(0,0,0,.22);
+    font-size:40px;font-weight:900;line-height:1;color:var(--yellow);
+    text-shadow:0 3px 0 rgba(0,0,0,.22);
   }
 
   .kiosk-body{
