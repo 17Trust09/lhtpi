@@ -87,7 +87,20 @@
   }
   .meister{margin-top:12px;font-size:18px;font-weight:700;color:var(--ink)}
   .meister::before{content:"Meister: ";color:var(--muted);font-weight:600}
-  .sidebar{display:flex;flex-direction:column;gap:24px}
+  .sidebar{display:flex;flex-direction:column;gap:24px;min-height:0}
+  /* Die Listen koennen beliebig lang werden - lege sie auf die verfuegbare
+     Hoehe und lasse sie intern scrollen, damit nichts ueber den Bildrand
+     laeuft. Die Scrollleiste ist dezent (duenn, nur bei Bedarf). */
+  .ersthelfer ul,.notruf ul{
+    max-height:calc(100vh - 320px);
+    overflow-y:auto;
+    scrollbar-width:thin;
+    scrollbar-color:var(--navy-2) transparent;
+  }
+  .ersthelfer ul::-webkit-scrollbar,.notruf ul::-webkit-scrollbar{width:8px}
+  .ersthelfer ul::-webkit-scrollbar-thumb,.notruf ul::-webkit-scrollbar-thumb{
+    background:var(--navy-2);border-radius:4px;
+  }
   .kiosk-meta{text-align:right;min-width:240px}
   .kiosk-meta .date{font-size:15px;color:#dfe6f5;white-space:nowrap}
   .kiosk-meta .safe{
