@@ -69,48 +69,71 @@
      Allerletzter Ausweg (extrem viele Eintraege): interne Scrollleiste. */
   (function () {
     function layoutListen() {
-      /* Ersthelfer: bekommen die volle verfuegbare Hoehe; bricht bei Ueberlauf
-         in eine zweite (dritte) Spalte um - nie abschneiden. */
-      document.querySelectorAll('.ersthelfer ul').forEach(function (ul) {
-        var available = ul.clientHeight;
-        if (!available) return;
-        ul.style.columnCount = '';
-        ul.style.columnGap = '';
-        ul.style.columnFill = '';
-        ul.style.overflowY = 'hidden';
-        if (ul.scrollHeight <= available) return;
-        ul.style.columnGap = '24px';
-        ul.style.columnFill = 'auto';
-        ul.style.columnCount = '2';
-        if (ul.scrollHeight <= available) return;
-        ul.style.columnCount = '3';
-        if (ul.scrollHeight <= available) return;
-        ul.style.overflowY = 'auto';
-      });
-      /* Notruf: natuerlich klein (so hoch wie der Inhalt). Nur bei sehr vielen
-         Nummern (hoeher als ~35% des Bildschirms) mehrspaltig mit balancierter
-         Hoehe umbrechen, damit sie die Ersthelfer nicht verdrängt. */
-      document.querySelectorAll('.notruf ul').forEach(function (ul) {
-        var maxH = Math.round(window.innerHeight * 0.35);
-        ul.style.columnCount = '';
-        ul.style.columnGap = '';
-        ul.style.columnFill = '';
-        ul.style.overflowY = 'hidden';
-        ul.style.height = '';
-        var natural = ul.scrollHeight;
-        if (natural <= maxH) return;
-        ul.style.columnGap = '24px';
-        ul.style.columnFill = 'auto';
-        var cols = 2;
-        ul.style.columnCount = cols;
-        ul.style.height = Math.ceil(natural / cols) + 'px';
-        if (ul.scrollHeight <= maxH) return;
-        cols = 3;
-        ul.style.columnCount = cols;
-        ul.style.height = Math.ceil(natural / cols) + 'px';
-        if (ul.scrollHeight <= maxH) return;
-        ul.style.overflowY = 'auto';
-      });
+      /* Sidebar exakt auf den verbleibenden Platz begrenzen: unterer Rand des
+         Bildschirms minus aktuelles Sidebar-top (der Offset variiert je nach
+         Header/Tabbar/Titel-Hoehe). So laeuft die Box NIE ueber den Rand. */
+      var sidebar = document.querySelector('.sidebar');
+      if (sidebar) {
+        var box = sidebar.getBoundingClientRect();
+        var maxH = window.innerHeight - box.top;
+        if (maxH < 120) maxH = 120;
+        sidebar.style.height = maxH + 'px';
+      }
+      /* Notruf zuerst natuerlich klein messen (so hoch wie ihr Inhalt);
+         bei sehr vielen Nummern mehrspaltig umbrechen mit balancierter Hoehe. */
+      var notrufUl = document.querySelector('.notruf ul');
+      if (notrufUl) {
+        var maxNotruf = Math.round(window.innerHeight * 0.35);
+        notrufUl.style.columnCount = '';
+        notrufUl.style.columnGap = '';
+        notrufUl.style.columnFill = '';
+        notrufUl.style.overflow = 'hidden';
+        notrufUl.style.height = '';
+        var natural = notrufUl.scrollHeight;
+        if (natural > maxNotruf) {
+          notrufUl.style.columnGap = '24px';
+          notrufUl.style.columnFill = 'auto';
+          var cols = 2;
+          notrufUl.style.columnCount = cols;
+          notrufUl.style.height = Math.ceil(natural / cols) + 'px';
+          if (notrufUl.scrollHeight > maxNotruf) {
+            cols = 3;
+            notrufUl.style.columnCount = cols;
+            notrufUl.style.height = Math.ceil(natural / cols) + 'px';
+          }
+        }
+      }
+      /* Ersthelfer-Liste exakt begrenzen: Seitenleistenhoehe minus alles andere
+         (Abt-Karte + Notruf + Luecken). So laeuft GESAMT nie ueber den Rand. */
+      var erstHelfer = document.querySelector('.ersthelfer');
+      var erstUl = erstHelfer ? erstHelfer.querySelector('ul') : null;
+      if (sidebar && erstUl) {
+        var used = 0;
+        sidebar.querySelectorAll(':scope > *').forEach(function (child) {
+          if (child === erstHelfer) return;
+          used += child.offsetHeight;
+        });
+        var gapTotal = 20 * (sidebar.children.length - 1);
+        var h2 = erstHelfer.querySelector('h2');
+        var h2h = h2 ? h2.offsetHeight : 0;
+        var available = sidebar.clientHeight - used - gapTotal - h2h;
+        if (available < 0) available = 0;
+        erstUl.style.height = available + 'px';
+
+        /* Spaltenanzahl der Ersthelfer ermitteln (1 -> 2 -> 3, nie abschneiden). */
+        erstUl.style.columnCount = '';
+        erstUl.style.columnGap = '';
+        erstUl.style.columnFill = '';
+        erstUl.style.overflow = 'hidden';
+        if (erstUl.scrollHeight > available) {
+          erstUl.style.columnGap = '24px';
+          erstUl.style.columnFill = 'auto';
+          erstUl.style.columnCount = '2';
+          if (erstUl.scrollHeight > available) {
+            erstUl.style.columnCount = '3';
+          }
+        }
+      }
     }
     layoutListen();
     window.addEventListener('load', layoutListen);

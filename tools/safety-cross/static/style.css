@@ -89,14 +89,16 @@
   .meister::before{content:"Meister: ";color:var(--muted);font-weight:600}
   .sidebar{
     display:flex;flex-direction:column;gap:20px;min-height:0;
-    height:calc(100vh - 190px);
+    /* Hoehe wird per JS exakt auf den verbleibenden Bildschirmplatz gesetzt,
+       damit die Box NIE ueber den unteren Rand laeuft. Fallback: */
+    height:calc(100vh - 320px);
   }
-  /* Abt-Karte bleibt kompakt. Die Ersthelfer-Liste bekommt den gesamten
-     verbleibenden Platz. Die Notruf-Box ist so hoch wie ihr Inhalt (klein bei
-     wenigen Nummern) - nur bei sehr vielen Nummern bricht sie mehrspaltig um. */
+  /* Abt-Karte bleibt kompakt. Die Notruf-Box ist so hoch wie ihr Inhalt.
+     Die Ersthelfer-Liste bekommt den RESTLICHEN Platz (wird per JS exakt
+     begrenzt, damit insgesamt nie ueber den Bildschirmrand gelaufen wird). */
   .abt-card{flex:none}
   .ersthelfer{
-    flex:1 1 0;min-height:0;
+    flex:1 1 auto;min-height:0;
     display:flex;flex-direction:column;
   }
   .notruf{
@@ -106,10 +108,10 @@
   .ersthelfer h2,.notruf h2{flex:none}
   .ersthelfer ul{
     flex:1 1 0;min-height:0;
-    overflow-y:hidden;
+    overflow:hidden;
   }
   .notruf ul{
-    overflow-y:hidden;
+    overflow:hidden;
   }
   .ersthelfer li,.notruf li{
     break-inside:avoid;
