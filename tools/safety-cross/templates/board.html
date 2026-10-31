@@ -70,12 +70,12 @@
   (function () {
     function layoutListen() {
       /* Sidebar exakt auf den verbleibenden Platz begrenzen: unterer Rand des
-         Bildschirms minus aktuelles Sidebar-top (der Offset variiert je nach
-         Header/Tabbar/Titel-Hoehe). So laeuft die Box NIE ueber den Rand. */
+         Bildschirms minus aktuelles Sidebar-top. Unten noch ~28px Luft lassen,
+         damit die Box nicht direkt am Bildrand klebt. So laeuft sie nie ueber. */
       var sidebar = document.querySelector('.sidebar');
       if (sidebar) {
         var box = sidebar.getBoundingClientRect();
-        var maxH = window.innerHeight - box.top;
+        var maxH = window.innerHeight - box.top - 28;
         if (maxH < 120) maxH = 120;
         sidebar.style.height = maxH + 'px';
       }
