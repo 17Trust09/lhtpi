@@ -68,8 +68,11 @@
     display:flex;align-items:center;justify-content:space-between;gap:20px;
   }
   /* Im Kiosk sitzt die Tabbar direkt ueber dem Header - der grosse
-     Kopf-Abstand (26px) waere dort ein leerer Streifen. Weniger Luft. */
-  body.kiosk .kiosk-header{padding-top:0;padding-bottom:14px}
+     Kopf-Abstand (26px) waere dort ein leerer Streifen. Titel buendig oben,
+     kompakter Header. */
+  body.kiosk .kiosk-header{padding-top:0;padding-bottom:10px;align-items:flex-start}
+  body.kiosk .kiosk-title h1{line-height:1.05}
+  body.kiosk .kiosk-title .sub{margin-top:2px;line-height:1.1}
   .kiosk-header .left{display:flex;align-items:center;gap:16px}
   .kiosk-title h1{font-size:34px;font-weight:800;letter-spacing:.01em;line-height:1}
   .kiosk-title .sub{font-size:14px;color:#aebbe0;letter-spacing:.22em;text-transform:uppercase;margin-top:6px}
