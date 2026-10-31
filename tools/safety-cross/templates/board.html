@@ -69,15 +69,19 @@
      Allerletzter Ausweg (extrem viele Eintraege): interne Scrollleiste. */
   (function () {
     function layoutListen() {
-      /* Sidebar exakt auf den verbleibenden Platz begrenzen: unterer Rand des
-         Bildschirms minus aktuelles Sidebar-top. Unten noch ~28px Luft lassen,
-         damit die Box nicht direkt am Bildrand klebt. So laeuft sie nie ueber. */
+      /* Sidebar exakt auf die Hoehe des Kreuz-Panels bringen, damit beide
+         unten buendig enden (align-items:start => gleiches top). Fallback:
+         verbleibender Bildschirmplatz minus 28px Luft. */
       var sidebar = document.querySelector('.sidebar');
       if (sidebar) {
-        var box = sidebar.getBoundingClientRect();
-        var maxH = window.innerHeight - box.top - 28;
-        if (maxH < 120) maxH = 120;
-        sidebar.style.height = maxH + 'px';
+        var crossPanel = document.querySelector('.cross-panel');
+        var targetH = crossPanel ? crossPanel.getBoundingClientRect().height : 0;
+        if (!targetH || targetH < 120) {
+          var box = sidebar.getBoundingClientRect();
+          targetH = window.innerHeight - box.top - 28;
+          if (targetH < 120) targetH = 120;
+        }
+        sidebar.style.height = targetH + 'px';
       }
       /* Notruf zuerst natuerlich klein messen (so hoch wie ihr Inhalt);
          bei sehr vielen Nummern mehrspaltig umbrechen mit balancierter Hoehe. */
