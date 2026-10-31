@@ -1,39 +1,15 @@
-"""Tests für das Referenz-Raster (konstante physische Groesse).
+"""Tests für die Referenz-Aufloesung (proportionale Skalierung).
 
-Prüft ohne Hardware die Herleitung und das Verhalten von
-``anzeige_fein.referenz_dpi()``, ``bildschirm_info.physische_groesse_mm``,
-``bildschirm_info.dpi`` und ``anzeige_fein.skalierungs_faktor``.
+Prüft ohne Hardware das Verhalten von
+``bildschirm_info.physische_groesse_mm``, ``bildschirm_info.dpi``,
+``bildschirm_info.aktuelle_aufloesung`` und ``anzeige_fein.skalierungs_faktor``.
 
 Aufruf:  ./venv/bin/python -m pytest test_referenz_raster.py
 """
-import math
-
 import pytest
 
 import anzeige_fein
 import bildschirm_info
-
-
-# ── Referenz-DPI ─────────────────────────────────────────────────────────────
-
-def test_referenz_dpi_standard():
-    # 55-Zoll-Display, 4096x2160, 150 % Zoom -> DPI_des_Schirms / 1,5.
-    diagonale_px = math.hypot(anzeige_fein.REFERENZ_BREITE, anzeige_fein.REFERENZ_HOEHE)
-    erwartet = (diagonale_px / 55.0) / anzeige_fein.REFERENZ_ZOOM
-    assert anzeige_fein.referenz_dpi() == pytest.approx(erwartet, rel=1e-9)
-
-
-def test_referenz_dpi_env_override(monkeypatch):
-    monkeypatch.setenv('LHTPI_REFERENZ_DPI', '60.0')
-    assert anzeige_fein.referenz_dpi() == 60.0
-
-
-def test_referenz_dpi_env_zoll(monkeypatch):
-    monkeypatch.delenv('LHTPI_REFERENZ_DPI', raising=False)
-    monkeypatch.setenv('LHTPI_REFERENZ_ZOLL', '43')
-    diagonale_px = math.hypot(anzeige_fein.REFERENZ_BREITE, anzeige_fein.REFERENZ_HOEHE)
-    assert anzeige_fein.referenz_dpi() == pytest.approx(
-        (diagonale_px / 43.0) / anzeige_fein.REFERENZ_ZOOM, rel=1e-9)
 
 
 # ── EDID / DPI ───────────────────────────────────────────────────────────────
@@ -86,37 +62,45 @@ def test_dpi_unbekannt(monkeypatch):
     assert bildschirm_info.dpi('HDMI-1') is None
 
 
-# ── Skalierungsfaktor ────────────────────────────────────────────────────────
+# ── Skalierungsfaktor (proportional zur Aufloesung) ──────────────────────────
 
-def test_faktor_bei_referenz_dpi_ist_150_prozent(monkeypatch):
-    dpi_ref = math.hypot(anzeige_fein.REFERENZ_BREITE, anzeige_fein.REFERENZ_HOEHE) / 55.0
-    monkeypatch.setattr(bildschirm_info, 'dpi', lambda ausgang: dpi_ref)
-    assert anzeige_fein.skalierungs_faktor('HDMI-1') == pytest.approx(1.5, rel=1e-9)
+def test_faktor_full_hd_ist_1(monkeypatch):
+    monkeypatch.setattr(bildschirm_info, 'aktuelle_aufloesung',
+                        lambda ausgang: '1920x1080')
+    assert anzeige_fein.skalierungs_faktor('HDMI-1') == 1.0
 
 
-def test_faktor_unbekannte_dpi_ist_1(monkeypatch):
-    monkeypatch.setattr(bildschirm_info, 'dpi', lambda ausgang: None)
+def test_faktor_kleiner_bildschirm_verkleinert(monkeypatch):
+    monkeypatch.setattr(bildschirm_info, 'aktuelle_aufloesung',
+                        lambda ausgang: '1366x768')
+    assert anzeige_fein.skalierungs_faktor('HDMI-1') == pytest.approx(
+        min(1366 / 1920, 768 / 1080), rel=1e-9)
+
+
+def test_faktor_4k_vergroessert(monkeypatch):
+    monkeypatch.setattr(bildschirm_info, 'aktuelle_aufloesung',
+                        lambda ausgang: '3840x2160')
+    assert anzeige_fein.skalierungs_faktor('HDMI-1') == pytest.approx(2.0, rel=1e-9)
+
+
+def test_faktor_unbekannte_aufloesung_ist_1(monkeypatch):
+    monkeypatch.setattr(bildschirm_info, 'aktuelle_aufloesung',
+                        lambda ausgang: None)
     assert anzeige_fein.skalierungs_faktor('HDMI-1') == 1.0
 
 
 def test_faktor_ist_begrenzt(monkeypatch):
-    monkeypatch.setattr(bildschirm_info, 'dpi', lambda ausgang: 1_000_000.0)
+    monkeypatch.setattr(bildschirm_info, 'aktuelle_aufloesung',
+                        lambda ausgang: '20000x20000')
     assert anzeige_fein.skalierungs_faktor('HDMI-1') == anzeige_fein.FAKTOR_MAX
-    monkeypatch.setattr(bildschirm_info, 'dpi', lambda ausgang: 0.1)
+    monkeypatch.setattr(bildschirm_info, 'aktuelle_aufloesung',
+                        lambda ausgang: '1x1')
     assert anzeige_fein.skalierungs_faktor('HDMI-1') == anzeige_fein.FAKTOR_MIN
 
 
-def test_physische_groesse_bleibt_konstant(monkeypatch):
-    """Kern-Zusage: CSS_px * Faktor / DPI ist unabhaengig von der DPI."""
-    referenz = anzeige_fein.referenz_dpi()
-    breite_css = 320.0  # z. B. die Sidebar
-    groessen = set()
-    for dpi in (84.193, 91.8, 138.0, 50.0):
-        monkeypatch.setattr(bildschirm_info, 'dpi', lambda ausgang, d=dpi: d)
-        faktor = anzeige_fein.skalierungs_faktor('HDMI-1')
-        # physische Breite in Zoll
-        groessen.add(breite_css * faktor / dpi)
-    # alle identisch (bis auf Rundung durch Faktor-Clamping irrelevant hier)
-    assert len(groessen) == 1
-    # und gleich der Referenz-Groesse breite_css / referenz_dpi
-    assert groessen.pop() == pytest.approx(breite_css / referenz, rel=1e-9)
+def test_faktor_abweichendes_seitenverhaeltnis(monkeypatch):
+    """Bei abweichendem Seitenverhaeltnis zaehlt das kleinere Verhaeltnis."""
+    # 1920x1200 (16:10): Breite = 1.0, Hoehe = 1200/1080 -> min = 1.0 (Breite).
+    monkeypatch.setattr(bildschirm_info, 'aktuelle_aufloesung',
+                        lambda ausgang: '1920x1200')
+    assert anzeige_fein.skalierungs_faktor('HDMI-1') == 1.0

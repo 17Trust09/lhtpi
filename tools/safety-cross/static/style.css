@@ -56,10 +56,11 @@
   .view.active{display:block}
 
   /* ===== DISPLAY ===== */
-  /* Referenz-Raster: alle Groessen in FESTEN Pixeln - die "natuerliche"
-     Groesse bei der Referenz-DPI (siehe anzeige_fein.referenz_dpi()). Der
-     DPI-basierte Zoom in der Kiosk-Huelle (screen.html) haelt die physische
-     Groesse auf jedem Bildschirm konstant. Kein vw/vh mehr: vw/vh sind
+  /* Referenz-Aufloesung: alle Groessen in FESTEN Pixeln, fuer Full HD
+     (1920x1080) gebaut. Der aufloesungsbasierte Zoom in der Kiosk-Huelle
+     (screen.html, anzeige_fein.skalierungs_faktor) skaliert das Layout
+     proportional zur Bildschirmaufloesung - auf jedem Bildschirm vollstaendig
+     sichtbar, gleich proportioniert. Kein vw/vh: vw/vh sind
      aufloesungsabhaengig und unterliefen den Zoom. */
   .kiosk-header{
     background:var(--navy);
