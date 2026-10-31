@@ -62,4 +62,34 @@
     </div>
   </main>
 </div>
+
+<script>
+  /* Listen mehrspaltig machen, wenn sie in einer Spalte die Kartenhoehe
+     sprengen wuerden - aber NIE abschneiden. Erst 1 Spalte, dann 2, dann 3.
+     Allerletzter Ausweg (extrem viele Eintraege): interne Scrollleiste. */
+  (function () {
+    function layoutListen() {
+      document.querySelectorAll('.ersthelfer ul, .notruf ul').forEach(function (ul) {
+        var available = ul.clientHeight;
+        if (!available) return;
+        ul.style.columnCount = '';
+        ul.style.columnGap = '';
+        ul.style.columnFill = '';
+        ul.style.overflowY = 'hidden';
+        if (ul.scrollHeight <= available) return;
+        ul.style.columnGap = '24px';
+        ul.style.columnFill = 'auto';
+        ul.style.columnCount = '2';
+        if (ul.scrollHeight <= available) return;
+        ul.style.columnCount = '3';
+        if (ul.scrollHeight <= available) return;
+        ul.style.overflowY = 'auto';
+      });
+    }
+    layoutListen();
+    window.addEventListener('load', layoutListen);
+    window.addEventListener('resize', layoutListen);
+    setTimeout(layoutListen, 300);
+  })();
+</script>
 {% endblock %}
