@@ -47,14 +47,32 @@ starte_dienst() {
 
 neu_gestartet=0
 systemteile=0
+
+# Safety Cross aus dem Repo nach /opt/safety-cross synchronisieren (nur Code:
+# .py + templates/ + static/). license.key, .secret, venv und DB bleiben
+# unangetastet - sonst waere die Lizenz/Anmeldung nach einem Pull weg.
+sync_safetycross() {
+    local src="${REPO}/tools/safety-cross"
+    local dst="/opt/safety-cross"
+    [ -d "${dst}" ] || return 0
+    for f in app.py auth.py db.py license.py requirements.txt; do
+        [ -f "${src}/${f}" ] && cp "${src}/${f}" "${dst}/${f}"
+    done
+    rm -rf "${dst}/templates" "${dst}/static"
+    cp -r "${src}/templates" "${dst}/templates" 2>/dev/null
+    cp -r "${src}/static" "${dst}/static" 2>/dev/null
+    return 0
+}
+
 if printf '%s\n' "${geaendert}" | grep -qE '^terminboard/'; then
     starte_dienst terminboard.service && neu_gestartet=1
 fi
-if printf '%s\n' "${geaendert}" | grep -qE '^app/'; then
+# Haupt-App: .py-Dateien im Wurzel sowie templates/ und static/.
+if printf '%s\n' "${geaendert}" | grep -qE '(^[^/]+\.py$|^templates/|^static/)'; then
     starte_dienst lhtpi.service && neu_gestartet=1
 fi
-if printf '%s\n' "${geaendert}" | grep -qE '^safety-cross/'; then
-    starte_dienst safetycross.service && neu_gestartet=1
+if printf '%s\n' "${geaendert}" | grep -qE '^tools/safety-cross/'; then
+    sync_safetycross && starte_dienst safetycross.service && neu_gestartet=1
 fi
 
 if [ "${neu_gestartet}" = "0" ] && [ "${systemteile}" = "0" ]; then
