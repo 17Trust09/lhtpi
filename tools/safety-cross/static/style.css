@@ -23,10 +23,11 @@
 
   /* Kiosk-Ansicht (nur Anzeige): body als Flex-Spalte, damit der Inhalt die
      volle Hoehe fuellt - zuverlaessig auch im iframe (wo vh unsicher sein
-     kann). Die Admin-Tabbar bleibt im Kiosk sichtbar, damit die Navigation
-     (Anzeige/Admin) jederzeit erreichbar ist. */
-  body.kiosk{display:flex;flex-direction:column;height:100%;overflow:hidden;padding-top:60px}
-  body.kiosk .tabbar{display:flex}
+     kann). Die Tabbar liegt hier NICHT fixed, sondern als erstes Kind im
+     Flex-Fluss - so sitzt der Safety-Cross-Titel direkt darunter, ohne den
+     doppelten Offset aus fixed + padding-top. */
+  body.kiosk{display:flex;flex-direction:column;height:100%;overflow:hidden}
+  body.kiosk .tabbar{position:static;flex:none}
 
   /* ===== TAB BAR ===== */
   .tabbar{
@@ -68,7 +69,7 @@
   }
   /* Im Kiosk sitzt die Tabbar direkt ueber dem Header - der grosse
      Kopf-Abstand (26px) waere dort ein leerer Streifen. Weniger Luft. */
-  body.kiosk .kiosk-header{padding-top:2px;padding-bottom:8px}
+  body.kiosk .kiosk-header{padding-top:12px;padding-bottom:14px}
   .kiosk-header .left{display:flex;align-items:center;gap:16px}
   .kiosk-title h1{font-size:34px;font-weight:800;letter-spacing:.01em;line-height:1}
   .kiosk-title .sub{font-size:14px;color:#aebbe0;letter-spacing:.22em;text-transform:uppercase;margin-top:6px}
