@@ -23,22 +23,10 @@
 
   /* Kiosk-Ansicht (nur Anzeige): body als Flex-Spalte, damit der Inhalt die
      volle Hoehe fuellt - zuverlaessig auch im iframe (wo vh unsicher sein
-     kann). Die Admin-Tabbar wird ausgeblendet, sie gehoert nicht in die
-     Anzeige. */
-  body.kiosk{display:flex;flex-direction:column;height:100%;overflow:hidden}
-  body.kiosk .tabbar{display:none}
-
-  /* Admin-Knopf: im Kiosk oben rechts dauerhaft erreichbar, obwohl die
-     Tabbar ausgeblendet ist. Ausserhalb des Kiosk (Admin-Ansicht) bleibt er
-     aus, dort gibt es ja die volle Tabbar. */
-  .admin-knopf{display:none}
-  body.kiosk .admin-knopf{
-    display:inline-flex;align-items:center;gap:6px;
-    position:fixed;top:12px;right:14px;z-index:100;
-    background:var(--yellow);color:var(--navy);text-decoration:none;
-    padding:8px 14px;border-radius:8px;font-size:14px;font-weight:700;
-    box-shadow:0 2px 8px rgba(5,22,77,.35);
-  }
+     kann). Die Admin-Tabbar bleibt im Kiosk sichtbar, damit die Navigation
+     (Anzeige/Admin) jederzeit erreichbar ist. */
+  body.kiosk{display:flex;flex-direction:column;height:100%;overflow:hidden;padding-top:60px}
+  body.kiosk .tabbar{display:flex}
 
   /* ===== TAB BAR ===== */
   .tabbar{
