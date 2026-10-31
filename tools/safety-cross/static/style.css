@@ -34,9 +34,10 @@
   .admin-knopf{display:none}
   body.kiosk .admin-knopf{
     display:inline-flex;align-items:center;gap:6px;
-    position:fixed;top:12px;right:14px;z-index:50;
-    background:var(--navy);color:#fff;text-decoration:none;
-    padding:8px 14px;border-radius:8px;font-size:14px;font-weight:600;
+    position:fixed;top:12px;right:14px;z-index:100;
+    background:var(--yellow);color:var(--navy);text-decoration:none;
+    padding:8px 14px;border-radius:8px;font-size:14px;font-weight:700;
+    box-shadow:0 2px 8px rgba(5,22,77,.35);
   }
 
   /* ===== TAB BAR ===== */
