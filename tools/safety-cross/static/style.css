@@ -178,7 +178,7 @@
 .notruf ul{list-style:none}
 .notruf li{
   display:flex;align-items:center;justify-content:flex-start;gap:14px;
-  padding:7px 6px;border-radius:10px;font-size:15px;font-weight:600;
+  padding:11px 8px;border-radius:10px;font-size:17px;font-weight:600;
 }
 .notruf li + li{border-top:1px solid var(--line)}
 .notruf .n-label{color:var(--ink)}
