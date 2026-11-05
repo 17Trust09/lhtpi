@@ -138,14 +138,12 @@ def _month_context():
 @app.route("/")
 def board():
     ctx = _month_context()
-    t = date.today()
     ctx.update({
         "abteilung": db.get_config("abteilung") or "",
         "meister": db.get_config("meister") or "",
         "ersthelfer": db.list_ersthelfer(),
         "notruf": db.list_notruf(),
         "safe_days": db.count_safe_days(),
-        "today_str": "%s, %d. %s %d" % (WEEKDAYS_DE[t.weekday()], t.day, MONTHS_DE[t.month - 1], t.year),
     })
     return render_template("board.html", active_tab="anzeige", **ctx)
 

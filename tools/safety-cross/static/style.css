@@ -118,7 +118,6 @@
     break-inside:avoid;
   }
   .kiosk-meta{display:flex;flex-direction:row;align-items:center;gap:16px;justify-content:flex-end;min-width:200px}
-  .kiosk-meta .date{font-size:13px;color:#dfe6f5;white-space:nowrap;text-align:right}
   .kiosk-meta .safe{
     display:inline-flex;flex-direction:column;align-items:center;
     gap:0;padding:6px 20px;border-radius:14px;
