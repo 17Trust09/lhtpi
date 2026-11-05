@@ -58,9 +58,11 @@ sync_safetycross() {
     for f in app.py auth.py db.py license.py requirements.txt; do
         [ -f "${src}/${f}" ] && cp "${src}/${f}" "${dst}/${f}"
     done
-    rm -rf "${dst}/templates" "${dst}/static"
-    cp -r "${src}/templates" "${dst}/templates" 2>/dev/null
-    cp -r "${src}/static" "${dst}/static" 2>/dev/null
+    # Sicher synchronisieren: erst kopieren (ueberschreibt), nie zuerst loeschen.
+    # Ein fehlgeschlagenes Kopieren darf die vorhandenen Templates nicht loeschen -
+    # sonst zeigt der Kiosk nach einem Pull nur noch ein schwarzes Bild.
+    [ -d "${src}/templates" ] && { mkdir -p "${dst}/templates"; cp -r "${src}/templates/." "${dst}/templates/"; }
+    [ -d "${src}/static" ] && { mkdir -p "${dst}/static"; cp -r "${src}/static/." "${dst}/static/"; }
     return 0
 }
 
