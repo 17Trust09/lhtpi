@@ -66,7 +66,14 @@ def _usb_schreibrecht(schalten):
 
 
 def _archiviere(mount, pfad):
-    """Verschiebt abgeschlossene Zeilen, wenn der Stick schreibbar ist."""
+    """Verschiebt abgeschlossene Zeilen, wenn der Stick schreibbar ist.
+
+    Erst trocken pruefen: Gibt es nichts zu verschieben, wird der Stick gar
+    nicht erst auf rw geschaltet - sonst hinge er bei jedem Durchlauf kurz um.
+    """
+    probe = verschiebe_abgeschlossene(pfad, trocken=True)
+    if not probe['verschoben']:
+        return probe
     if not _usb_schreibrecht('rw'):
         return {'verschoben': [], 'fehler': 'Stick nicht beschreibbar', 'sicherung': None}
     try:
@@ -102,12 +109,17 @@ def verarbeite_stick(mount_dir=None, erzwinge=False):
             # Parser-Fehler (z. B. kaputte Zeile im Blatt „Zeiten") mitgeben
             report['parser_fehler'] = daten['fehler']
 
-            # Abgeschlossene Zeilen wandern ins Archiv. Das braucht Schreibrecht
-            # auf dem Stick; schlaegt es fehl, bleibt der Import trotzdem gueltig.
-            report['archiv'] = _archiviere(mount, xlsx)
-
             ergebnis['importiert'] = True
             ergebnis['report'] = report
+
+        # Archivieren laeuft bewusst ausserhalb des Hash-Checks: Hat der Import
+        # schon mal stattgefunden, das Verschieben aber nicht geklappt (z. B.
+        # Stick nicht beschreibbar), wuerde sonst nie wieder archiviert.
+        archiv = _archiviere(mount, xlsx)
+        if archiv['verschoben'] or archiv['fehler']:
+            if ergebnis['report'] is None:
+                ergebnis['report'] = {}
+            ergebnis['report']['archiv'] = archiv
 
     bericht = pruefe_stick_befehl(mount)
     if bericht['ausgeloest']:
