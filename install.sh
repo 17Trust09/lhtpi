@@ -1548,7 +1548,7 @@ EOF
 ZIEL=/mnt/lhtpi-usb
 [ -d "$ZIEL" ] || exit 0
 case "$1" in
-    rw) mountpoint -q "$ZIEL" || exit 0; exec mount -o remount,rw,uid=pi,gid=pi "$ZIEL" ;;
+    rw) mountpoint -q "$ZIEL" || exit 0; exec mount -o remount,rw "$ZIEL" ;;
     ro) mountpoint -q "$ZIEL" || exit 0; sync; exec mount -o remount,ro "$ZIEL" ;;
     *)  echo "Aufruf: $0 rw|ro" >&2; exit 2 ;;
 esac
