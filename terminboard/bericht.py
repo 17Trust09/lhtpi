@@ -566,3 +566,29 @@ def pruefe_stick_befehl(mount_dir):
         except OSError as fehler:
             ergebnis['erledigt_marker'] = f'konnte nicht umbenannt werden: {fehler}'
     return ergebnis
+
+
+def erstelle_berichte_automatisch(mount_dir):
+    """Erstellt Monats- und Jahresbericht und kopiert sie auf den Stick.
+
+    Wird aufgerufen, wenn sich die Daten geändert haben (Import oder
+    Archivierung) – ganz ohne Auslöse-Datei. Der Stick ist die einzige
+    Datenquelle; sobald er neue Daten bringt, werden die Berichte erneuert.
+    """
+    ergebnis = {'monat': None, 'jahr': None, 'kopiert': [], 'fehler': None}
+    if not os.path.isdir(mount_dir):
+        ergebnis['fehler'] = 'Stick nicht gefunden'
+        return ergebnis
+
+    jetzt = datetime.now()
+    ergebnis['monat'] = erstelle_monatsbericht(jetzt.year, jetzt.month)
+    ergebnis['jahr'] = erstelle_jahresbericht_lokal(jetzt.year)
+
+    with schreibfenster(mount_dir) as bereit:
+        if not bereit:
+            ergebnis['fehler'] = 'Stick ließ sich nicht beschreibbar schalten'
+            return ergebnis
+        kopie = _kopiere_dateien(mount_dir)
+        ergebnis['kopiert'] = kopie['kopiert']
+        ergebnis['fehler'] = kopie['fehler']
+    return ergebnis

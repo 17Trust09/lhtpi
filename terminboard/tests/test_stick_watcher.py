@@ -89,9 +89,18 @@ class TestImport:
 
 
 class TestBerichtsausloeser:
-    def test_ohne_trigger_kein_bericht(self, app, stick):
+    def test_neue_daten_erzeugen_bericht_automatisch(self, app, stick):
+        # Erster Import bringt neue Termine → Berichte entstehen von selbst,
+        # ganz ohne Trigger-Datei.
         ergebnis = verarbeite_stick(stick)
-        assert ergebnis['bericht'] is None
+        assert ergebnis['bericht'] is not None
+        assert ergebnis['bericht']['monat'] is not None
+        assert ergebnis['bericht']['jahr'] is not None
+
+    def test_gleiche_datei_erzeugt_keinen_bericht(self, app, stick):
+        verarbeite_stick(stick)
+        zweiter = verarbeite_stick(stick)
+        assert zweiter['bericht'] is None
 
     def test_trigger_erzeugt_berichte(self, app, stick):
         with open(os.path.join(stick, 'LHTPi-Bericht.jetzt'), 'w') as fh:

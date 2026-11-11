@@ -21,7 +21,7 @@ from historie import ImportLauf, importiere
 from archiv import verschiebe_abgeschlossene
 from excel_modell2 import lies_datei
 from usb_source import find_usb_termin_dir, USB_XLSX_FILENAME
-from bericht import pruefe_stick_befehl
+from bericht import pruefe_stick_befehl, erstelle_berichte_automatisch
 
 STANDARD_INTERVALL = 20      # Sekunden
 
@@ -98,6 +98,7 @@ def verarbeite_stick(mount_dir=None, erzwinge=False):
     xlsx = os.path.join(mount, USB_XLSX_FILENAME)
     if os.path.isfile(xlsx):
         hashwert = datei_hash(xlsx)
+        geaendert = False
         if erzwinge or not _zuletzt_importiert(USB_XLSX_FILENAME, hashwert):
             daten = lies_datei(xlsx)
             report = importiere(
@@ -108,6 +109,8 @@ def verarbeite_stick(mount_dir=None, erzwinge=False):
             )
             # Parser-Fehler (z. B. kaputte Zeile im Blatt „Zeiten") mitgeben
             report['parser_fehler'] = daten['fehler']
+            geaendert = (report['neu'] + report['geaendert'] +
+                         report['entfernt']) > 0
 
             ergebnis['importiert'] = True
             ergebnis['report'] = report
@@ -116,11 +119,19 @@ def verarbeite_stick(mount_dir=None, erzwinge=False):
         # schon mal stattgefunden, das Verschieben aber nicht geklappt (z. B.
         # Stick nicht beschreibbar), wuerde sonst nie wieder archiviert.
         archiv = _archiviere(mount, xlsx)
+        if archiv['verschoben']:
+            geaendert = True
         if archiv['verschoben'] or archiv['fehler']:
             if ergebnis['report'] is None:
                 ergebnis['report'] = {}
             ergebnis['report']['archiv'] = archiv
 
+        # Berichte automatisch erneuern, wenn sich Daten geaendert haben –
+        # kein Trigger nötig: der Stick selbst ist die Änderungsquelle.
+        if geaendert:
+            ergebnis['bericht'] = erstelle_berichte_automatisch(mount)
+
+    # Manuelle Ausloese-Datei bleibt als zusätzlicher Weg erhalten.
     bericht = pruefe_stick_befehl(mount)
     if bericht['ausgeloest']:
         ergebnis['bericht'] = bericht
