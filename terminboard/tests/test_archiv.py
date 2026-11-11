@@ -118,3 +118,23 @@ def test_trockenlauf_schreibt_nicht(tmp_path):
     assert ergebnis['verschoben'] == [1]
     wb = load_workbook(pfad)
     assert wb['Termine'].max_row == 2        # unveraendert
+
+
+def test_legende_wird_nicht_mitkopiert(tmp_path):
+    # Rechts neben den Daten steht die Legende - sie darf nicht ins Archiv.
+    pfad = tmp_path / 'termine.xlsx'
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Termine'
+    ws.append(KOPF)
+    ws.append([1, 'Kalibrierung', 'P11', '19.10.2026', '26.10.2026', 'x', 'abgeschlossen'])
+    ws['H1'] = 'Legende'
+    ws['H2'] = 'offen = rot'
+    wb.save(pfad)
+
+    verschiebe_abgeschlossene(str(pfad))
+
+    wb2 = load_workbook(str(pfad))
+    archiv = wb2['Archiv']
+    assert archiv.max_column == 7
+    assert archiv.cell(row=1, column=8).value is None      # keine Legende-Spalte

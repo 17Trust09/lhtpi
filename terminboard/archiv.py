@@ -20,6 +20,7 @@ TERMINE_BLATT = 'Termine'
 ARCHIV_BLATT = 'Archiv'
 SPALTE_STATUS = 7            # G
 SPALTE_NR = 1                # A
+SPALTEN_TERMINE = 7          # A-G: nur diese Daten-Spalten wandern ins Archiv
 
 
 def _hat_archiv(wb):
@@ -52,7 +53,7 @@ def verschiebe_abgeschlossene(pfad, trocken=False):
     if not _hat_archiv(wb):
         archiv = wb.create_sheet(ARCHIV_BLATT)
         archiv.append([ws.cell(row=1, column=spalte).value
-                       for spalte in range(1, ws.max_column + 1)])
+                       for spalte in range(1, SPALTEN_TERMINE + 1)])
     else:
         archiv = wb[ARCHIV_BLATT]
 
@@ -81,7 +82,7 @@ def verschiebe_abgeschlossene(pfad, trocken=False):
     # sie bei einem Fehler weg.
     for zeile in zu_loeschen:
         werte = [ws.cell(row=zeile, column=spalte).value
-                 for spalte in range(1, ws.max_column + 1)]
+                 for spalte in range(1, SPALTEN_TERMINE + 1)]
         archiv.append(werte)
         ergebnis['verschoben'].append(werte[SPALTE_NR - 1])
 
