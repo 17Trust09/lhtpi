@@ -80,10 +80,24 @@ def verschiebe_abgeschlossene(pfad, trocken=False):
 
     # Erst die Werte ins Archiv schreiben, dann loeschen - andersherum waeren
     # sie bei einem Fehler weg.
+    # Wichtig: NICHT `archiv.append()` nutzen. Das Archiv-Blatt der Vorlage hat
+    # viele vorformatierte Leerzeilen; `append` haengt ans Ende und die Eintraege
+    # landen unsichtbar bei Zeile ~500. Stattdessen in die erste freie Zeile
+    # (direkt unter der Kopfzeile) schreiben.
+    ziel = 2
+    for pruef_zeile in range(2, archiv.max_row + 1):
+        if archiv.cell(row=pruef_zeile, column=SPALTE_NR).value is None:
+            ziel = pruef_zeile
+            break
+    else:
+        ziel = archiv.max_row + 1
+
     for zeile in zu_loeschen:
         werte = [ws.cell(row=zeile, column=spalte).value
                  for spalte in range(1, SPALTEN_TERMINE + 1)]
-        archiv.append(werte)
+        for spalte, wert in enumerate(werte, start=1):
+            archiv.cell(row=ziel, column=spalte, value=wert)
+        ziel += 1
         ergebnis['verschoben'].append(werte[SPALTE_NR - 1])
 
     if trocken:

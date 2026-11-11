@@ -138,3 +138,26 @@ def test_legende_wird_nicht_mitkopiert(tmp_path):
     archiv = wb2['Archiv']
     assert archiv.max_column == 7
     assert archiv.cell(row=1, column=8).value is None      # keine Legende-Spalte
+
+
+def test_archiv_mit_vorformatierten_leerzeilen(tmp_path):
+    # Das Archiv-Blatt der Vorlage hat viele vorformatierte Leerzeilen.
+    # Neue Eintraege muessen direkt unter die Kopfzeile (Zeile 2), nicht ans Ende.
+    pfad = tmp_path / 'termine.xlsx'
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Termine'
+    ws.append(KOPF)
+    ws.append([1, 'Kalibrierung', 'P11', '19.10.2026', '26.10.2026', 'x', 'abgeschlossen'])
+    archiv = wb.create_sheet('Archiv')
+    archiv.append(KOPF)
+    for zeile in range(2, 502):           # 500 vorformatierte Leerzeilen
+        archiv.cell(row=zeile, column=1).value = None
+    wb.save(pfad)
+
+    verschiebe_abgeschlossene(str(pfad))
+
+    wb2 = load_workbook(str(pfad))
+    archiv2 = wb2['Archiv']
+    assert archiv2.cell(row=2, column=1).value == 1    # direkt unter der Kopfzeile
+    assert archiv2.cell(row=3, column=1).value is None  # danach wieder leer
