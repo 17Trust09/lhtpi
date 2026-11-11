@@ -19,7 +19,7 @@ from fpdf import FPDF
 from fpdf.fonts import FontFace
 
 from models import db
-from historie import Vorgang, ImportLauf, ausfall_je_pruefstand
+from historie import Vorgang, ImportLauf, ausfall_je_pruefstand_im_monat
 
 MONATE = ('', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
           'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember')
@@ -115,9 +115,9 @@ def sammle_daten(jahr, monat):
 
     abgeschlossen = (Vorgang.query
                      .filter_by(status='abgeschlossen')
-                     .filter(Vorgang.abgeschlossen_am >= beginn)
-                     .filter(Vorgang.abgeschlossen_am < ende)
-                     .order_by(Vorgang.abgeschlossen_am).all())
+                     .filter(Vorgang.bis >= beginn)
+                     .filter(Vorgang.bis < ende)
+                     .order_by(Vorgang.bis).all())
 
     letzter_import = (ImportLauf.query
                       .order_by(ImportLauf.zeitpunkt.desc()).first())
@@ -127,7 +127,7 @@ def sammle_daten(jahr, monat):
         'monat': monat,
         'aktive': aktive,
         'abgeschlossen': abgeschlossen,
-        'statistik': ausfall_je_pruefstand(jahr),
+        'statistik': ausfall_je_pruefstand_im_monat(jahr, monat),
         'import': letzter_import,
     }
 
@@ -173,23 +173,22 @@ def erstelle_bericht(pfad, jahr, monat, erzeugt_am=None):
         _leer(pdf, schrift, 'Keine aktiven Termine.')
     pdf.ln(3)
 
-    # ── Abgeschlossen im Monat
+    # ── Abgeschlossen im Monat (Termine, die in diesem Monat enden)
     _ueberschrift(pdf, schrift,
                   f'Abgeschlossen im {MONATE[monat]} ({len(daten["abgeschlossen"])})')
     if daten['abgeschlossen']:
         _tabelle(pdf, schrift,
-                 ('Abgeschlossen', 'Art', 'Prüfstand', 'Zeitraum'),
-                 [(v.abgeschlossen_am.strftime('%d.%m.%Y'),
-                   ART_TEXT.get(v.art, v.art), v.pruefstand,
-                   f'{_kurz(v.von)} – {_kurz(v.bis)}')
+                 ('Zeitraum', 'Art', 'Prüfstand'),
+                 [(f'{_kurz(v.von)} – {_kurz(v.bis)}',
+                   ART_TEXT.get(v.art, v.art), v.pruefstand)
                   for v in daten['abgeschlossen']],
-                 breiten=(26, 24, 46, 94))
+                 breiten=(94, 24, 72))
     else:
         _leer(pdf, schrift, 'Nichts abgeschlossen in diesem Monat.')
     pdf.ln(3)
 
     # ── Ausfallzeiten
-    _ueberschrift(pdf, schrift, f'Ausfallzeiten {jahr} je Prüfstand')
+    _ueberschrift(pdf, schrift, f'Ausfallzeiten {MONATE[monat]} {jahr} je Prüfstand')
     if daten['statistik']:
         zeilen = []
         for eintrag in sorted(daten['statistik'].values(),
@@ -213,7 +212,7 @@ def erstelle_bericht(pfad, jahr, monat, erzeugt_am=None):
                  f'Summe: {_std(summe_stunden)} h an {summe_tage} Tagen',
                  new_x='LMARGIN', new_y='NEXT')
     else:
-        _leer(pdf, schrift, 'Keine Ausfallzeiten im Jahr erfasst.')
+        _leer(pdf, schrift, 'Keine Ausfallzeiten in diesem Monat erfasst.')
     pdf.ln(3)
 
     # ── Import
@@ -365,9 +364,6 @@ def _kopiere_dateien(mount_dir):
                 continue
             quelle = os.path.join(berichtsordner_lokal(), name)
             ziel = os.path.join(ziel_ordner, name)
-            if os.path.exists(ziel):
-                ergebnis['vorhanden'].append(name)
-                continue
             with open(quelle, 'rb') as fq, open(ziel, 'wb') as fz:
                 fz.write(fq.read())
             ergebnis['kopiert'].append(name)

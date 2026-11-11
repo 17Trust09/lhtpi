@@ -498,3 +498,45 @@ def ausfall_je_pruefstand_je_monat(jahr):
         eintrag['monate'] = {m: round(h, 2) for m, h in eintrag['monate'].items()}
         eintrag['tage'] = len(eintrag['tage'])
     return ergebnis
+
+
+def ausfall_je_pruefstand_im_monat(jahr, monat):
+    """Ausfallstunden und -tage je Prüfstand für einen einzelnen Monat.
+
+    Wie ``ausfall_je_pruefstand``, aber auf einen Kalendermonat begrenzt –
+    für den Monatsbericht. Die Jahres-Summe bleibt im Jahresbericht.
+    """
+    from betriebszeit import betriebstage
+
+    ergebnis = {}
+    for v in Vorgang.query.filter(Vorgang.status == 'abgeschlossen').all():
+        if not v.zaehlt_als_ausfall:
+            continue
+        stunden = stunden_je_monat(v.von, v.bis or v.von).get((jahr, monat), 0.0)
+        if stunden <= 0:
+            continue
+
+        if v.zeiten:
+            zeitraeume = [(z.von, z.bis) for z in v.zeiten]
+        else:
+            zeitraeume = [(v.von, v.bis or v.von)]
+
+        tage = set()
+        for von, bis in zeitraeume:
+            tage.update(t for t in betriebstage(von, bis)
+                        if t.year == jahr and t.month == monat)
+
+        eintrag = ergebnis.setdefault(v.pruefstand, {
+            'pruefstand': v.pruefstand,
+            'stunden': 0.0,
+            'tage': set(),
+            'vorgaenge': 0,
+        })
+        eintrag['stunden'] += stunden
+        eintrag['tage'].update(tage)
+        eintrag['vorgaenge'] += 1
+
+    for eintrag in ergebnis.values():
+        eintrag['stunden'] = round(eintrag['stunden'], 2)
+        eintrag['tage'] = len(eintrag['tage'])
+    return ergebnis

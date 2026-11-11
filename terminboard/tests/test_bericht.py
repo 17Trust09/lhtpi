@@ -89,7 +89,17 @@ class TestBericht:
                           bis=datetime(2026, 11, 7, 16, 0),
                           status='abgeschlossen')])
         statistik = sammle_daten(2026, 11)['statistik']
-        assert statistik['P03 NRA']['stunden'] == pytest.approx(0.0)
+        # 0 Stunden am Wochenende → der Prüfstand taucht gar nicht erst auf.
+        assert 'P03 NRA' not in statistik
+
+    def test_abgeschlossen_ordnet_nach_bis_statt_abhakdatum(self, app):
+        # Termin endet im Oktober, wird aber erst im November abgehakt.
+        # Er gehört in den Oktober-Bericht, nicht in den November-Bericht.
+        importiere([zeile(nr=1, von=datetime(2026, 10, 19, 7, 0),
+                          bis=datetime(2026, 10, 26, 15, 0),
+                          status='abgeschlossen')])
+        assert len(sammle_daten(2026, 11)['abgeschlossen']) == 0
+        assert len(sammle_daten(2026, 10)['abgeschlossen']) == 1
 
     def test_ohne_daten_kein_absturz(self, app, tmp_path):
         pfad = tmp_path / 'leer.pdf'
@@ -119,15 +129,14 @@ class TestAblage:
         assert (ziel / 'Terminbericht_2026-11.pdf').exists()
         assert (ziel / 'Terminbericht_2026-10.pdf').exists()
 
-    def test_zweite_kopie_legt_keine_dublette_an(self, app, tmp_path):
+    def test_zweite_kopie_ueberschreibt(self, app, tmp_path):
         erstelle_monatsbericht(2026, 11)
         stick = tmp_path / 'stick'
         stick.mkdir()
 
         kopiere_auf_stick(str(stick))
         zweite = kopiere_auf_stick(str(stick))
-        assert zweite['kopiert'] == []
-        assert zweite['vorhanden'] == ['Terminbericht_2026-11.pdf']
+        assert zweite['kopiert'] == ['Terminbericht_2026-11.pdf']
         assert len(list((stick / 'LHTPi-Berichte').iterdir())) == 1
 
     def test_ohne_stick_passiert_nichts(self, app, tmp_path):
@@ -161,7 +170,7 @@ class TestStickAusloeser:
         berichte = stick / 'LHTPi-Berichte'
         assert len(list(berichte.glob('*.pdf'))) == 2
 
-    def test_zweiter_trigger_legt_keine_dubletten_an(self, app, tmp_path):
+    def test_zweiter_trigger_ueberschreibt(self, app, tmp_path):
         from bericht import pruefe_stick_befehl, TRIGGER_NAME
         stick = tmp_path / 'stick'
         stick.mkdir()
@@ -171,7 +180,8 @@ class TestStickAusloeser:
         (stick / TRIGGER_NAME).write_text('')
         ergebnis = pruefe_stick_befehl(str(stick))
 
-        assert ergebnis['kopiert'] == []      # schon vorhanden
+        assert ergebnis['kopiert'] == ['Terminbericht_2026-11.pdf',
+                                       'Terminbericht_Jahr_2026.pdf']
         assert len(list((stick / 'LHTPi-Berichte').glob('*.pdf'))) == 2
 
 
