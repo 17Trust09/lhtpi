@@ -91,11 +91,10 @@ PYSCR
 fi
 
 # Stick-Helfer zum kurzzeitigen Beschreibbar-Schalten (fuer Berichte) nachziehen.
-# install.sh erzeugt ihn, aber ein reines git pull laesst ihn fehlen - dann
-# schlaegt der Selbsttest "Stick beschreibbar schalten" fehl, obwohl die
-# sudoers-Regel vorhanden ist.
+# IMMER aktualisieren: die Mount-Optionen (uid=pi,gid=pi) muessen auch beim
+# remount stimmen, sonst scheitern Archiv und Bericht mit "Permission denied".
 USB_RW_HELFER="/usr/local/bin/lhtpi-usb-rw.sh"
-if [ ! -x "${USB_RW_HELFER}" ] && grep -q "lhtpi-usb-rw.sh <<'EOF'" "${REPO}/install.sh"; then
+if grep -q "lhtpi-usb-rw.sh <<'EOF'" "${REPO}/install.sh"; then
     python3 - "${REPO}/install.sh" "${USB_RW_HELFER}" <<'PYRW'
 import pathlib, sys
 quelle, ziel = sys.argv[1], sys.argv[2]
@@ -107,7 +106,7 @@ b = s.index("EOF", a)
 pathlib.Path(ziel).write_text(s[a:b])
 PYRW
     chmod 0755 "${USB_RW_HELFER}"
-    bash -n "${USB_RW_HELFER}" && sag "Helfer eingerichtet: ${USB_RW_HELFER}"
+    bash -n "${USB_RW_HELFER}" && sag "Stick-RW-Helfer aktualisiert: ${USB_RW_HELFER}"
 fi
 
 # Stick-Mount-Helfer IMMER nachziehen: hier stehen die Mount-Optionen
