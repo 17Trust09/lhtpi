@@ -64,7 +64,9 @@ class Vorgang(db.Model):
     @property
     def zaehlt_als_ausfall(self):
         """True, wenn der Vorgang in die Ausfallstatistik eingeht."""
-        return self.status in ('offen', 'abgeschlossen') and self.art in (
+        # Nur abgeschlossene zählen: ein noch offener Termin ist kein
+        # bestätigter Ausfall, sondern erst eine Ankündigung.
+        return self.status == 'abgeschlossen' and self.art in (
             'kalibrierung', 'wartung', 'ausfall')
 
     def __repr__(self):
@@ -354,7 +356,7 @@ def ausfall_je_pruefstand(jahr=None):
     Rechnet ausschließlich auf Vorgängen (eine Zeile je Termin), nie auf
     Import-Läufen – damit mehrfach importierte Termine nicht doppelt zählen.
     """
-    query = Vorgang.query.filter(Vorgang.status.in_(('offen', 'abgeschlossen')))
+    query = Vorgang.query.filter(Vorgang.status == 'abgeschlossen')
     ergebnis = {}
 
     for v in query.all():
@@ -465,7 +467,7 @@ def ausfall_je_pruefstand_je_monat(jahr):
     from betriebszeit import betriebstage
 
     ergebnis = {}
-    for v in Vorgang.query.filter(Vorgang.status.in_(('offen', 'abgeschlossen'))).all():
+    for v in Vorgang.query.filter(Vorgang.status == 'abgeschlossen').all():
         if not v.zaehlt_als_ausfall:
             continue
         if not _beruehrt_jahr(v, jahr):

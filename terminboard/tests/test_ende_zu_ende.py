@@ -47,8 +47,8 @@ def testdatei(tmp_path):
     ws.append(['Nr', 'Art', 'Prüfstand', 'Von', 'Bis', 'Info', 'Status'])
     ws.append([1, 'Wartung', 'P03 NRA', '02.11.2026', '02.11.2026', 'Jahreswartung', 'abgeschlossen'])
     ws.append([2, 'Kalibrierung', 'P10 PTU TESTFUCHS', '16.11.2026', '21.11.2026', 'mehrtaegig', 'abgeschlossen'])
-    ws.append([3, 'Ausfall', 'P21 NRC HYCOM', '18.11.2026', '19.11.2026', 'Steuerung', 'offen'])
-    ws.append([4, 'Kalibrierung', 'P31 THSA', '24.11.2026', '24.11.2026', 'Halbtag', 'offen'])
+    ws.append([3, 'Ausfall', 'P21 NRC HYCOM', '18.11.2026', '19.11.2026', 'Steuerung', 'abgeschlossen'])
+    ws.append([4, 'Kalibrierung', 'P31 THSA', '24.11.2026', '24.11.2026', 'Halbtag', 'abgeschlossen'])
     ws.append([5, 'Audit', 'P40 AKKU/HOCHDRUCK-RAUM', '27.11.2026', '27.11.2026', 'intern', 'offen'])
     ws.append([6, 'Info', 'P07 EHSV NRA', '01.12.2026', None, 'Hinweis', 'offen'])
 

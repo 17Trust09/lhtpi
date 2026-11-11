@@ -130,9 +130,14 @@ class TestImport:
         assert v.zaehlt_als_ausfall is False
 
     def test_wartung_zaehlt_als_ausfall(self, app):
-        importiere([zeile(art='Wartung', status='offen')])
+        importiere([zeile(art='Wartung', status='abgeschlossen')])
         v = Vorgang.query.one()
         assert v.zaehlt_als_ausfall is True
+
+    def test_offen_zaehlt_nicht_als_ausfall(self, app):
+        importiere([zeile(art='Wartung', status='offen')])
+        v = Vorgang.query.one()
+        assert v.zaehlt_als_ausfall is False
 
 
 class TestBloecke:
