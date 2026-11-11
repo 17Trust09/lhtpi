@@ -569,19 +569,24 @@ def pruefe_stick_befehl(mount_dir):
 
 
 def erstelle_berichte_automatisch(mount_dir):
-    """Erstellt Monats- und Jahresbericht und kopiert sie auf den Stick.
+    """Erstellt alle Monats- und den Jahresbericht und kopiert sie auf den Stick.
 
     Wird aufgerufen, wenn sich die Daten geändert haben (Import oder
-    Archivierung) – ganz ohne Auslöse-Datei. Der Stick ist die einzige
-    Datenquelle; sobald er neue Daten bringt, werden die Berichte erneuert.
+    Archivierung) – ganz ohne Auslöse-Datei. Es werden alle Monate des
+    laufenden Jahres erzeugt, damit auch rückwirkende Änderungen (z. B. ein
+    nachträglich abgeschlossener Oktober-Termin) in den richtigen
+    Monatsbericht wandern.
     """
-    ergebnis = {'monat': None, 'jahr': None, 'kopiert': [], 'fehler': None}
+    ergebnis = {'monate': [], 'jahr': None, 'kopiert': [], 'fehler': None}
     if not os.path.isdir(mount_dir):
         ergebnis['fehler'] = 'Stick nicht gefunden'
         return ergebnis
 
     jetzt = datetime.now()
-    ergebnis['monat'] = erstelle_monatsbericht(jetzt.year, jetzt.month)
+    for monat in range(1, 13):
+        pfad = erstelle_monatsbericht(jetzt.year, monat)
+        if pfad:
+            ergebnis['monate'].append(pfad)
     ergebnis['jahr'] = erstelle_jahresbericht_lokal(jetzt.year)
 
     with schreibfenster(mount_dir) as bereit:

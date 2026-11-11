@@ -91,10 +91,10 @@ class TestImport:
 class TestBerichtsausloeser:
     def test_neue_daten_erzeugen_bericht_automatisch(self, app, stick):
         # Erster Import bringt neue Termine → Berichte entstehen von selbst,
-        # ganz ohne Trigger-Datei.
+        # ganz ohne Trigger-Datei. Es werden alle 12 Monate erzeugt.
         ergebnis = verarbeite_stick(stick)
         assert ergebnis['bericht'] is not None
-        assert ergebnis['bericht']['monat'] is not None
+        assert len(ergebnis['bericht']['monate']) == 12
         assert ergebnis['bericht']['jahr'] is not None
 
     def test_gleiche_datei_erzeugt_keinen_bericht(self, app, stick):
@@ -109,7 +109,8 @@ class TestBerichtsausloeser:
         assert ergebnis['bericht'] is not None
         assert ergebnis['bericht']['ausgeloest'] is True
         ordner = os.path.join(stick, 'LHTPi-Berichte')
-        assert len([n for n in os.listdir(ordner) if n.endswith('.pdf')]) == 2
+        # 12 Monatsberichte + 1 Jahresbericht
+        assert len([n for n in os.listdir(ordner) if n.endswith('.pdf')]) == 13
 
 
 class TestHash:
