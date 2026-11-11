@@ -110,6 +110,26 @@ PYRW
     bash -n "${USB_RW_HELFER}" && sag "Helfer eingerichtet: ${USB_RW_HELFER}"
 fi
 
+# Stick-Mount-Helfer IMMER nachziehen: hier stehen die Mount-Optionen
+# (uid=pi,gid=pi), die bestimmen, ob der pi-User schreiben darf. Ein reines
+# git pull liess den alten Helfer mit root-only-Rechten zurueck - dann scheitern
+# Archiv und Bericht mit "Permission denied".
+USB_MOUNT_HELFER="/usr/local/bin/lhtpi-usb-mount.sh"
+if grep -q "lhtpi-usb-mount.sh <<'EOF'" "${REPO}/install.sh"; then
+    python3 - "${REPO}/install.sh" "${USB_MOUNT_HELFER}" <<'PYMOUNT'
+import pathlib, sys
+quelle, ziel = sys.argv[1], sys.argv[2]
+s = pathlib.Path(quelle).read_text()
+marker = "cat > /usr/local/bin/lhtpi-usb-mount.sh <<'EOF'"
+a = s.index(marker)
+a = s.index("\n", a) + 1
+b = s.index("EOF", a)
+pathlib.Path(ziel).write_text(s[a:b])
+PYMOUNT
+    chmod 0755 "${USB_MOUNT_HELFER}"
+    bash -n "${USB_MOUNT_HELFER}" && sag "Stick-Mount-Helfer aktualisiert: ${USB_MOUNT_HELFER}"
+fi
+
 # Freigaben: Bildschirmzahl setzen und die Kiosk-Dienste neu starten. Ohne die
 # zweite Regel scheiterte das Neustarten nach dem Speichern still - die Anzeige
 # behielt dann die alte Belegung.

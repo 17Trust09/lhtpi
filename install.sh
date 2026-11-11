@@ -1531,9 +1531,9 @@ if mountpoint -q /mnt/lhtpi-usb; then
     umount -l /mnt/lhtpi-usb 2>/dev/null || true
 fi
 # Read-only mounten (exFAT/FAT32/NTFS per Auto-Detect, mit explizitem Fallback)
-mount "$dev" /mnt/lhtpi-usb -o ro,umask=022 2>/dev/null \
-    || mount "$dev" /mnt/lhtpi-usb -o ro,umask=022 -t vfat 2>/dev/null \
-    || mount "$dev" /mnt/lhtpi-usb -o ro,umask=022 -t exfat 2>/dev/null \
+mount "$dev" /mnt/lhtpi-usb -o ro,uid=pi,gid=pi,umask=022 2>/dev/null \
+    || mount "$dev" /mnt/lhtpi-usb -o ro,uid=pi,gid=pi,umask=022 -t vfat 2>/dev/null \
+    || mount "$dev" /mnt/lhtpi-usb -o ro,uid=pi,gid=pi,umask=022 -t exfat 2>/dev/null \
     || true
 exit 0
 EOF
@@ -1548,7 +1548,7 @@ EOF
 ZIEL=/mnt/lhtpi-usb
 [ -d "$ZIEL" ] || exit 0
 case "$1" in
-    rw) mountpoint -q "$ZIEL" || exit 0; exec mount -o remount,rw "$ZIEL" ;;
+    rw) mountpoint -q "$ZIEL" || exit 0; exec mount -o remount,rw,uid=pi,gid=pi "$ZIEL" ;;
     ro) mountpoint -q "$ZIEL" || exit 0; sync; exec mount -o remount,ro "$ZIEL" ;;
     *)  echo "Aufruf: $0 rw|ro" >&2; exit 2 ;;
 esac
