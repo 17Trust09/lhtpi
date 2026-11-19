@@ -28,7 +28,7 @@ from datetime import date, datetime, timedelta
 
 from models import db, Setting
 
-ALLOWED_TYPES = {'kalibrierung', 'audit', 'info', 'wartung'}
+ALLOWED_TYPES = {'kalibrierung', 'audit', 'info', 'wartung', 'ausfall'}
 
 EXPECTED_HEADER = ['typ', 'titel', 'referenz', 'start', 'ende', 'text']
 
@@ -198,17 +198,67 @@ def parse_azubi_settings(text):
     return result
 
 
+def _ist_modell3(pfad):
+    """True, wenn die Datei die Modell-3-Blätter (Betriebsmittel/News) hat."""
+    try:
+        from openpyxl import load_workbook
+        wb = load_workbook(pfad, read_only=True)
+        try:
+            namen = set(wb.sheetnames)
+        finally:
+            wb.close()
+        return 'Betriebsmittel' in namen or 'News & Audits' in namen
+    except Exception:                                # noqa: BLE001
+        return False
+
+
+def _parse_modell3(file_path):
+    """Liest Modell 3 und liefert Anzeige-Dicts für Termine und News."""
+    from excel_modell3 import lies_datei
+    daten = lies_datei(file_path)
+    rows = []
+    for zeile in daten.get('termine') or []:
+        if zeile.get('von') is None:
+            continue
+        titel = zeile.get('info') or \
+            f"{zeile.get('art')} {zeile.get('betriebsmittel')}".strip()
+        rows.append({
+            'typ': normalize_type(zeile.get('art')),
+            'titel': titel,
+            'referenz': zeile.get('betriebsmittel'),
+            'start': zeile['von'].date(),
+            'ende': zeile['bis'].date() if zeile.get('bis') else None,
+            'text': None,
+        })
+    for zeile in daten.get('news') or []:
+        if zeile.get('von') is None:
+            continue
+        rows.append({
+            'typ': normalize_type(zeile.get('art')),
+            'titel': zeile.get('titel'),
+            'referenz': None,
+            'start': zeile['von'].date(),
+            'ende': zeile['bis'].date() if zeile.get('bis') else None,
+            'text': zeile.get('info'),
+        })
+    if not rows:
+        return None
+    return rows
+
+
 def parse_termin_xlsx(file_path):
-    """Liest ``termine.xlsx`` über den einheitlichen Excel-Leser.
+    """Liest ``termine.xlsx`` – Modell 3 (Termine + News) oder Modell 2.
 
-    Es gibt nur noch **einen** Excel-Leser (``excel_modell2``). Diese Funktion
-    übersetzt dessen Ergebnis in die Dict-Form, die die Anzeige erwartet.
-    Dateien im alten Fünf-Spalten-Format werden abgelehnt.
-
-    Liefert ``None``, wenn die Datei nicht gelesen werden kann.
+    Modell 3 wird an den Blättern ``Betriebsmittel``/``News & Audits`` erkannt;
+    andernfalls gilt der Modell-2-Leser. Liefert Anzeige-Dicts
+    (``typ, titel, referenz, start, ende, text``) oder ``None``.
     """
     if not os.path.isfile(file_path):
         return None
+
+    if _ist_modell3(file_path):
+        return _parse_modell3(file_path)
+
     try:
         from excel_modell2 import lies_datei
     except ImportError:

@@ -48,6 +48,11 @@ def load_user(user_id):
 
 
 with app.app_context():
+    # Bestehende Datenbanken erst auf den Modell-3-Stand heben, dann fehlende
+    # Tabellen anlegen. create_all() allein ergänzt keine neuen Spalten.
+    # Ein fehlgeschlagenes Upgrade darf die App nicht still weiterlaufen lassen.
+    from schema_upgrade import upgrade_oder_abbrechen
+    upgrade_oder_abbrechen(db, logger=app.logger)
     db.create_all()
     from models import User
     if not User.query.filter_by(username='admin').first():

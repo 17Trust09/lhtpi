@@ -1,14 +1,20 @@
 """Stick-Verarbeitung: Excel importieren und Berichte auslösen.
 
-Läuft im Hintergrund, während das Board am Prüfstand steht. Zwei Aufgaben:
+Läuft im Hintergrund, während das Board am Prüfstand steht. Aufgaben:
 
 1. **Import** – liegt eine ``termine.xlsx`` auf dem Stick, wird sie in die
-   Historie übernommen. Erkannt wird eine neue Fassung am Datei-Hash, damit
-   nicht bei jedem Durchlauf derselbe Stand verarbeitet wird.
-2. **Bericht** – liegt zusätzlich ``LHTPi-Bericht.jetzt`` auf dem Stick,
+   Historie übernommen (Modell 3 mit Betriebsmittel-Abgleich, Terminen und
+   News; Modell 2 als Fallback). Erkannt wird eine neue Fassung am Datei-Hash.
+2. **Writeback/Archiv** – beim Modell 3 werden vergebene BM-Kennungen und die
+   ausgeblendete BM-ID in die Datei zurückgeschrieben und abgeschlossene
+   Zeilen archiviert. Nach dem Schreiben wird der neue Datei-Hash registriert,
+   damit der Watcher seine eigene Änderung nicht erneut importiert.
+3. **Bericht** – liegt zusätzlich ``LHTPi-Bericht.jetzt`` auf dem Stick,
    werden Monats- und Jahresbericht erzeugt und auf den Stick geschrieben.
 
-Beides ist unschädlich, wenn kein Stick steckt.
+Beides ist unschädlich, wenn kein Stick steckt. Ein nicht beschreibbarer
+Stick lässt Import/Lesen weiter zu; der Writeback-Fehler wird gemeldet und
+beim nächsten Durchlauf erneut versucht.
 """
 import hashlib
 import os
@@ -17,10 +23,12 @@ import threading
 import time
 
 from models import db
-from historie import ImportLauf, importiere
+from historie import ImportLauf, importiere, importiere_modell3
+from betriebsmittel_sync import sync_betriebsmittel
 from archiv import verschiebe_abgeschlossene
+from excel_writeback import wende_an
 from excel_modell2 import lies_datei
-from usb_source import find_usb_termin_dir, USB_XLSX_FILENAME
+from usb_source import find_usb_termin_dir, USB_XLSX_FILENAME, FIXED_MOUNT, _ist_modell3
 from bericht import pruefe_stick_befehl, erstelle_berichte_automatisch
 
 STANDARD_INTERVALL = 20      # Sekunden
@@ -48,11 +56,16 @@ def _zuletzt_importiert(dateiname, hashwert):
     return treffer is not None
 
 
-def _usb_schreibrecht(schalten):
-    """Schaltet den Stick beschreibbar bzw. wieder nur lesend.
+def _registriere_hash(dateiname, hashwert):
+    """Merkt den aktuellen Dateiinhalt als verarbeitet (nach Writeback)."""
+    lauf = ImportLauf(dateiname=dateiname, datei_hash=hashwert, zeilen=0,
+                      bericht='writeback')
+    db.session.add(lauf)
+    db.session.commit()
 
-    Liegt als Helfer in /usr/local/bin, weil das Mounten root braucht.
-    """
+
+def _usb_schreibrecht(schalten):
+    """Schaltet den Stick beschreibbar bzw. wieder nur lesend."""
     helfer = '/usr/local/bin/lhtpi-usb-rw.sh'
     if not os.path.exists(helfer):
         return False
@@ -65,12 +78,19 @@ def _usb_schreibrecht(schalten):
         return False
 
 
-def _archiviere(mount, pfad):
-    """Verschiebt abgeschlossene Zeilen, wenn der Stick schreibbar ist.
+def _schreibbar(mount):
+    """True, wenn in ``mount`` geschrieben werden darf.
 
-    Erst trocken pruefen: Gibt es nichts zu verschieben, wird der Stick gar
-    nicht erst auf rw geschaltet - sonst hinge er bei jedem Durchlauf kurz um.
+    Pfade außerhalb des festen Mounts (z. B. Tests) gelten als beschreibbar;
+    der echte Stick wird über den root-Helfer kurz auf rw geschaltet.
     """
+    if os.path.abspath(mount) != FIXED_MOUNT:
+        return True
+    return _usb_schreibrecht('rw')
+
+
+def _archiviere(mount, pfad):
+    """Modell 2: verschiebt abgeschlossene Zeilen, wenn der Stick schreibbar ist."""
     probe = verschiebe_abgeschlossene(pfad, trocken=True)
     if not probe['verschoben']:
         return probe
@@ -80,6 +100,92 @@ def _archiviere(mount, pfad):
         return verschiebe_abgeschlossene(pfad)
     finally:
         _usb_schreibrecht('ro')
+
+
+def _writeback_modell3(mount, pfad, writeback):
+    """Modell 3: IDs/Archiv zurückschreiben, wenn der Stick beschreibbar ist."""
+    probe = wende_an(pfad, writeback, trocken=True)
+    if not probe['geaendert']:
+        return probe
+    if not _schreibbar(mount):
+        return {'geaendert': False, 'verschoben': [],
+                'fehler': 'Stick nicht beschreibbar', 'sicherung': None}
+    try:
+        return wende_an(pfad, writeback)
+    finally:
+        if os.path.abspath(mount) == FIXED_MOUNT:
+            _usb_schreibrecht('ro')
+
+
+def _verarbeite_modell3(pfad, mount, ergebnis, erzwinge):
+    """Modell-3-Durchlauf: Abgleich → Import → Writeback/Archiv → Hash merken."""
+    from excel_modell3 import lies_datei
+
+    hashwert = datei_hash(pfad)
+    daten = lies_datei(pfad)
+
+    # Der Betriebsmittel-Abgleich läuft bei jedem Durchlauf (idempotent), damit
+    # vergebene IDs auch dann geschrieben werden, wenn der Import wegen
+    # unverändertem Hash übersprungen wurde.
+    sync_report = sync_betriebsmittel(daten.get('betriebsmittel') or [])
+
+    geaendert = False
+    report = None
+    if erzwinge or not _zuletzt_importiert(USB_XLSX_FILENAME, hashwert):
+        report = importiere_modell3(
+            daten, dateiname=USB_XLSX_FILENAME, datei_hash=hashwert)
+        report['sync'] = sync_report
+        ergebnis['importiert'] = True
+        ergebnis['report'] = report
+        geaendert = (report['neu'] + report['geaendert'] +
+                     report['entfernt']) > 0
+
+    writeback = list(sync_report['writeback'])
+
+    wb_ergebnis = _writeback_modell3(mount, pfad, writeback)
+    if wb_ergebnis['geaendert'] or wb_ergebnis['verschoben'] or wb_ergebnis['fehler']:
+        if ergebnis['report'] is None:
+            ergebnis['report'] = {}
+        ergebnis['report']['writeback'] = wb_ergebnis
+        if wb_ergebnis['geaendert'] and not wb_ergebnis['fehler']:
+            # Die Datei hat sich durch das Zurückschreiben geändert – der neue
+            # Hash darf beim nächsten Durchlauf keinen erneuten Import auslösen.
+            _registriere_hash(USB_XLSX_FILENAME, datei_hash(pfad))
+            geaendert = True
+
+    if geaendert:
+        ergebnis['bericht'] = erstelle_berichte_automatisch(mount)
+
+
+def _verarbeite_modell2(pfad, mount, ergebnis, erzwinge):
+    """Modell-2-Durchlauf (bisheriges Verhalten)."""
+    hashwert = datei_hash(pfad)
+    geaendert = False
+    if erzwinge or not _zuletzt_importiert(USB_XLSX_FILENAME, hashwert):
+        daten = lies_datei(pfad)
+        report = importiere(
+            daten['zeilen'],
+            bloecke=daten['bloecke'],
+            dateiname=USB_XLSX_FILENAME,
+            datei_hash=hashwert,
+        )
+        report['parser_fehler'] = daten['fehler']
+        geaendert = (report['neu'] + report['geaendert'] +
+                     report['entfernt']) > 0
+
+        ergebnis['importiert'] = True
+        ergebnis['report'] = report
+
+    archiv = _archiviere(mount, pfad)
+    if archiv['verschoben']:
+        geaendert = True
+    if archiv['verschoben'] or archiv['fehler']:
+        if ergebnis['report'] is None:
+            ergebnis['report'] = {}
+        ergebnis['report']['archiv'] = archiv
+
+    if geaendert:
+        ergebnis['bericht'] = erstelle_berichte_automatisch(mount)
 
 
 def verarbeite_stick(mount_dir=None, erzwinge=False):
@@ -97,39 +203,10 @@ def verarbeite_stick(mount_dir=None, erzwinge=False):
 
     xlsx = os.path.join(mount, USB_XLSX_FILENAME)
     if os.path.isfile(xlsx):
-        hashwert = datei_hash(xlsx)
-        geaendert = False
-        if erzwinge or not _zuletzt_importiert(USB_XLSX_FILENAME, hashwert):
-            daten = lies_datei(xlsx)
-            report = importiere(
-                daten['zeilen'],
-                bloecke=daten['bloecke'],
-                dateiname=USB_XLSX_FILENAME,
-                datei_hash=hashwert,
-            )
-            # Parser-Fehler (z. B. kaputte Zeile im Blatt „Zeiten") mitgeben
-            report['parser_fehler'] = daten['fehler']
-            geaendert = (report['neu'] + report['geaendert'] +
-                         report['entfernt']) > 0
-
-            ergebnis['importiert'] = True
-            ergebnis['report'] = report
-
-        # Archivieren laeuft bewusst ausserhalb des Hash-Checks: Hat der Import
-        # schon mal stattgefunden, das Verschieben aber nicht geklappt (z. B.
-        # Stick nicht beschreibbar), wuerde sonst nie wieder archiviert.
-        archiv = _archiviere(mount, xlsx)
-        if archiv['verschoben']:
-            geaendert = True
-        if archiv['verschoben'] or archiv['fehler']:
-            if ergebnis['report'] is None:
-                ergebnis['report'] = {}
-            ergebnis['report']['archiv'] = archiv
-
-        # Berichte automatisch erneuern, wenn sich Daten geaendert haben –
-        # kein Trigger nötig: der Stick selbst ist die Änderungsquelle.
-        if geaendert:
-            ergebnis['bericht'] = erstelle_berichte_automatisch(mount)
+        if _ist_modell3(xlsx):
+            _verarbeite_modell3(xlsx, mount, ergebnis, erzwinge)
+        else:
+            _verarbeite_modell2(xlsx, mount, ergebnis, erzwinge)
 
     # Manuelle Ausloese-Datei bleibt als zusätzlicher Weg erhalten.
     bericht = pruefe_stick_befehl(mount)
@@ -150,9 +227,6 @@ def starte_hintergrundpruefung(app, intervall=STANDARD_INTERVALL):
             except Exception as fehler:     # darf den Kiosk nie stoppen
                 app.logger.warning('Stick-Verarbeitung fehlgeschlagen: %s', fehler)
             finally:
-                # Session auch nach einem Fehler schließen, sonst bleibt die
-                # thread-lokale Session vergiftet und der Watcher läuft nie
-                # wieder an.
                 try:
                     db.session.remove()
                 except Exception:

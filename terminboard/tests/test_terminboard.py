@@ -288,6 +288,20 @@ def test_active_termine_wartung_in_kalibrierungen():
     _clean_termine()
 
 
+def test_active_termine_ausfall_links_nicht_als_news():
+    _clean_termine()
+    with app.app_context():
+        db.session.add(Termin(typ='ausfall', titel='Defekt P5', referenz='P5',
+                              start=date(2026, 9, 20), ende=date(2026, 9, 21)))
+        db.session.commit()
+    with app.test_client() as c:
+        d = c.get('/board/api/status').get_json()
+        # Ausfall ist ein Termin auf der linken Seite, keine News-Meldung.
+        assert [t['typ'] for t in d['kalibrierungen']] == ['ausfall']
+        assert d['news'] == []
+    _clean_termine()
+
+
 def test_find_azubi_images(monkeypatch, tmp_path):
     (tmp_path / 'flyer.png').write_bytes(b'x')
     (tmp_path / 'seite2.jpg').write_bytes(b'y')

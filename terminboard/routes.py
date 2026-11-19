@@ -97,8 +97,8 @@ def active_termine():
         'manual_source': manual_source,
         'usb_present': usb_present,
         'termine': termine,
-        'kalibrierungen': [t for t in termine if t['typ'] in ('kalibrierung', 'wartung')],
-        'news': [t for t in termine if t['typ'] not in ('kalibrierung', 'wartung')],
+        'kalibrierungen': [t for t in termine if t['typ'] in ('kalibrierung', 'wartung', 'ausfall')],
+        'news': [t for t in termine if t['typ'] not in ('kalibrierung', 'wartung', 'ausfall')],
     }
 
 

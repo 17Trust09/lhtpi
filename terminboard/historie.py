@@ -12,12 +12,19 @@ Zwei Regeln tragen das ganze Modul:
 Die Zeitrechnung selbst steckt in :mod:`betriebszeit`.
 """
 import hashlib
+import re
 from datetime import datetime
 
 from models import db
 
 ARTEN = ('kalibrierung', 'wartung', 'ausfall', 'audit', 'info')
 STATUS_WERTE = ('offen', 'abgeschlossen', 'storniert', 'entfernt')
+
+# Modell 3 kennt kein "storniert" mehr – nur offen/abgeschlossen/entfernt.
+MODELL3_STATUS = ('offen', 'abgeschlossen')
+# Betriebsmittel-Typen (intern kleingeschrieben).
+TYPEN = ('pruefstand', 'konsole')
+KENNUNG_RE = re.compile(r'BM-\d{3}')
 
 
 class Pruefstand(db.Model):
@@ -33,14 +40,54 @@ class Pruefstand(db.Model):
         return f'<Pruefstand {self.name}>'
 
 
+class Betriebsmittel(db.Model):
+    """Stabiles Betriebsmittel (Prüfstand oder Konsole) für Modell 3.
+
+    Die ``kennung`` (``BM-001`` …) ist die unveränderliche Identität, an der
+    Vorgänge hängen. ``bezeichnung`` und ``typ`` dürfen sich ändern, die
+    Kennung bleibt. ``in_excel_aktiv`` beschreibt nur, ob das Betriebsmittel
+    (noch) in der Excel-Stammliste steht – die Historie bleibt erhalten, auch
+    wenn es dort gelöscht wurde. ``merge_ziel`` ist der optionale Alias/
+    Zusammenführungs-Verweis auf ein anderes Betriebsmittel.
+    """
+    __tablename__ = 'betriebsmittel'
+
+    id = db.Column(db.Integer, primary_key=True)
+    kennung = db.Column(db.String(20), unique=True, nullable=False)
+    typ = db.Column(db.String(20), nullable=False, default='pruefstand')
+    bezeichnung = db.Column(db.String(80), nullable=False)
+    in_excel_aktiv = db.Column(db.Boolean, nullable=False, default=True)
+    merge_ziel_id = db.Column(db.Integer, db.ForeignKey('betriebsmittel.id'))
+    sortierung = db.Column(db.Integer, nullable=False, default=0)
+
+    merge_ziel = db.relationship(
+        'Betriebsmittel', remote_side='Betriebsmittel.id',
+        foreign_keys=[merge_ziel_id])
+
+    # Kompatibilitäts-Aliase für alten Code, der von ``name``/``aktiv`` liest.
+    @property
+    def name(self):
+        return self.bezeichnung
+
+    @property
+    def aktiv(self):
+        return self.in_excel_aktiv
+
+    def __repr__(self):
+        return f'<Betriebsmittel {self.kennung} {self.bezeichnung}>'
+
+
 class Vorgang(db.Model):
     """Ein Termin – einmalig, mit Revision und Status."""
     __tablename__ = 'vorgang'
 
     id = db.Column(db.Integer, primary_key=True)
     nr = db.Column(db.Integer)                       # Nummer aus der Excel (nur Info)
+    vorgangsnummer = db.Column(db.String(20), unique=True, nullable=True)  # T-NNN/N-NNN (Modell 3)
     art = db.Column(db.String(20), nullable=False)
     pruefstand = db.Column(db.String(80), nullable=False)
+    betriebsmittel_id = db.Column(db.Integer, db.ForeignKey('betriebsmittel.id'))
+    titel = db.Column(db.String(200))                # Titel für News (Modell 3)
     von = db.Column(db.DateTime, nullable=False)
     bis = db.Column(db.DateTime)
     info = db.Column(db.String(500))
@@ -54,6 +101,9 @@ class Vorgang(db.Model):
     abgeschlossen_am = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, default=datetime.now)
     updated_at = db.Column(db.DateTime, default=datetime.now, onupdate=datetime.now)
+
+    betriebsmittel = db.relationship(
+        'Betriebsmittel', foreign_keys=[betriebsmittel_id])
 
     zeiten = db.relationship(
         'VorgangZeit', backref='vorgang',
@@ -118,6 +168,54 @@ def _iso(wert):
     if wert is None:
         return ''
     return wert.strftime('%Y-%m-%dT%H:%M')
+
+
+# ── Normalisierung Modell 3 ───────────────────────────────────────────
+
+def _norm_typ(typ):
+    """'Prüfstand'→'pruefstand', 'Konsole'→'konsole' (sonst kleingeschrieben)."""
+    t = str(typ or '').strip().lower()
+    if t == 'prüfstand':
+        return 'pruefstand'
+    return t
+
+
+def _norm_kennung(kennung):
+    """Normalisiert eine BM-Kennung zu 'BM-001' oder liefert '' wenn ungültig."""
+    wert = str(kennung or '').strip().upper()
+    if KENNUNG_RE.fullmatch(wert):
+        return wert
+    return ''
+
+
+def _norm_bezeichnung(bezeichnung):
+    return ' '.join(str(bezeichnung or '').split())
+
+
+def _norm_status_m3(status):
+    wert = str(status or '').strip().lower()
+    return wert if wert in MODELL3_STATUS else ''
+
+
+def _norm_art_m3(art):
+    return str(art or '').strip().lower()
+
+
+def _bm_name(vorgang):
+    """Aktueller Betriebsmittel-Name eines Vorgangs (FK zuerst, sonst String).
+
+    Folgt der Zusammenführungs-Kette bis zum endgültigen Ziel – ein Vorgang an
+    einem Alias zählt unter dem Namen des Ziels.
+    """
+    if vorgang.betriebsmittel is not None:
+        return _aufloesen_final(vorgang.betriebsmittel).bezeichnung
+    return vorgang.pruefstand
+
+
+def _bm_typ(vorgang):
+    if vorgang.betriebsmittel is not None:
+        return _aufloesen_final(vorgang.betriebsmittel).typ
+    return 'pruefstand'
 
 
 def natural_key(art, pruefstand, von):
@@ -328,8 +426,14 @@ def importiere(zeilen, bloecke=None, quelle='usb', dateiname=None, datei_hash=No
 
 
 def _entfernte_markieren(gesehen, gesehen_basis, report):
-    """Markiert offene Vorgänge, die in der Datei nicht mehr vorkommen."""
+    """Markiert offene Vorgänge, die in der Datei nicht mehr vorkommen.
+
+    Betrifft nur Modell-2-Vorgänge (ohne ``vorgangsnummer``) – Modell-3-Zeilen
+    verwaltet ``importiere_modell3`` eigenständig.
+    """
     for vorgang in Vorgang.query.filter_by(status='offen').all():
+        if vorgang.vorgangsnummer:
+            continue
         if vorgang.natural_key in gesehen:
             continue
         if (_norm_pruefstand(vorgang.pruefstand), _iso(vorgang.von)) in gesehen_basis:
@@ -346,6 +450,241 @@ def _zeiten_setzen(vorgang, zeiten):
     for von, bis in zeiten:
         db.session.add(VorgangZeit(vorgang_id=vorgang.id, von=von, bis=bis))
     db.session.flush()
+
+
+# ── Import Modell 3 ───────────────────────────────────────────────────
+
+def _aufloesen_final(bm):
+    """Folgt der Zusammenführungs-Kette bis zum endgültigen Ziel.
+
+    Läuft über die FK-Spalte ``merge_ziel_id`` (nicht über die ORM-Relation),
+    damit auch innerhalb einer laufenden Transaktion kein veralteter
+    Relationship-Cache gelesen wird – ``merge_ziel_id`` wird direkt gesetzt
+    und ist daher immer aktuell.
+    """
+    gesehen = {bm.id}
+    aktuell = bm
+    while aktuell is not None and aktuell.merge_ziel_id is not None:
+        if aktuell.merge_ziel_id in gesehen:
+            break
+        gesehen.add(aktuell.merge_ziel_id)
+        nxt = db.session.get(Betriebsmittel, aktuell.merge_ziel_id)
+        if nxt is None:
+            break
+        aktuell = nxt
+    return aktuell
+
+
+def _bm_aufloesen(typ, bezeichnung, kennung):
+    """Löst ein Betriebsmittel auf: Kennung zuerst, sonst exakt Typ+Name.
+
+    Liefert ``(Betriebsmittel|None, fehler|None)``. Eine vorhandene, aber
+    ungültige oder unbekannte Kennung ist ein Fehler – der Name ist nur der
+    Fallback für eine **leere** Kennung. Zusammenführungs-Aliase werden bis zum
+    endgültigen Ziel aufgelöst.
+    """
+    typ_norm = _norm_typ(typ)
+    name_norm = _norm_bezeichnung(bezeichnung)
+    roh = str(kennung or '').strip()
+    if roh:
+        kennung_norm = _norm_kennung(roh)
+        if not kennung_norm:
+            return None, 'Ungültige Betriebsmittel-ID %r' % roh
+        bm = Betriebsmittel.query.filter_by(kennung=kennung_norm).first()
+        if bm is None:
+            return None, 'Unbekannte Betriebsmittel-ID %r' % roh
+        return _aufloesen_final(bm), None
+    if not name_norm:
+        return None, 'Betriebsmittel fehlt'
+    from sqlalchemy import func
+    bm = (Betriebsmittel.query
+          .filter_by(typ=typ_norm)
+          .filter(func.lower(Betriebsmittel.bezeichnung) == name_norm.casefold())
+          .first())
+    if bm is None:
+        return None, 'Unbekanntes Betriebsmittel %r' % bezeichnung
+    return _aufloesen_final(bm), None
+
+
+def _modell3_hash(nr, art, bm_kennung, bm_name, titel, von, bis, info, status,
+                  bloecke):
+    teile = [
+        str(nr or ''),
+        _norm_art_m3(art),
+        bm_kennung or '',
+        _norm_bezeichnung(bm_name),
+        _norm_bezeichnung(titel or ''),
+        _iso(von),
+        _iso(bis),
+        ' '.join(str(info or '').split()),
+        status,
+    ]
+    for z_von, z_bis in sorted(bloecke or [], key=lambda p: (p[0], p[1])):
+        teile.append(f'{_iso(z_von)}>{_iso(z_bis)}')
+    return hashlib.sha256('|'.join(teile).encode('utf-8')).hexdigest()
+
+
+def importiere_modell3(daten, quelle='usb', dateiname=None, datei_hash=None):
+    """Importiert Termine und News aus dem Modell-3-Ergebnis.
+
+    ``daten`` ist der Rückgabewert von :func:`excel_modell3.lies_datei`.
+    Identität ist die ``vorgangsnummer`` (T-NNN bzw. N-NNN), nicht mehr
+    Art+Name+Von. Aktive und Archiv-Blätter werden gemeinsam gelesen.
+
+    Parser-Fehler aus ``daten['fehler']`` fließen in den Report ein
+    (``report['parser_fehler']``) und verhindern – wie Import-Fehler – dass
+    irgendein bestehender Vorgang als ``entfernt`` markiert wird. Eine kaputte
+    oder übersprungene Zeile ist kein Beweis, dass ein Termin gelöscht wurde.
+
+    Die ausgeblendete BM-ID-Spalte (Termine!I) wird **nicht** zurückgeschrieben:
+    dort stehen INDEX/VERGLEICH-Formeln, die nicht durch statische Werte
+    zerstört werden dürfen. Der Parser löst leere Formel-Werte über Name/Typ
+    auf, ein separater Schreibauftrag entfällt.
+    """
+    parser_fehler = list(daten.get('fehler') or [])
+    report = {
+        'neu': 0, 'geaendert': 0, 'unveraendert': 0, 'entfernt': 0,
+        'fehler': [], 'parser_fehler': parser_fehler, 'import_id': None,
+    }
+
+    termine = list(daten.get('termine') or []) + \
+        list(daten.get('archiv_termine') or [])
+    news = list(daten.get('news') or []) + list(daten.get('archiv_news') or [])
+    bloecke = daten.get('bloecke') or {}
+
+    gesehen = set()
+
+    def speichere(nr, art, bm, titel, von, bis, info, status, bloecke_zeile):
+        h = _modell3_hash(nr, art, bm.kennung if bm else None,
+                          bm.bezeichnung if bm else '', titel,
+                          von, bis, info, status, bloecke_zeile)
+        name = bm.bezeichnung if bm else ''
+        vorgang = Vorgang.query.filter_by(vorgangsnummer=nr).first()
+        if vorgang is None:
+            vorgang = Vorgang(
+                nr=None, vorgangsnummer=nr, art=art, pruefstand=name,
+                betriebsmittel_id=bm.id if bm else None, titel=titel,
+                von=von, bis=bis, info=info, status=status,
+                natural_key='v3|' + nr, revision=1, inhalt_hash=h,
+                quelle=quelle,
+                abgeschlossen_am=datetime.now() if status == 'abgeschlossen' else None,
+            )
+            db.session.add(vorgang)
+            db.session.flush()
+            _zeiten_setzen(vorgang, bloecke_zeile)
+            report['neu'] += 1
+        elif vorgang.inhalt_hash == h:
+            report['unveraendert'] += 1
+        else:
+            vorgang.art = art
+            vorgang.pruefstand = name
+            vorgang.betriebsmittel_id = bm.id if bm else None
+            vorgang.titel = titel
+            vorgang.von = von
+            vorgang.bis = bis
+            vorgang.info = info
+            if status != vorgang.status:
+                vorgang.status = status
+                if status == 'abgeschlossen' and vorgang.abgeschlossen_am is None:
+                    vorgang.abgeschlossen_am = datetime.now()
+            vorgang.revision = (vorgang.revision or 1) + 1
+            vorgang.inhalt_hash = h
+            _zeiten_setzen(vorgang, bloecke_zeile)
+            report['geaendert'] += 1
+        return vorgang
+
+    for z in termine:
+        nr = str(z.get('nr') or '').strip()
+        art = _norm_art_m3(z.get('art'))
+        typ = _norm_typ(z.get('typ'))
+        bm_name = _norm_bezeichnung(z.get('betriebsmittel'))
+        von = z.get('von')
+        bis = z.get('bis')
+        info = (z.get('info') or '').strip()
+        status = _norm_status_m3(z.get('status'))
+
+        if not nr:
+            report['fehler'].append({'nr': None, 'grund': 'Vorgangsnummer fehlt'})
+            continue
+        gesehen.add(nr)
+        if art not in ('kalibrierung', 'wartung', 'ausfall'):
+            report['fehler'].append(
+                {'nr': nr, 'grund': 'unbekannte Art: %r' % z.get('art')})
+            continue
+        if not status:
+            report['fehler'].append(
+                {'nr': nr, 'grund': 'unzulässiger Status: %r' % z.get('status')})
+            continue
+        if not isinstance(von, datetime):
+            report['fehler'].append({'nr': nr, 'grund': 'Von fehlt oder ungültig'})
+            continue
+        bm, fehler = _bm_aufloesen(typ, bm_name, z.get('betriebsmittel_id'))
+        if bm is None:
+            report['fehler'].append({'nr': nr, 'grund': fehler})
+            continue
+
+        speichere(nr, art, bm, None, von, bis, info, status,
+                  _bloecke_fuer(nr, bloecke))
+
+    for z in news:
+        nr = str(z.get('nr') or '').strip()
+        art = _norm_art_m3(z.get('art'))
+        titel = _norm_bezeichnung(z.get('titel'))
+        von = z.get('von')
+        bis = z.get('bis')
+        info = (z.get('info') or '').strip()
+        status = _norm_status_m3(z.get('status'))
+
+        if not nr:
+            report['fehler'].append({'nr': None, 'grund': 'Vorgangsnummer fehlt'})
+            continue
+        gesehen.add(nr)
+        if art not in ('audit', 'info'):
+            report['fehler'].append(
+                {'nr': nr, 'grund': 'unbekannte Art: %r' % z.get('art')})
+            continue
+        if not status:
+            report['fehler'].append(
+                {'nr': nr, 'grund': 'unzulässiger Status: %r' % z.get('status')})
+            continue
+        if not titel:
+            report['fehler'].append({'nr': nr, 'grund': 'Titel fehlt'})
+            continue
+        if not isinstance(von, datetime):
+            report['fehler'].append({'nr': nr, 'grund': 'Von fehlt oder ungültig'})
+            continue
+
+        speichere(nr, art, None, titel, von, bis, info, status, [])
+
+    # Offene Modell-3-Vorgänge, deren Nummer nicht mehr vorkommt, gelten als
+    # entfernt. Sicherheitsregel wie beim Modell-2-Import: bei Import- ODER
+    # Parser-Fehlern wird nichts entfernt – eine kaputte/übersprungene Zeile
+    # ist kein Beweis, dass der Termin gelöscht wurde.
+    if not report['fehler'] and not parser_fehler:
+        for vorgang in Vorgang.query.filter_by(status='offen').all():
+            if not vorgang.vorgangsnummer:
+                continue
+            if vorgang.vorgangsnummer in gesehen:
+                continue
+            vorgang.status = 'entfernt'
+            report['entfernt'] += 1
+
+    alle_fehler = report['fehler'] + parser_fehler
+    lauf = ImportLauf(
+        dateiname=dateiname,
+        datei_hash=datei_hash,
+        zeilen=len(termine) + len(news),
+        neu=report['neu'],
+        geaendert=report['geaendert'],
+        unveraendert=report['unveraendert'],
+        entfernt=report['entfernt'],
+        fehler=len(alle_fehler),
+        bericht=str(alle_fehler) if alle_fehler else None,
+    )
+    db.session.add(lauf)
+    db.session.commit()
+    report['import_id'] = lauf.id
+    return report
 
 
 # ── Auswertung ────────────────────────────────────────────────────────
@@ -365,8 +704,10 @@ def ausfall_je_pruefstand(jahr=None):
         if jahr and not _beruehrt_jahr(v, jahr):
             continue
 
-        eintrag = ergebnis.setdefault(v.pruefstand, {
-            'pruefstand': v.pruefstand,
+        name = _bm_name(v)
+        eintrag = ergebnis.setdefault(name, {
+            'pruefstand': name,
+            'typ': _bm_typ(v),
             'stunden': 0.0,
             'tage': set(),
             'vorgaenge': 0,
@@ -473,8 +814,10 @@ def ausfall_je_pruefstand_je_monat(jahr):
         if not _beruehrt_jahr(v, jahr):
             continue
 
-        eintrag = ergebnis.setdefault(v.pruefstand, {
-            'pruefstand': v.pruefstand,
+        name = _bm_name(v)
+        eintrag = ergebnis.setdefault(name, {
+            'pruefstand': name,
+            'typ': _bm_typ(v),
             'monate': {},
             'stunden': 0.0,
             'tage': set(),
@@ -526,8 +869,10 @@ def ausfall_je_pruefstand_im_monat(jahr, monat):
             tage.update(t for t in betriebstage(von, bis)
                         if t.year == jahr and t.month == monat)
 
-        eintrag = ergebnis.setdefault(v.pruefstand, {
-            'pruefstand': v.pruefstand,
+        name = _bm_name(v)
+        eintrag = ergebnis.setdefault(name, {
+            'pruefstand': name,
+            'typ': _bm_typ(v),
             'stunden': 0.0,
             'tage': set(),
             'vorgaenge': 0,
