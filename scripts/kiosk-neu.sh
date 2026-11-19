@@ -129,6 +129,27 @@ PYMOUNT
     bash -n "${USB_MOUNT_HELFER}" && sag "Stick-Mount-Helfer aktualisiert: ${USB_MOUNT_HELFER}"
 fi
 
+# ── Terminboard-DB-Sicherung: Root-Helfer ──────────────────────────────────
+# Ein git pull laeuft als pi und darf die DB unter /var/lib/lhtpi nicht
+# konsistent lesen (WAL, Rechte). Der Helfer laeuft ueber sudo als root und
+# legt mit der sqlite3-Backup-API einen konsistenten Snapshot an. Er ist
+# absichtlich ohne Argumente - so bleibt die sudo-Freigabe eng. Die Freigabe
+# selbst steht weiter unten in scripts/sudoers-regeln.sh.
+BACKUP_HELFER="/usr/local/sbin/lhtpi-terminboard-backup"
+if [ -f "${REPO}/scripts/terminboard-db-backup.py" ]; then
+    if ! install -m 0755 -o root -g root \
+            "${REPO}/scripts/terminboard-db-backup.py" "${BACKUP_HELFER}"; then
+        echo "FEHLER: ${BACKUP_HELFER} liess sich nicht installieren." >&2
+        exit 1
+    fi
+    if python3 -c 'import ast, sys; ast.parse(open(sys.argv[1], encoding="utf-8").read())' "${BACKUP_HELFER}"; then
+        sag "Terminboard-DB-Sicherung installiert: ${BACKUP_HELFER}"
+    else
+        echo "FEHLER: ${BACKUP_HELFER} hat einen Syntaxfehler." >&2
+        exit 1
+    fi
+fi
+
 # Freigaben: Bildschirmzahl setzen und die Kiosk-Dienste neu starten. Ohne die
 # zweite Regel scheiterte das Neustarten nach dem Speichern still - die Anzeige
 # behielt dann die alte Belegung.

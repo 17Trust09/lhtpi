@@ -14,7 +14,8 @@ from stick_watcher import verarbeite_stick
 def app(monkeypatch):
     import stick_watcher
     monkeypatch.setattr(stick_watcher, 'erstelle_berichte_automatisch',
-                        lambda mount: {'monate': [], 'jahr': None, 'fehler': None})
+                        lambda mount, jahre=None: {'monate': [], 'jahr': None,
+                                                   'fehler': None})
     app = Flask(__name__)
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite://'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False

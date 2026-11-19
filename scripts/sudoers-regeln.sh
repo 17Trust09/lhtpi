@@ -20,6 +20,9 @@ ZIEL="/etc/sudoers.d/021_lhtpi-screens"
 
 SCREENS_HELFER="/usr/local/bin/lhtpi-screens.sh"
 RETTUNG="/usr/local/bin/lhtpi-anzeige-rettung.sh"
+# Terminboard-DB-Sicherung: laeuft als root (sqlite3-Backup-API, WAL-fest),
+# deshalb ohne Argumente - die Freigabe bleibt auf genau diesen Befehl begrenzt.
+DB_BACKUP="/usr/local/sbin/lhtpi-terminboard-backup"
 SYSTEMCTL="$(command -v systemctl || echo /usr/bin/systemctl)"
 
 tmp="$(mktemp)"
@@ -35,6 +38,7 @@ ${PI_USER} ALL=(root) NOPASSWD: ${SYSTEMCTL} restart terminboard.service
 ${PI_USER} ALL=(root) NOPASSWD: ${SYSTEMCTL} restart lhtpi.service
 ${PI_USER} ALL=(root) NOPASSWD: ${SYSTEMCTL} restart safetycross.service
 ${PI_USER} ALL=(root) NOPASSWD: /usr/local/bin/lhtpi-usb-rw.sh
+${PI_USER} ALL=(root) NOPASSWD: ${DB_BACKUP}
 # Aufloesung dauerhaft setzen: erlaubt nur Ausgang und Modus, keine freien
 # Argumente - sonst waere die Regel ein Freifahrtschein fuer beliebige Befehle.
 ${PI_USER} ALL=(root) NOPASSWD: /usr/local/bin/lhtpi-cmdline.sh HDMI-1 [0-9]*x[0-9]*

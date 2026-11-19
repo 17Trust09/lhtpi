@@ -2178,6 +2178,19 @@ echo "Bildschirmzahl: ${anzahl}"
 SCR_EOF
     chmod 0755 /usr/local/bin/lhtpi-screens.sh
 
+    # Terminboard-DB-Sicherung: Root-Helfer (sqlite3-Backup-API, WAL-fest).
+    # Ohne Argumente, damit die sudo-Freigabe eng bleibt - nach-pull.sh ruft
+    # ihn nach einem git pull vor dem Terminboard-Neustart auf.
+    if [ -f "${SCRIPT_DIR}/scripts/terminboard-db-backup.py" ]; then
+        install -m 0755 -o root -g root \
+            "${SCRIPT_DIR}/scripts/terminboard-db-backup.py" \
+            /usr/local/sbin/lhtpi-terminboard-backup \
+            && ok "Terminboard-DB-Sicherung installiert (/usr/local/sbin/lhtpi-terminboard-backup)" \
+            || warn "Terminboard-DB-Sicherung ließ sich nicht installieren"
+    else
+        warn "scripts/terminboard-db-backup.py fehlt - Terminboard-DB-Sicherung nicht installiert"
+    fi
+
     # Alle Freigaben an einer Stelle (scripts/sudoers-regeln.sh) - vorher
     # standen sie doppelt in install.sh und kiosk-neu.sh und liefen
     # auseinander. Bei einer frischen Installation fehlten dadurch Rechte,

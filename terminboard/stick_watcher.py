@@ -23,7 +23,8 @@ import threading
 import time
 
 from models import db
-from historie import ImportLauf, importiere, importiere_modell3
+from historie import (ImportLauf, importiere, importiere_modell3,
+                      jahre_der_betriebsmittel, kennungen_aus_sync_report)
 from betriebsmittel_sync import sync_betriebsmittel
 from archiv import verschiebe_abgeschlossene
 from excel_writeback import wende_an
@@ -154,7 +155,13 @@ def _verarbeite_modell3(pfad, mount, ergebnis, erzwinge):
             geaendert = True
 
     if geaendert:
-        ergebnis['bericht'] = erstelle_berichte_automatisch(mount)
+        # Betroffene Jahre aus Betriebsmittel-Änderungen (Umbenennung/Typwechsel/
+        # Zusammenführung) und aus den importierten/geänderten Vorgängen selbst.
+        jahre = set(jahre_der_betriebsmittel(
+            kennungen_aus_sync_report(sync_report)))
+        if report is not None:
+            jahre.update(report.get('jahre') or set())
+        ergebnis['bericht'] = erstelle_berichte_automatisch(mount, jahre=jahre)
 
 
 def _verarbeite_modell2(pfad, mount, ergebnis, erzwinge):

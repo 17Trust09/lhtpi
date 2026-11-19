@@ -1,6 +1,6 @@
 # Terminboard: Betriebsmittel- und Excel-Weiterentwicklung – Roadmap
 
-> **Status: Nur Planung.** Mit der Implementierung wird erst begonnen, wenn Tim außerhalb dieser Planung ausdrücklich den Coding-Start freigibt.
+> **Status: umgesetzt** (Phasen 0–13 inkl. Tests; Phase 14 „Pi2-Deployment“ weiterhin erst nach ausdrücklicher Freigabe).
 >
 > **Für Hermes:** Bei der späteren Umsetzung `subagent-driven-development`, `test-driven-development`, `baseline-gated-verification` und `embedded-kiosk-hardening` laden. Aufgaben der Reihe nach umsetzen, nach jedem Abschnitt testen und nur gezielt committen – niemals `git add -A`, weil Tim parallel am Repository arbeiten kann.
 
@@ -738,6 +738,10 @@ Die eigentliche Datei wird erst ersetzt, nachdem die temporäre Datei erneut erf
 
 ## Phase 9: Kiosk-API und Bildschirmtrennung
 
+**Status: umgesetzt** — `routes.py`/`board.html`: Überschrift
+„KALIBRIERUNG / WARTUNG / AUSFALL“, Betriebsmittel-Spalte statt „Prüfstand“,
+Termine links / News & Audits rechts; Tests in `test_terminboard.py`.
+
 **Modify:**
 
 ```text
@@ -758,6 +762,10 @@ Tests:
 
 ## Phase 10: Berichte auf Betriebsmittel-ID umstellen
 
+**Status: umgesetzt** — `bericht.py`/`historie.py`: Prüfstände/Konsolen
+getrennt, aktueller BM-Name, rückwirkende Regeneration betroffener Jahre;
+Tests in `test_bericht.py` (inkl. echter PDF-Erzeugung in `tmp`).
+
 **Modify:**
 
 ```text
@@ -776,6 +784,9 @@ Tests:
 - betroffene historische Jahre werden neu generiert.
 
 ## Phase 11: Stick-Watcher integrieren
+
+**Status: umgesetzt** (Basis f4f18d6) — Watcher übergibt betroffene Jahre an die
+Berichtsregeneration; `test_stick_watcher_modell3.py`.
 
 **Modify:**
 
@@ -801,6 +812,18 @@ Wichtig: Ein vom Gerät selbst erzeugter neuer Dateihash darf nicht zu einer End
 
 ## Phase 12: Dokumentation und Updatepfad
 
+**Status: umgesetzt** — `terminboard/README.md`, `USB/README.md`, `STAND.md`
+sowie `scripts/nach-pull.sh` (Eine-`git-pull`-Aktualisierung inkl.
+requirements-Installation, DB-Sicherung, Neustart + Healthcheck). Zusätzlich
+Konverter `tools_modell2_zu_modell3.py` mit Tests.
+
+DB-Sicherung seit dem Umbau über einen Root-Helfer
+(`/usr/local/sbin/lhtpi-terminboard-backup`, sqlite3-Backup-API für einen
+konsistenten WAL-Snapshot); Installer und `kiosk-neu.sh` installieren Helfer
+und sudo-Freigabe. Hinweis: Fehler nach einem Merge werden zwar ausgegeben,
+`git merge`/`git pull` ist dann aber bereits abgeschlossen – die rote
+Fehlerausgabe nicht überlesen.
+
 **Modify:**
 
 ```text
@@ -824,6 +847,9 @@ Dokumentieren:
 - Wiederherstellung aus `.bak`.
 
 ## Phase 13: Vollständige Verifikation
+
+**Status: umgesetzt** — siehe unten; HTTP/Kiosk- und Generator-/Konverter-Prüfung
+lokal ausgeführt.
 
 Ausführen:
 
@@ -875,33 +901,33 @@ Deployment erst nach lokaler Freigabe:
 
 Die Umsetzung gilt erst als abgeschlossen, wenn alle Punkte nachgewiesen sind:
 
-- [ ] Modell-3-Vorlage wird reproduzierbar per Skript erzeugt.
-- [ ] `Termine` enthält ausschließlich Kalibrierung, Wartung und Ausfall.
-- [ ] `News & Audits` enthält ausschließlich Audit und Info.
-- [ ] `storniert` ist kein Excel-Status mehr.
-- [ ] Betriebsmittel besitzt keine sichtbare Aktiv/inaktiv-Spalte.
-- [ ] Neue Betriebsmittel werden zuerst im Stammdatenblatt angelegt.
-- [ ] Termine erlauben nur die Dropdown-Auswahl eines Betriebsmittels.
-- [ ] Leere BM-ID wird beim ersten Import sicher vergeben und zurückgeschrieben.
-- [ ] Umbenennung bei gleicher BM-ID erhält sämtliche Historie.
-- [ ] Typänderung bei gleicher BM-ID ordnet Berichte rückwirkend korrekt zu.
-- [ ] Ähnliche Namen werden nicht automatisch vereinigt.
-- [ ] Manuelle Zusammenführung über Ziel-ID funktioniert atomar.
-- [ ] T-001 bis T-500 sind eindeutig und vorgefüllt.
-- [ ] N-001 bis N-500 sind eindeutig und vorgefüllt.
-- [ ] Leere nummerierte Vorlagenzeilen werden ignoriert.
-- [ ] Nummern bleiben beim Archivieren erhalten.
-- [ ] Archivierte Nummern werden nicht wiederverwendet.
-- [ ] Zeitblöcke verwenden ausschließlich T-Nummern.
-- [ ] Prüfstands- und Konsolenausfälle werden getrennt ausgewertet.
-- [ ] Audit und Info erzeugen keine Ausfallzeit.
-- [ ] Berichte verwenden immer den aktuellen Betriebsmittelnamen.
-- [ ] Namens- oder Typänderungen regenerieren alle betroffenen Berichte.
-- [ ] Mehrfachimport erzeugt keine Doppelbuchungen.
-- [ ] Excel-Schreibvorgänge besitzen Backup, temporäre Datei, Prüfung und Rollback.
-- [ ] Ein schreibgeschützter Stick bringt Import und Kiosk nicht zum Absturz.
-- [ ] Komplette Testsuite ist grün.
-- [ ] Lokaler HTTP- und Kiosk-Test ist erfolgreich.
+- [x] Modell-3-Vorlage wird reproduzierbar per Skript erzeugt.
+- [x] `Termine` enthält ausschließlich Kalibrierung, Wartung und Ausfall.
+- [x] `News & Audits` enthält ausschließlich Audit und Info.
+- [x] `storniert` ist kein Excel-Status mehr.
+- [x] Betriebsmittel besitzt keine sichtbare Aktiv/inaktiv-Spalte.
+- [x] Neue Betriebsmittel werden zuerst im Stammdatenblatt angelegt.
+- [x] Termine erlauben nur die Dropdown-Auswahl eines Betriebsmittels.
+- [x] Leere BM-ID wird beim ersten Import sicher vergeben und zurückgeschrieben.
+- [x] Umbenennung bei gleicher BM-ID erhält sämtliche Historie.
+- [x] Typänderung bei gleicher BM-ID ordnet Berichte rückwirkend korrekt zu.
+- [x] Ähnliche Namen werden nicht automatisch vereinigt.
+- [x] Manuelle Zusammenführung über Ziel-ID funktioniert atomar.
+- [x] T-001 bis T-500 sind eindeutig und vorgefüllt.
+- [x] N-001 bis N-500 sind eindeutig und vorgefüllt.
+- [x] Leere nummerierte Vorlagenzeilen werden ignoriert.
+- [x] Nummern bleiben beim Archivieren erhalten.
+- [x] Archivierte Nummern werden nicht wiederverwendet.
+- [x] Zeitblöcke verwenden ausschließlich T-Nummern.
+- [x] Prüfstands- und Konsolenausfälle werden getrennt ausgewertet.
+- [x] Audit und Info erzeugen keine Ausfallzeit.
+- [x] Berichte verwenden immer den aktuellen Betriebsmittelnamen.
+- [x] Namens- oder Typänderungen regenerieren alle betroffenen Berichte.
+- [x] Mehrfachimport erzeugt keine Doppelbuchungen.
+- [x] Excel-Schreibvorgänge besitzen Backup, temporäre Datei, Prüfung und Rollback.
+- [x] Ein schreibgeschützter Stick bringt Import und Kiosk nicht zum Absturz.
+- [x] Komplette Testsuite ist grün.
+- [x] Lokaler HTTP- und Kiosk-Test ist erfolgreich.
 - [ ] Deployment auf Pi2 wurde mit Sicherung und Rückrolltest verifiziert.
 
 ---

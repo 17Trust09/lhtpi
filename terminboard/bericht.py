@@ -17,9 +17,11 @@ from datetime import datetime
 
 from fpdf import FPDF
 from fpdf.fonts import FontFace
+from sqlalchemy import or_
 
 from models import db
-from historie import Vorgang, ImportLauf, ausfall_je_pruefstand_im_monat
+from historie import (Vorgang, ImportLauf, ausfall_je_pruefstand_im_monat,
+                      getrennt_nach_typ)
 
 MONATE = ('', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
           'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember')
@@ -101,8 +103,20 @@ def _kurz(wert):
     return wert.strftime('%d.%m.%Y') if wert else '–'
 
 
+def _betriebsmittel_name(vorgang):
+    """Aktueller Name des Betriebsmittels (über FK, Umbenennung und Merge)."""
+    from historie import _bm_name
+    return _bm_name(vorgang)
+
+
 def sammle_daten(jahr, monat):
-    """Sammelt alle Zahlen für den Bericht (ohne PDF)."""
+    """Sammelt alle Zahlen für den Bericht (ohne PDF).
+
+    Termine (Kalibrierung/Wartung/Ausfall) und News (Audit/Info) werden
+    getrennt. ``storniert`` ist kein Modell-3-Status mehr und zählt nie als
+    aktiv; Audit/Info erscheinen nur im Abschnitt ``News & Audits`` und gehen
+    nie in die Ausfallstatistik ein.
+    """
     beginn = datetime(jahr, monat, 1)
     if monat == 12:
         ende = datetime(jahr + 1, 1, 1)
@@ -110,11 +124,22 @@ def sammle_daten(jahr, monat):
         ende = datetime(jahr, monat + 1, 1)
 
     aktive = (Vorgang.query
-              .filter(Vorgang.status.in_(('offen', 'storniert')))
+              .filter_by(status='offen')
+              .filter(Vorgang.art.in_(('kalibrierung', 'wartung', 'ausfall')))
+              .filter(Vorgang.von < ende)
+              .filter(or_(Vorgang.bis.is_(None), Vorgang.bis >= beginn))
               .order_by(Vorgang.von).all())
+
+    news = (Vorgang.query
+            .filter_by(status='offen')
+            .filter(Vorgang.art.in_(('audit', 'info')))
+            .filter(Vorgang.von < ende)
+            .filter(or_(Vorgang.bis.is_(None), Vorgang.bis >= beginn))
+            .order_by(Vorgang.von).all())
 
     abgeschlossen = (Vorgang.query
                      .filter_by(status='abgeschlossen')
+                     .filter(Vorgang.art.in_(('kalibrierung', 'wartung', 'ausfall')))
                      .filter(Vorgang.bis >= beginn)
                      .filter(Vorgang.bis < ende)
                      .order_by(Vorgang.bis).all())
@@ -122,12 +147,18 @@ def sammle_daten(jahr, monat):
     letzter_import = (ImportLauf.query
                       .order_by(ImportLauf.zeitpunkt.desc()).first())
 
+    statistik = ausfall_je_pruefstand_im_monat(jahr, monat)
+    pruefstaende, konsolen = getrennt_nach_typ(statistik)
+
     return {
         'jahr': jahr,
         'monat': monat,
         'aktive': aktive,
+        'news': news,
         'abgeschlossen': abgeschlossen,
-        'statistik': ausfall_je_pruefstand_im_monat(jahr, monat),
+        'statistik': statistik,
+        'statistik_pruefstaende': pruefstaende,
+        'statistik_konsolen': konsolen,
         'import': letzter_import,
     }
 
@@ -164,9 +195,11 @@ def erstelle_bericht(pfad, jahr, monat, erzeugt_am=None):
     _ueberschrift(pdf, schrift, f'Aktive Termine ({len(daten["aktive"])})')
     if daten['aktive']:
         _tabelle(pdf, schrift,
-                 ('Von', 'Art', 'Prüfstand', 'Bis', 'Status', 'Info'),
-                 [(f'{_datum(v.von)}', ART_TEXT.get(v.art, v.art), v.pruefstand,
-                   _datum(v.bis), STATUS_TEXT.get(v.status, v.status), v.info or '')
+                 ('Von', 'Art', 'Betriebsmittel', 'Bis', 'Status', 'Info'),
+                 [(f'{_datum(v.von)}', ART_TEXT.get(v.art, v.art),
+                   _betriebsmittel_name(v),
+                   _datum(v.bis), STATUS_TEXT.get(v.status, v.status),
+                   v.info or '')
                   for v in daten['aktive']],
                  breiten=(30, 22, 48, 30, 20, 40))
     else:
@@ -178,41 +211,36 @@ def erstelle_bericht(pfad, jahr, monat, erzeugt_am=None):
                   f'Abgeschlossen im {MONATE[monat]} ({len(daten["abgeschlossen"])})')
     if daten['abgeschlossen']:
         _tabelle(pdf, schrift,
-                 ('Zeitraum', 'Art', 'Prüfstand'),
+                 ('Zeitraum', 'Art', 'Betriebsmittel'),
                  [(f'{_kurz(v.von)} – {_kurz(v.bis)}',
-                   ART_TEXT.get(v.art, v.art), v.pruefstand)
+                   ART_TEXT.get(v.art, v.art), _betriebsmittel_name(v))
                   for v in daten['abgeschlossen']],
                  breiten=(94, 24, 72))
     else:
         _leer(pdf, schrift, 'Nichts abgeschlossen in diesem Monat.')
     pdf.ln(3)
 
-    # ── Ausfallzeiten
-    _ueberschrift(pdf, schrift, f'Ausfallzeiten {MONATE[monat]} {jahr} je Prüfstand')
-    if daten['statistik']:
-        zeilen = []
-        for eintrag in sorted(daten['statistik'].values(),
-                              key=lambda e: (-e['stunden'], e['pruefstand'])):
-            zeilen.append((
-                eintrag['pruefstand'],
-                _std(eintrag['stunden']),
-                str(eintrag['tage']),
-                str(eintrag['vorgaenge']),
-            ))
+    # ── News & Audits (keine Ausfallzeit, eigener Abschnitt)
+    _ueberschrift(pdf, schrift, f'News & Audits ({len(daten["news"])})')
+    if daten['news']:
         _tabelle(pdf, schrift,
-                 ('Prüfstand', 'Ausfallstunden', 'Tage', 'Termine'),
-                 zeilen,
-                 breiten=(84, 40, 26, 40),
-                 ausrichtung=('LEFT', 'RIGHT', 'RIGHT', 'RIGHT'))
-
-        summe_stunden = sum(e['stunden'] for e in daten['statistik'].values())
-        summe_tage = sum(e['tage'] for e in daten['statistik'].values())
-        pdf.set_font(schrift, size=9, style='B')
-        pdf.cell(0, 7,
-                 f'Summe: {_std(summe_stunden)} h an {summe_tage} Tagen',
-                 new_x='LMARGIN', new_y='NEXT')
+                 ('Von', 'Art', 'Titel', 'Info'),
+                 [(f'{_datum(v.von)}', ART_TEXT.get(v.art, v.art),
+                   v.titel or '', v.info or '')
+                  for v in daten['news']],
+                 breiten=(30, 22, 78, 60))
     else:
-        _leer(pdf, schrift, 'Keine Ausfallzeiten in diesem Monat erfasst.')
+        _leer(pdf, schrift, 'Keine News oder Audits.')
+    pdf.ln(3)
+
+    # ── Ausfallzeiten (getrennt nach Prüfständen und Konsolen)
+    _ausfalltabelle(pdf, schrift,
+                    f'Ausfallzeiten {MONATE[monat]} {jahr} – Prüfstände',
+                    daten['statistik_pruefstaende'])
+    pdf.ln(3)
+    _ausfalltabelle(pdf, schrift,
+                    f'Ausfallzeiten {MONATE[monat]} {jahr} – Konsolen',
+                    daten['statistik_konsolen'])
     pdf.ln(3)
 
     # ── Import
@@ -271,6 +299,35 @@ def _tabelle(pdf, schrift, kopf, zeilen, breiten, ausrichtung=None):
             reihe = tabelle.row()
             for wert in zeile:
                 reihe.cell(_rein(wert))
+
+
+def _ausfalltabelle(pdf, schrift, titel, statistik):
+    """Eine Ausfallzeiten-Tabelle (Prüfstände ODER Konsolen) mit Teilsumme."""
+    _ueberschrift(pdf, schrift, titel)
+    if not statistik:
+        _leer(pdf, schrift, 'Keine Ausfallzeiten erfasst.')
+        return
+    zeilen = []
+    for eintrag in sorted(statistik.values(),
+                          key=lambda e: (-e['stunden'], e['pruefstand'])):
+        zeilen.append((
+            eintrag['pruefstand'],
+            _std(eintrag['stunden']),
+            str(eintrag['tage']),
+            str(eintrag['vorgaenge']),
+        ))
+    _tabelle(pdf, schrift,
+             ('Betriebsmittel', 'Ausfallstunden', 'Tage', 'Termine'),
+             zeilen,
+             breiten=(84, 40, 26, 40),
+             ausrichtung=('LEFT', 'RIGHT', 'RIGHT', 'RIGHT'))
+
+    summe_stunden = sum(e['stunden'] for e in statistik.values())
+    summe_tage = sum(e['tage'] for e in statistik.values())
+    pdf.set_font(schrift, size=9, style='B')
+    pdf.cell(0, 7,
+             f'Summe: {_std(summe_stunden)} h an {summe_tage} Tagen',
+             new_x='LMARGIN', new_y='NEXT')
 
 
 def _dateiname(jahr, monat):
@@ -423,48 +480,30 @@ def erstelle_jahresbericht(pfad, jahr, erzeugt_am=None):
         pdf.output(pfad)
         return pfad
 
-    # ── Kennzahlen
+    pruefstaende, konsolen = getrennt_nach_typ(daten)
+
+    # ── Kennzahlen: eine einzige, nicht doppelt gebildete Gesamtsumme.
     gesamt = sum(e['stunden'] for e in daten.values())
     tage = sum(e['tage'] for e in daten.values())
     betroffen = len([e for e in daten.values() if e['stunden'] > 0])
     pdf.set_font(schrift, size=10)
     pdf.cell(0, 7,
-             f'{betroffen} Prüfstände betroffen · {_std(gesamt)} Ausfallstunden · {tage} Ausfalltage',
+             f'{betroffen} Betriebsmittel betroffen · {_std(gesamt)} Ausfallstunden · {tage} Ausfalltage',
              new_x='LMARGIN', new_y='NEXT')
     pdf.ln(2)
 
-    # ── Monatsmatrix
-    _ueberschrift(pdf, schrift, 'Ausfallstunden je Monat')
-    kopf = ['Prüfstand'] + list(MONAT_KURZ) + ['Gesamt', 'Tage']
-    breiten = [52] + [15] * 12 + [22, 16]
-    # Monatssummen zuerst – sie stehen als letzte Tabellenzeile
-    monatssummen = [0.0] * 12
-    for eintrag in daten.values():
-        for monat in range(1, 13):
-            monatssummen[monat - 1] += eintrag['monate'].get(monat, 0.0)
+    # ── Monatsmatrizen: getrennt nach Prüfständen und Konsolen.
+    _, _, ps_monate = _monatsmatrix(
+        pdf, schrift, 'Ausfallstunden je Monat – Prüfstände', pruefstaende)
+    _, _, ko_monate = _monatsmatrix(
+        pdf, schrift, 'Ausfallstunden je Monat – Konsolen', konsolen)
 
-    zeilen = []
-    for eintrag in sorted(daten.values(), key=lambda e: (-e['stunden'], e['pruefstand'])):
-        if eintrag['stunden'] <= 0:
-            continue          # Prüfstand ohne Ausfallzeit gehört nicht in die Übersicht
-        zeile = [eintrag['pruefstand']]
-        for monat in range(1, 13):
-            wert = eintrag['monate'].get(monat)
-            zeile.append(_std(wert) if wert else '–')
-        zeile.append(_std(eintrag['stunden']))
-        zeile.append(str(eintrag['tage']))
-        zeilen.append(tuple(zeile))
-
-    summenzeile = ['Summe']
-    for wert in monatssummen:
-        summenzeile.append(_std(wert) if wert else '–')
-    summenzeile.append(_std(gesamt))
-    summenzeile.append(str(tage))
-    zeilen.append(tuple(summenzeile))
-
-    _tabelle(pdf, schrift, tuple(kopf), zeilen, breiten=tuple(breiten),
-             ausrichtung=('LEFT',) + ('RIGHT',) * 14)
-    pdf.ln(4)
+    monatssummen = [ps_monate[i] + ko_monate[i] for i in range(12)]
+    pdf.set_font(schrift, size=10, style='B')
+    pdf.cell(0, 7,
+             f'Gesamt (alle Betriebsmittel): {_std(gesamt)} h an {tage} Tagen',
+             new_x='LMARGIN', new_y='NEXT')
+    pdf.ln(2)
 
     # ── Balken je Monat
     _monatsbalken(pdf, schrift, monatssummen)
@@ -476,6 +515,51 @@ def erstelle_jahresbericht(pfad, jahr, erzeugt_am=None):
         os.makedirs(ordner, exist_ok=True)
     pdf.output(pfad)
     return pfad
+
+
+def _monatsmatrix(pdf, schrift, titel, daten):
+    """Rendert eine Monatsmatrix (Prüfstände ODER Konsolen).
+
+    Liefert ``(summe_stunden, summe_tage, monatssummen)`` zurück, damit die
+    Gesamtsumme am Ende über beide Teile hinweg einmal gebildet werden kann.
+    """
+    _ueberschrift(pdf, schrift, titel)
+    kopf = ['Betriebsmittel'] + list(MONAT_KURZ) + ['Gesamt', 'Tage']
+    breiten = [52] + [15] * 12 + [22, 16]
+    monatssummen = [0.0] * 12
+    for eintrag in daten.values():
+        for monat in range(1, 13):
+            monatssummen[monat - 1] += eintrag['monate'].get(monat, 0.0)
+
+    summe_stunden = sum(e['stunden'] for e in daten.values())
+    summe_tage = sum(e['tage'] for e in daten.values())
+
+    zeilen = []
+    for eintrag in sorted(daten.values(),
+                          key=lambda e: (-e['stunden'], e['pruefstand'])):
+        if eintrag['stunden'] <= 0:
+            continue          # ohne Ausfallzeit gehört nicht in die Übersicht
+        zeile = [eintrag['pruefstand']]
+        for monat in range(1, 13):
+            wert = eintrag['monate'].get(monat)
+            zeile.append(_std(wert) if wert else '–')
+        zeile.append(_std(eintrag['stunden']))
+        zeile.append(str(eintrag['tage']))
+        zeilen.append(tuple(zeile))
+
+    if zeilen:
+        summenzeile = ['Summe']
+        for wert in monatssummen:
+            summenzeile.append(_std(wert) if wert else '–')
+        summenzeile.append(_std(summe_stunden))
+        summenzeile.append(str(summe_tage))
+        zeilen.append(tuple(summenzeile))
+        _tabelle(pdf, schrift, tuple(kopf), zeilen, breiten=tuple(breiten),
+                 ausrichtung=('LEFT',) + ('RIGHT',) * 14)
+    else:
+        _leer(pdf, schrift, 'Keine Ausfallzeiten erfasst.')
+    pdf.ln(4)
+    return summe_stunden, summe_tage, monatssummen
 
 
 def _monatsbalken(pdf, schrift, werte):
@@ -568,26 +652,36 @@ def pruefe_stick_befehl(mount_dir):
     return ergebnis
 
 
-def erstelle_berichte_automatisch(mount_dir):
-    """Erstellt alle Monats- und den Jahresbericht und kopiert sie auf den Stick.
+def erstelle_berichte_automatisch(mount_dir, jahre=None):
+    """Erstellt alle Monats- und Jahresberichte und kopiert sie auf den Stick.
 
-    Wird aufgerufen, wenn sich die Daten geändert haben (Import oder
-    Archivierung) – ganz ohne Auslöse-Datei. Es werden alle Monate des
-    laufenden Jahres erzeugt, damit auch rückwirkende Änderungen (z. B. ein
-    nachträglich abgeschlossener Oktober-Termin) in den richtigen
-    Monatsbericht wandern.
+    Wird aufgerufen, wenn sich die Daten geändert haben (Import, Umbenennung,
+    Typänderung, Zusammenführung oder Archivierung) – ganz ohne Auslöse-Datei.
+
+    ``jahre`` ist die Menge der betroffenen Jahre. Ohne Angabe wird nur das
+    laufende Jahr erzeugt (bisheriges Verhalten, z. B. für den Modell-2-Fall).
+    Eine Umbenennung/Typänderung/Zusammenführung liefert hier die historischen
+    Jahre ihrer Vorgänge, damit auch alte PDFs ersetzt werden. Für jedes Jahr
+    entstehen 12 Monatsberichte plus ein Jahresbericht.
     """
-    ergebnis = {'monate': [], 'jahr': None, 'kopiert': [], 'fehler': None}
+    ergebnis = {'jahre': [], 'monate': [], 'jahresberichte': [],
+                'jahr': None, 'kopiert': [], 'fehler': None}
     if not os.path.isdir(mount_dir):
         ergebnis['fehler'] = 'Stick nicht gefunden'
         return ergebnis
 
-    jetzt = datetime.now()
-    for monat in range(1, 13):
-        pfad = erstelle_monatsbericht(jetzt.year, monat)
-        if pfad:
-            ergebnis['monate'].append(pfad)
-    ergebnis['jahr'] = erstelle_jahresbericht_lokal(jetzt.year)
+    if not jahre:
+        jahre = [datetime.now().year]
+
+    for jahr in sorted(set(int(j) for j in jahre)):
+        ergebnis['jahre'].append(jahr)
+        for monat in range(1, 13):
+            pfad = erstelle_monatsbericht(jahr, monat)
+            if pfad:
+                ergebnis['monate'].append(pfad)
+        jahrespfad = erstelle_jahresbericht_lokal(jahr)
+        ergebnis['jahresberichte'].append(jahrespfad)
+        ergebnis['jahr'] = jahrespfad
 
     with schreibfenster(mount_dir) as bereit:
         if not bereit:

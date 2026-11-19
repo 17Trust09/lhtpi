@@ -68,6 +68,23 @@ def _sort_key(t):
     return (t['start'] is None, t['start'] or '')
 
 
+def betriebsmittel_liste():
+    """Aktive Betriebsmittel (Prüfstände und Konsolen) aus der Stammdaten-Tabelle.
+
+    Dient der Kiosk-API, damit Konsolen und Prüfstände unabhängig von einem
+    konkreten Termin bekannt sind. Nur in Excel aktive Zeilen werden geliefert;
+    entfernte/umbenannte bleiben über die Vorgänge erreichbar.
+    """
+    from historie import Betriebsmittel
+    return [{
+        'kennung': b.kennung,
+        'typ': b.typ,
+        'bezeichnung': b.bezeichnung,
+    } for b in (Betriebsmittel.query
+                .filter_by(in_excel_aktiv=True)
+                .order_by(Betriebsmittel.kennung).all())]
+
+
 def active_termine():
     """Bestimmt die aktive Quelle (auto/manual) und liefert alle Termine."""
     mode = get_mode()
@@ -91,14 +108,18 @@ def active_termine():
                    for t in Termin.query.order_by(Termin.start).all()]
 
     termine.sort(key=_sort_key)
+    # Explizite Trennung: links ausschließlich Kalibrierung/Wartung/Ausfall,
+    # rechts ausschließlich Audit/Info. Alles andere fällt auf keine Seite.
     return {
         'source': source,
         'mode': mode,
         'manual_source': manual_source,
         'usb_present': usb_present,
         'termine': termine,
-        'kalibrierungen': [t for t in termine if t['typ'] in ('kalibrierung', 'wartung', 'ausfall')],
-        'news': [t for t in termine if t['typ'] not in ('kalibrierung', 'wartung', 'ausfall')],
+        'kalibrierungen': [t for t in termine
+                           if t['typ'] in ('kalibrierung', 'wartung', 'ausfall')],
+        'news': [t for t in termine if t['typ'] in ('audit', 'info')],
+        'betriebsmittel': betriebsmittel_liste(),
     }
 
 

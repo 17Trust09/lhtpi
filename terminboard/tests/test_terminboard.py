@@ -302,6 +302,55 @@ def test_active_termine_ausfall_links_nicht_als_news():
     _clean_termine()
 
 
+def test_active_termine_trennt_alle_fuenf_arten():
+    _clean_termine()
+    with app.app_context():
+        for typ in ('kalibrierung', 'wartung', 'ausfall', 'audit', 'info'):
+            db.session.add(Termin(typ=typ, titel=typ, referenz='X',
+                                  start=date(2026, 9, 1)))
+        db.session.commit()
+    with app.test_client() as c:
+        d = c.get('/board/api/status').get_json()
+        assert sorted(t['typ'] for t in d['kalibrierungen']) == \
+            ['ausfall', 'kalibrierung', 'wartung']
+        assert sorted(t['typ'] for t in d['news']) == ['audit', 'info']
+        assert len(d['termine']) == 5
+    _clean_termine()
+
+
+def test_active_termine_liefert_betriebsmittel_liste():
+    _clean_termine()
+    from historie import Betriebsmittel
+    from betriebsmittel_sync import sync_betriebsmittel
+    with app.app_context():
+        sync_betriebsmittel([
+            {'id': 'BM-001', 'typ': 'Prüfstand', 'bezeichnung': 'P31 THSA',
+             'zusammenfuehren_mit': None, 'hinweis': '', 'excel_zeile': 2},
+            {'id': 'BM-002', 'typ': 'Konsole', 'bezeichnung': 'TESTFUCHS KONSOLE 1',
+             'zusammenfuehren_mit': None, 'hinweis': '', 'excel_zeile': 3},
+        ])
+    with app.test_client() as c:
+        d = c.get('/board/api/status').get_json()
+        assert 'betriebsmittel' in d
+        nach_kennung = {b['kennung']: b for b in d['betriebsmittel']}
+        assert nach_kennung['BM-001']['typ'] == 'pruefstand'
+        assert nach_kennung['BM-002']['typ'] == 'konsole'
+        assert nach_kennung['BM-002']['bezeichnung'] == 'TESTFUCHS KONSOLE 1'
+    with app.app_context():
+        Betriebsmittel.query.delete()
+        db.session.commit()
+    _clean_termine()
+
+
+def test_board_html_nennt_ausfall_und_betriebsmittel():
+    html = (open(os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), 'templates', 'board.html'),
+            encoding='utf-8').read())
+    assert 'KALIBRIERUNG / WARTUNG / AUSFALL' in html
+    assert '<th>Betriebsmittel</th>' in html
+    assert '<th>Prüfstand</th>' not in html
+
+
 def test_find_azubi_images(monkeypatch, tmp_path):
     (tmp_path / 'flyer.png').write_bytes(b'x')
     (tmp_path / 'seite2.jpg').write_bytes(b'y')

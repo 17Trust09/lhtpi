@@ -109,6 +109,67 @@ class TestBericht:
         assert 'Noch kein Import' in text
 
 
+class TestMonatsbezug:
+    """Aktive Termine/News sind auf den Berichtsmonat bezogen (Überlappung)."""
+
+    def test_vergangener_offener_termin_erscheint_nicht_in_jedem_bericht(
+            self, app):
+        importiere([zeile(nr=1, von=datetime(2024, 5, 2, 7, 0),
+                          bis=datetime(2024, 5, 2, 15, 0),
+                          status='offen')])
+        assert len(sammle_daten(2024, 5)['aktive']) == 1
+        assert sammle_daten(2024, 6)['aktive'] == []
+        assert sammle_daten(2026, 11)['aktive'] == []
+
+    def test_vergangene_offene_news_erscheint_nicht_in_jedem_bericht(self, app):
+        from historie import importiere_modell3
+        news = _n3(nr='N-001', art='Audit', titel='Audit LH',
+                   von=datetime(2024, 5, 2, 0, 0), status='offen')
+        news['bis'] = datetime(2024, 5, 3, 0, 0)   # endet in der Vergangenheit
+        importiere_modell3(_daten3(news=[news]))
+        assert len(sammle_daten(2024, 5)['news']) == 1
+        assert sammle_daten(2024, 6)['news'] == []
+        assert sammle_daten(2026, 11)['news'] == []
+
+    def test_offene_news_ohne_ende_bleibt_sichtbar(self, app):
+        # Eine Meldung ohne Bis gilt weiter – sie bleibt in späteren Monaten.
+        from historie import importiere_modell3
+        importiere_modell3(_daten3(news=[
+            _n3(nr='N-001', art='Info', titel='Hinweis',
+                von=datetime(2024, 5, 2, 0, 0), status='offen'),
+        ]))
+        assert len(sammle_daten(2024, 5)['news']) == 1
+        assert len(sammle_daten(2024, 6)['news']) == 1
+        assert len(sammle_daten(2026, 11)['news']) == 1
+
+    def test_offener_termin_der_den_monat_ueberschneidet_erscheint(self, app):
+        # Läuft über die Monatsgrenzen → in jedem berührten Monat sichtbar.
+        importiere([zeile(nr=1, von=datetime(2026, 10, 15, 7, 0),
+                          bis=datetime(2026, 12, 10, 15, 0),
+                          status='offen')])
+        assert len(sammle_daten(2026, 10)['aktive']) == 1
+        assert len(sammle_daten(2026, 11)['aktive']) == 1
+        assert len(sammle_daten(2026, 12)['aktive']) == 1
+
+    def test_entfernter_termin_bleibt_aus_dem_bericht(self, app, tmp_path):
+        # Vergangener offener Termin → sichtbar. Nach dem Entfernen verschwindet
+        # er aus dem Bericht (kein veralteter Bericht).
+        importiere([zeile(nr=1, von=datetime(2024, 5, 2, 7, 0),
+                          bis=datetime(2024, 5, 2, 15, 0),
+                          status='offen')])
+        pfad = tmp_path / 'vorher.pdf'
+        erstelle_bericht(str(pfad), 2024, 5)
+        assert 'P03 NRA' in text_aus_pdf(pfad)
+
+        importiere([])                       # Zeile weg → als entfernt markiert
+        assert sammle_daten(2024, 5)['aktive'] == []
+        assert sammle_daten(2026, 11)['aktive'] == []
+
+        pfad2 = tmp_path / 'nachher.pdf'
+        erstelle_bericht(str(pfad2), 2024, 5)
+        assert 'P03 NRA' not in text_aus_pdf(pfad2)
+
+
 class TestAblage:
     def test_monatsbericht_liegt_im_berichtsordner(self, app, tmp_path):
         pfad = erstelle_monatsbericht(2026, 11)
@@ -204,3 +265,206 @@ class TestSchreibgeschuetzterStick:
         ordner.mkdir()
         with schreibfenster(str(ordner)) as bereit:
             assert bereit is True
+
+
+# ── Modell-3-Berichte: Typ-Trennung, aktuelle Namen, betroffene Jahre ──
+
+def _bm(bezeichnung, typ='Prüfstand', kennung='BM-001'):
+    return {'id': kennung, 'typ': typ, 'bezeichnung': bezeichnung,
+            'zusammenfuehren_mit': None, 'hinweis': '', 'excel_zeile': 2}
+
+
+def _t3(nr, art, bm, bm_id, von, bis, status='abgeschlossen'):
+    return {'nr': nr, 'art': art, 'typ': None, 'betriebsmittel': bm,
+            'betriebsmittel_id': bm_id, 'von': von, 'bis': bis,
+            'info': 'x', 'status': status, 'excel_zeile': 2}
+
+
+def _n3(nr='N-001', art='Audit', titel='Audit LH', von=None, status='offen'):
+    return {'nr': nr, 'art': art, 'titel': titel,
+            'von': von or datetime(2026, 11, 16, 0, 0), 'bis': None,
+            'info': '', 'status': status, 'excel_zeile': 2}
+
+
+def _daten3(**kw):
+    basis = {'termine': [], 'news': [], 'bloecke': {}, 'archiv_termine': [],
+             'archiv_news': [], 'fehler': []}
+    basis.update(kw)
+    return basis
+
+
+class TestBetriebsmittelBerichte:
+    def test_statistik_getrennt_nach_typ(self, app):
+        from betriebsmittel_sync import sync_betriebsmittel
+        from historie import importiere_modell3
+        sync_betriebsmittel([
+            _bm('P31 THSA', 'Prüfstand', 'BM-001'),
+            _bm('TESTFUCHS KONSOLE 1', 'Konsole', 'BM-002'),
+        ])
+        importiere_modell3(_daten3(termine=[
+            _t3('T-001', 'Kalibrierung', 'P31 THSA', 'BM-001',
+                datetime(2026, 11, 2, 7, 0), datetime(2026, 11, 2, 15, 0)),
+            _t3('T-002', 'Wartung', 'TESTFUCHS KONSOLE 1', 'BM-002',
+                datetime(2026, 11, 3, 7, 0), datetime(2026, 11, 3, 15, 0)),
+        ]))
+        daten = sammle_daten(2026, 11)
+        assert 'P31 THSA' in daten['statistik_pruefstaende']
+        assert 'TESTFUCHS KONSOLE 1' in daten['statistik_konsolen']
+        assert daten['statistik_pruefstaende']['P31 THSA']['typ'] == 'pruefstand'
+        assert daten['statistik_konsolen']['TESTFUCHS KONSOLE 1']['typ'] == 'konsole'
+
+    def test_umbenennen_aendert_namen_nicht_stunden(self, app, tmp_path):
+        from betriebsmittel_sync import sync_betriebsmittel
+        from historie import importiere_modell3
+        sync_betriebsmittel([_bm('ALT', 'Prüfstand', 'BM-001')])
+        importiere_modell3(_daten3(termine=[
+            _t3('T-001', 'Kalibrierung', 'ALT', 'BM-001',
+                datetime(2026, 11, 2, 7, 0), datetime(2026, 11, 2, 15, 0)),
+        ]))
+        pfad = tmp_path / 'alt.pdf'
+        erstelle_bericht(str(pfad), 2026, 11)
+        text_alt = text_aus_pdf(pfad)
+        assert 'ALT' in text_alt
+        assert '8,00' in text_alt
+
+        sync_betriebsmittel([_bm('NEU', 'Prüfstand', 'BM-001')])
+        pfad2 = tmp_path / 'neu.pdf'
+        erstelle_bericht(str(pfad2), 2026, 11)
+        text_neu = text_aus_pdf(pfad2)
+        assert 'NEU' in text_neu
+        assert 'ALT' not in text_neu
+        assert '8,00' in text_neu          # Stunden unverändert
+
+    def test_typwechsel_verschiebt_kategorie(self, app):
+        from betriebsmittel_sync import sync_betriebsmittel
+        from historie import importiere_modell3
+        sync_betriebsmittel([_bm('P31 THSA', 'Prüfstand', 'BM-001')])
+        importiere_modell3(_daten3(termine=[
+            _t3('T-001', 'Kalibrierung', 'P31 THSA', 'BM-001',
+                datetime(2026, 11, 2, 7, 0), datetime(2026, 11, 2, 15, 0)),
+        ]))
+        daten = sammle_daten(2026, 11)
+        assert 'P31 THSA' in daten['statistik_pruefstaende']
+        assert daten['statistik_konsolen'] == {}
+
+        sync_betriebsmittel([_bm('P31 THSA', 'Konsole', 'BM-001')])
+        daten = sammle_daten(2026, 11)
+        assert daten['statistik_pruefstaende'] == {}
+        assert 'P31 THSA' in daten['statistik_konsolen']
+
+    def test_merge_summiert_korrekt(self, app):
+        from betriebsmittel_sync import sync_betriebsmittel
+        from historie import importiere_modell3
+        sync_betriebsmittel([
+            _bm('ALT', 'Prüfstand', 'BM-001'),
+            _bm('NEU', 'Prüfstand', 'BM-002'),
+        ])
+        importiere_modell3(_daten3(termine=[
+            _t3('T-001', 'Kalibrierung', 'ALT', 'BM-001',
+                datetime(2026, 11, 2, 7, 0), datetime(2026, 11, 2, 15, 0)),
+            _t3('T-002', 'Wartung', 'NEU', 'BM-002',
+                datetime(2026, 11, 3, 7, 0), datetime(2026, 11, 3, 15, 0)),
+        ]))
+        # Zusammenführen: BM-001 → BM-002.
+        sync_betriebsmittel([
+            _bm('NEU', 'Prüfstand', 'BM-002'),
+            {'id': 'BM-001', 'typ': 'Prüfstand', 'bezeichnung': 'ALT',
+             'zusammenfuehren_mit': 'BM-002', 'hinweis': '', 'excel_zeile': 3},
+        ])
+        statistik = sammle_daten(2026, 11)['statistik']
+        assert 'NEU' in statistik
+        assert 'ALT' not in statistik
+        assert statistik['NEU']['stunden'] == 16.0
+        assert statistik['NEU']['vorgaenge'] == 2
+
+    def test_news_erzeugt_keine_ausfallzeit(self, app, tmp_path):
+        from betriebsmittel_sync import sync_betriebsmittel
+        from historie import importiere_modell3
+        sync_betriebsmittel([_bm('P31 THSA', 'Prüfstand', 'BM-001')])
+        importiere_modell3(_daten3(
+            termine=[_t3('T-001', 'Kalibrierung', 'P31 THSA', 'BM-001',
+                         datetime(2026, 11, 2, 7, 0),
+                         datetime(2026, 11, 2, 15, 0))],
+            news=[_n3(status='offen'), _n3(nr='N-002', art='Info',
+                                          titel='Hinweis', status='offen')],
+        ))
+        daten = sammle_daten(2026, 11)
+        assert len(daten['news']) == 2
+        assert daten['statistik_pruefstaende']['P31 THSA']['stunden'] == 8.0
+        assert daten['statistik_konsolen'] == {}
+        assert all(v.art in ('audit', 'info') for v in daten['news'])
+
+        pfad = tmp_path / 'news.pdf'
+        erstelle_bericht(str(pfad), 2026, 11)
+        text = text_aus_pdf(pfad)
+        assert 'News & Audits' in text
+        assert 'Audit LH' in text
+
+    def test_import_report_enthaelt_betroffene_jahre(self, app):
+        from betriebsmittel_sync import sync_betriebsmittel
+        from historie import importiere_modell3
+        sync_betriebsmittel([_bm('P31 THSA', 'Prüfstand', 'BM-001')])
+        report = importiere_modell3(_daten3(termine=[
+            _t3('T-001', 'Kalibrierung', 'P31 THSA', 'BM-001',
+                datetime(2024, 5, 2, 7, 0), datetime(2024, 5, 2, 15, 0)),
+            _t3('T-002', 'Wartung', 'P31 THSA', 'BM-001',
+                datetime(2025, 3, 2, 7, 0), datetime(2025, 3, 2, 15, 0)),
+        ]))
+        assert report['jahre'] == {2024, 2025}
+
+
+class TestHistorischeRegeneration:
+    def test_jahre_der_betriebsmittel(self, app):
+        from betriebsmittel_sync import sync_betriebsmittel
+        from historie import importiere_modell3, jahre_der_betriebsmittel
+        sync_betriebsmittel([_bm('P31 THSA', 'Prüfstand', 'BM-001')])
+        importiere_modell3(_daten3(termine=[
+            _t3('T-001', 'Kalibrierung', 'P31 THSA', 'BM-001',
+                datetime(2024, 5, 2, 7, 0), datetime(2024, 5, 2, 15, 0)),
+            _t3('T-002', 'Wartung', 'P31 THSA', 'BM-001',
+                datetime(2026, 11, 2, 7, 0), datetime(2026, 11, 2, 15, 0)),
+        ]))
+        assert jahre_der_betriebsmittel({'BM-001'}) == {2024, 2026}
+
+    def test_automatisch_regeneriert_alle_angegebenen_jahre(self, app, tmp_path):
+        from bericht import erstelle_berichte_automatisch
+        stick = tmp_path / 'stick'
+        stick.mkdir()
+        ergebnis = erstelle_berichte_automatisch(str(stick), jahre={2024, 2025})
+        assert sorted(ergebnis['jahre']) == [2024, 2025]
+        assert len(ergebnis['monate']) == 24
+        assert len(ergebnis['jahresberichte']) == 2
+        # Lokal und auf dem Stick liegen die historischen Dateien.
+        ziel = stick / 'LHTPi-Berichte'
+        assert (ziel / 'Terminbericht_2024-05.pdf').exists()
+        assert (ziel / 'Terminbericht_Jahr_2024.pdf').exists()
+        assert (ziel / 'Terminbericht_2025-12.pdf').exists()
+
+    def test_historische_datei_wird_ueberschrieben(self, app, tmp_path):
+        from betriebsmittel_sync import sync_betriebsmittel
+        from historie import importiere_modell3
+        from bericht import erstelle_berichte_automatisch
+        import hashlib
+        sync_betriebsmittel([_bm('P31 THSA', 'Prüfstand', 'BM-001')])
+        importiere_modell3(_daten3(termine=[
+            _t3('T-001', 'Kalibrierung', 'P31 THSA', 'BM-001',
+                datetime(2024, 5, 2, 7, 0), datetime(2024, 5, 2, 15, 0)),
+        ]))
+        stick = tmp_path / 'stick'
+        stick.mkdir()
+        erstelle_berichte_automatisch(str(stick), jahre={2024})
+        ziel = stick / 'LHTPi-Berichte' / 'Terminbericht_2024-05.pdf'
+        hash_vorher = hashlib.sha256(ziel.read_bytes()).hexdigest()
+
+        # Neuer Termin im selben historischen Jahr → Regeneration ersetzt die Datei.
+        importiere_modell3(_daten3(termine=[
+            _t3('T-001', 'Kalibrierung', 'P31 THSA', 'BM-001',
+                datetime(2024, 5, 2, 7, 0), datetime(2024, 5, 2, 15, 0)),
+            _t3('T-002', 'Wartung', 'P31 THSA', 'BM-001',
+                datetime(2024, 6, 2, 7, 0), datetime(2024, 6, 2, 15, 0)),
+        ]))
+        erstelle_berichte_automatisch(str(stick), jahre={2024})
+        hash_nachher = hashlib.sha256(ziel.read_bytes()).hexdigest()
+        assert hash_nachher != hash_vorher
+        # Die Datei bleibt ein gültiges, nicht-leeres PDF.
+        assert ziel.stat().st_size > 1000

@@ -545,6 +545,7 @@ def importiere_modell3(daten, quelle='usb', dateiname=None, datei_hash=None):
     report = {
         'neu': 0, 'geaendert': 0, 'unveraendert': 0, 'entfernt': 0,
         'fehler': [], 'parser_fehler': parser_fehler, 'import_id': None,
+        'jahre': set(),
     }
 
     termine = list(daten.get('termine') or []) + \
@@ -573,6 +574,9 @@ def importiere_modell3(daten, quelle='usb', dateiname=None, datei_hash=None):
             db.session.flush()
             _zeiten_setzen(vorgang, bloecke_zeile)
             report['neu'] += 1
+            report['jahre'].add(von.year)
+            if bis:
+                report['jahre'].add(bis.year)
         elif vorgang.inhalt_hash == h:
             report['unveraendert'] += 1
         else:
@@ -591,6 +595,9 @@ def importiere_modell3(daten, quelle='usb', dateiname=None, datei_hash=None):
             vorgang.inhalt_hash = h
             _zeiten_setzen(vorgang, bloecke_zeile)
             report['geaendert'] += 1
+            report['jahre'].add(von.year)
+            if bis:
+                report['jahre'].add(bis.year)
         return vorgang
 
     for z in termine:
@@ -668,6 +675,9 @@ def importiere_modell3(daten, quelle='usb', dateiname=None, datei_hash=None):
                 continue
             vorgang.status = 'entfernt'
             report['entfernt'] += 1
+            report['jahre'].add(vorgang.von.year)
+            if vorgang.bis:
+                report['jahre'].add(vorgang.bis.year)
 
     alle_fehler = report['fehler'] + parser_fehler
     lauf = ImportLauf(
@@ -885,3 +895,65 @@ def ausfall_je_pruefstand_im_monat(jahr, monat):
         eintrag['stunden'] = round(eintrag['stunden'], 2)
         eintrag['tage'] = len(eintrag['tage'])
     return ergebnis
+
+
+# ── Typ-Trennung und betroffene Jahre (Modell 3) ───────────────────────
+
+def getrennt_nach_typ(statistik):
+    """Teilt ein Statistik-Dict nach Betriebsmitteltyp in zwei Dicts.
+
+    ``konsole`` landet im zweiten, alles andere (Standard ``pruefstand``) im
+    ersten. Die Einträge selbst bleiben unverändert – nur die Zuordnung ändert
+    sich, sodass eine spätere Typänderung rückwirkend die richtige Kategorie
+    trifft, ohne Stunden neu zu buchen.
+    """
+    pruefstaende = {}
+    konsolen = {}
+    for name, eintrag in (statistik or {}).items():
+        if eintrag.get('typ') == 'konsole':
+            konsolen[name] = eintrag
+        else:
+            pruefstaende[name] = eintrag
+    return pruefstaende, konsolen
+
+
+def kennungen_aus_sync_report(sync_report):
+    """Alle BM-Kennungen, die ein Sync-Report berührt hat.
+
+    Aus ``neu``/``geaendert``/``id_vergeben``/``zusammengefuehrt``/``inaktiv``
+    werden alle vorkommenden Kennungen (Quelle wie Ziel) eingesammelt.
+    """
+    kennungen = set()
+    for schluessel in ('neu', 'geaendert', 'id_vergeben',
+                       'zusammengefuehrt', 'inaktiv'):
+        for eintrag in (sync_report or {}).get(schluessel) or []:
+            for feld in ('kennung', 'quelle', 'ziel'):
+                wert = eintrag.get(feld)
+                if wert:
+                    kennungen.add(wert)
+    return kennungen
+
+
+def jahre_der_betriebsmittel(kennungen):
+    """Jahre aller Vorgänge der genannten Betriebsmittel (Aliase aufgelöst).
+
+    Für jede Kennung wird die Zusammenführungs-Kette bis zum endgültigen Ziel
+    verfolgt und dann jedes Jahr gesammelt, in dem ein zugehöriger Vorgang
+    liegt. Damit regeneriert eine Umbenennung/Typänderung/Zusammenführung alle
+    historischen Berichte der betroffenen Betriebsmittel.
+    """
+    if not kennungen:
+        return set()
+    bms = (Betriebsmittel.query
+           .filter(Betriebsmittel.kennung.in_(list(kennungen))).all())
+    ids = set()
+    for bm in bms:
+        ids.add(_aufloesen_final(bm).id)
+    jahre = set()
+    if not ids:
+        return jahre
+    for v in Vorgang.query.filter(Vorgang.betriebsmittel_id.in_(ids)).all():
+        jahre.add(v.von.year)
+        if v.bis:
+            jahre.add(v.bis.year)
+    return jahre

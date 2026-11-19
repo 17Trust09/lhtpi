@@ -192,9 +192,10 @@ def lies_pruefstandblatt(ws):
             continue
         auswahl = _text(row[2]) if len(row) > 2 and row[2] is not None else ''
         if not auswahl:
-            kennung = _text(row[0])
-            bezeichnung = _text(row[1]) if len(row) > 1 else ''
-            auswahl = f'{kennung} {bezeichnung}'.strip()
+            # Leere Auswahl: der wahre Anzeigename ist die Bezeichnung – keine
+            # Zusammenklebung aus Kennung + Bezeichnung (die ergäbe z. B. ein
+            # falsches "AHH Belastungsbank" statt "Belastungsbank").
+            auswahl = _text(row[1]) if len(row) > 1 else ''
         if auswahl and auswahl not in namen:
             namen.append(auswahl)
     return namen

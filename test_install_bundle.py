@@ -677,6 +677,7 @@ for datei, beschreibung in [
         ('scripts/aufloesung.sh', 'Aufloesung pruefen und nativ setzen'),
         ('scripts/kiosk-neu.sh', 'Nachziehen der Kiosk-Teile'),
         ('scripts/nach-pull.sh', 'Nachziehen nach git pull'),
+        ('scripts/terminboard-db-backup.py', 'Terminboard-DB-Sicherung (Root-Helfer)'),
 ]:
     ok(os.path.isfile(os.path.join(BASE, datei)),
        '%s liegt im Bundle (%s)' % (beschreibung, datei))
@@ -687,6 +688,23 @@ ok('sudoers-regeln.sh' in _inst,
    'install.sh nutzt die gemeinsamen sudo-Regeln')
 ok('selbsttest.sh' in _inst,
    'install.sh prueft sich zum Schluss selbst')
+
+# Terminboard-DB-Sicherung: Helfer und Freigabe muessen bei frischer
+# Installation UND nach git pull ankommen - sonst bricht nach-pull.sh den
+# Neustart ab (oder sichert gar nicht). Der Helfer ist absichtlich ohne
+# Argumente, damit die sudo-Freigabe eng bleibt.
+_sudoers = open(os.path.join(BASE, 'scripts', 'sudoers-regeln.sh'), encoding='utf-8').read()
+_kiosk_neu = open(os.path.join(BASE, 'scripts', 'kiosk-neu.sh'), encoding='utf-8').read()
+ok('/usr/local/sbin/lhtpi-terminboard-backup' in _inst,
+   'install.sh installiert den Terminboard-DB-Sicherungs-Helfer')
+ok('/usr/local/sbin/lhtpi-terminboard-backup' in _sudoers
+   and 'NOPASSWD' in _sudoers,
+   'sudoers-regeln.sh erlaubt den Sicherungs-Helfer ohne Passwort')
+ok('/usr/local/sbin/lhtpi-terminboard-backup' in _kiosk_neu,
+   'kiosk-neu.sh zieht den Sicherungs-Helfer nach einem Pull nach')
+ok('sqlite3' in open(os.path.join(BASE, 'scripts', 'terminboard-db-backup.py'),
+                    encoding='utf-8').read(),
+   'der Helfer nutzt die sqlite3-Backup-API (konsistenter WAL-Snapshot)')
 
 # Der Waechter muss den Fall kennen, der den Reboot gekostet hat.
 _wache = open(os.path.join(BASE, 'scripts', 'hdmi-wache.sh'), encoding='utf-8').read()

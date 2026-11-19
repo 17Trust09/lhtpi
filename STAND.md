@@ -1,6 +1,6 @@
 # Projektstand — LHTPi + Terminboard
 
-> Stand: **26.08.2026** · Branch: `feature/terminboard` · Status: ✅ läuft
+> Stand: **19.11.2026** · Branch: `feature/multitool-kiosk` · Status: ✅ läuft (Modell 3)
 
 Kurzer Einstieg für alle, die das Projekt fortsetzen wollen. Details in den
 jeweiligen `README.md` (Repo-Root und `terminboard/`).
@@ -21,20 +21,28 @@ Beide lesen bei Bedarf von **einem gemeinsamen USB-Stick**.
 
 ---
 
-## Einheitliche Datenstruktur (Terminboard)
+## Einheitliche Datenstruktur (Terminboard, Modell 3)
 
-Excel-Spalten: `Art | Prüfstand | Von | Bis | Info`
+Die Excel-Datei `termine.xlsx` ist die eindeutige Datenquelle. Sechs Blätter:
 
-| Spalte | Bedeutung | Pflicht |
+| Blatt | Inhalt | Nummern |
 |---|---|---|
-| Art | Kalibrierung / Audit / Wartung / Info | ✓ Dropdown |
-| Prüfstand | z. B. `P3` | ✓ |
-| Von | Startdatum | ✓ |
-| Bis | Enddatum | – |
-| Info | Beschreibung | ✓ |
+| `Termine` | Kalibrierung / Wartung / Ausfall | `T-001 … T-500` |
+| `News & Audits` | Audit / Info | `N-001 … N-500` |
+| `Betriebsmittel` | Stammdaten (ID, Typ, Bezeichnung, Zusammenführen mit) | `BM-001 …` |
+| `Zeiten` | Uhrzeitblöcke, verweisen auf `T-Nummern` | – |
+| `Archiv Termine` / `Archiv News & Audits` | abgeschlossene Vorgänge | – |
 
-Interne DB-Felder (`models.py`): `typ`, `titel` (= Info), `referenz`
-(= Prüfstand, jetzt Pflicht), `start`, `ende`, `text` (Notiz, nur Web-Formular).
+Arbeitsablauf: **Betriebsmittel zuerst anlegen** (unten im Stammdatenblatt,
+`ID` leer lassen – das Gerät vergibt sie beim Import und schreibt sie zurück),
+dann in `Termine` per Dropdown wählen. Umbenennen/Typwechsel bei gleicher `ID`
+wirken rückwirkend auf Historie und Berichte; Zusammenführung über
+`Zusammenführen mit` = Ziel-`BM-NNN`. Status nur `offen`/`abgeschlossen`
+(kein `storniert`); `abgeschlossen` wandert automatisch ins Archiv.
+
+Interne DB-Felder (`models.py`): `typ`, `titel`, `referenz`, `start`, `ende`,
+`text`. Die Web-Oberfläche dient der Anzeige und dem Abruf der Berichte – die
+Pflege erfolgt in Excel.
 
 ---
 
@@ -51,7 +59,13 @@ Interne DB-Felder (`models.py`): `typ`, `titel` (= Info), `referenz`
 - USB hat im `auto`-Modus Vorrang vor der internen DB/Playlist.
 - Excel-Vorlage neu erzeugen (lokal):
   ```bash
-  cd terminboard && ./venv/bin/python generate_termine_template.py
+  cd terminboard && ./venv/bin/python tools_vorlage_modell3_bauen.py
+  ```
+- Modell-2-Altbestand migrieren:
+  ```bash
+  cd terminboard
+  ./venv/bin/python tools_modell2_zu_modell3.py --quelle alt.xlsx --ziel neu.xlsx
+  ./venv/bin/python tools_modell2_zu_modell3.py --quelle alt.xlsx --ersetzen   # sichert .bak
   ```
 
 ---
@@ -94,12 +108,43 @@ USB-Auto-Mount: udev-Regel → `/usr/local/bin/lhtpi-usb-mount.sh` →
 
 ### Update auf den Pi
 
+Ein einziger Befehl genügt – der post-merge-Haken erledigt den Rest:
+
 ```bash
 cd /home/pi/lhtpi
 git pull
-sudo systemctl restart lhtpi
-sudo systemctl restart terminboard
 ```
+
+`scripts/nach-pull.sh` (via post-merge-Haken) führt dabei automatisch aus:
+
+1. **Abhängigkeiten:** Ändern sich `terminboard/requirements.txt` (oder andere
+   relevante Anforderungen), werden sie idempotent in
+   `terminboard/venv` installiert. Schlägt die Installation fehl, bricht der
+   Nachzug ab – **kein Neustart** mit halb installierten Abhängigkeiten.
+2. **DB-Sicherung:** Vor dem Terminboard-Neustart sichert ein Root-Helfer
+   (`/usr/local/sbin/lhtpi-terminboard-backup`, via `sudo -n`) die Live-DB
+   (`/var/lib/lhtpi/terminboard/terminboard.db`) mit der sqlite3-Backup-API –
+   das ergibt auch im WAL-Modus einen konsistenten Snapshot (kein unsicheres
+   `cp` mehr). Sicherungen landen in `<db>/backups/`, alte werden auf die
+   letzten 10 begrenzt. Schlägt die Sicherung fehl, wird **nicht** neu
+   gestartet.
+3. **Neustart + Healthcheck:** `terminboard.service` wird neu gestartet, danach
+   werden `http://127.0.0.1:8001/login` und `/board/api/status` geprüft (bis zu
+   ca. 30 s mit Wiederholungen). Schlägt der Neustart oder der Healthcheck
+   fehl, bricht der Nachzug mit sichtbarem Fehler ab.
+4. **Migration:** Die App führt beim Start ihre Schema-Migration automatisch aus
+   und bricht bei Fehlern ab (die DB-Sicherung aus Schritt 2 erlaubt die
+   Wiederherstellung).
+
+Kein manuelles `sudo systemctl restart` mehr nötig; die bestehenden
+`starte_dienst`-Freigaben werden unverändert genutzt.
+
+> **Achtung bei Fehlermeldungen:** Der post-merge-Haken läuft **nach** dem
+> Merge – ist der Nachzug fehlgeschlagen, ist `git merge`/`git pull` zu diesem
+> Zeitpunkt bereits abgeschlossen und der neue Code liegt im Arbeitsverzeichnis.
+> Der Dienst wurde dann aber **nicht** neu gestartet (bzw. die Sicherung fehlt).
+> Die rote Fehlerausgabe (`LHTPi: …`, `FEHLER: …`) also nicht überlesen – sonst
+> läuft die Anzeige mit altem Code weiter, und niemand merkt es.
 
 ### Kiosk-Diagnose
 
@@ -116,7 +161,7 @@ DISPLAY=:0 xrandr --current                       # Monitor-Zuordnung
 
 ```bash
 cd terminboard
-./venv/bin/python -m pytest tests/ -q        # 34 passed
+./venv/bin/python -m pytest tests/ -q
 ```
 
 ---

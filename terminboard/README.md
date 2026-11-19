@@ -76,8 +76,77 @@ Vorlage neu erzeugen (lokal):
 
 ```bash
 cd terminboard
-./venv/bin/python generate_termine_template.py
+./venv/bin/python tools_vorlage_modell3_bauen.py            # Modell-3-Vorlage
+./venv/bin/python tools_vorlage_modell3_bauen.py --pruefen  # Vorlage prüfen
 ```
+
+## Modell 3 – Excel-Arbeitsablauf
+
+Die Excel-Datei `termine.xlsx` ist seit Modell 3 die eindeutige Datenquelle.
+Die Anwender arbeiten ausschließlich in Excel; eine Webverwaltung ist für den
+Alltag nicht nötig.
+
+**Blätter:** `Termine` (Kalibrierung/Wartung/Ausfall), `News & Audits`
+(Audit/Info), `Betriebsmittel` (Stammdaten), `Zeiten` (Uhrzeiten), plus die
+beiden Archive.
+
+### Betriebsmittel anlegen, umbenennen, Typ ändern, zusammenführen
+
+1. **Neu anlegen:** Im Blatt `Betriebsmittel` unten eine Zeile ergänzen –
+   `Typ` (Prüfstand/Konsole) und `Bezeichnung`. Die `ID`-Spalte bleibt leer;
+   das Gerät vergibt beim ersten Import die feste Kennung `BM-001` usw. und
+   schreibt sie zurück.
+2. **Auswählen:** Im Blatt `Termine` wird das Betriebsmittel ausschließlich
+   über das Dropdown gewählt (Spalte `Betriebsmittel`). Freie Eingaben blockt
+   Excel.
+3. **Umbenennen:** Einfach die `Bezeichnung` ändern – die `ID` bleibt. Historie
+   und Berichte zeigen ab sofort den neuen Namen; Stunden werden nicht neu
+   gebucht.
+4. **Typ ändern:** `Prüfstand` ↔ `Konsole` bei gleicher `ID` ist erlaubt.
+   Berichte ordnen das Betriebsmittel rückwirkend der richtigen Kategorie zu.
+5. **Zusammenführen:** In der Spalte `Zusammenführen mit` die Ziel-`BM-NNN`
+   eintragen. Alle Vorgänge der Quelle werden atomar auf das Ziel umgehängt,
+   die Quelle bleibt intern als Alias erhalten. Selbst- und Ring-Zusammenführung
+   werden abgelehnt.
+6. **Entfernen:** Eine Zeile ohne Zusammenführung löschen entfernt das
+   Betriebsmittel aus der aktiven Liste – die Historie bleibt erhalten, nur das
+   Dropdown führt es nicht mehr.
+
+### Nummern (T/N) und Archive
+
+- Termine haben `T-001 … T-500`, News/Audits `N-001 … N-500`. Die Nummern sind
+  vorausgefüllt und gesperrt; eine Nummer darf nur in genau einem der beiden
+  Blätter (aktiv oder Archiv) vorkommen.
+- Beim Status `abgeschlossen` verschiebt das Gerät die Zeile automatisch ins
+  passende Archiv (`Archiv Termine` bzw. `Archiv News & Audits`). Die Nummer
+  bleibt erhalten und wird nie wiederverwendet.
+- `Zeiten` verweist ausschließlich auf `T-Nummern` (nicht auf News).
+
+### Schreibgeschützter Stick und `.bak`-Wiederherstellung
+
+- Vor jeder Änderung der Arbeitsmappe legt das Gerät eine `.bak`-Sicherung an
+  und schreibt erst in eine temporäre Datei, prüft sie, und ersetzt dann das
+  Original atomar.
+- Ein schreibgeschützter Stick verhindert den **Import** nicht: die Daten werden
+  gelesen, nur das Zurückschreiben (IDs, Archiv) wird gemeldet und beim nächsten
+  Lauf erneut versucht.
+- Wiederherstellung: die jüngste `<datei>.bak` nach `termine.xlsx` zurückkopieren.
+
+### Migration von Modell 2 auf Modell 3
+
+```bash
+cd terminboard
+./venv/bin/python tools_modell2_zu_modell3.py --quelle alt.xlsx --ziel neu.xlsx
+# oder in place (sichert alt.xlsx → alt.xlsx.bak):
+./venv/bin/python tools_modell2_zu_modell3.py --quelle alt.xlsx --ersetzen
+```
+
+Termine und Archivzeilen werden übernommen, `T-/N-Nummern` deterministisch neu
+vergeben, Audit/Info wandern nach `News & Audits`, `Zeiten`-Blöcke werden auf
+die neuen Nummern abgebildet. Nicht zuordenbare Zeilen werden gemeldet, nie
+still verworfen. `TESTFUCHS KONSOLE …` (und die exakt so eingetragene
+Schreibweise `TESTTUCHS KONSOLE …`) werden als Konsole eingestuft, alles andere
+als Prüfstand.
 
 ## Installation auf dem Pi
 
@@ -97,7 +166,7 @@ auf HDMI-A-2, gemeinsamer USB-Auto-Mount (`/mnt/lhtpi-usb`), Firewall.
 
 ```bash
 cd terminboard
-./venv/bin/python -m pytest tests/ -q    # 34 passed
+./venv/bin/python -m pytest tests/ -q
 ```
 
 ## Sicherheit
